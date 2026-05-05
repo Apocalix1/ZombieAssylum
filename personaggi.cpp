@@ -1,65 +1,122 @@
 #include "personaggi.h"
+#include <iostream>
+#include <cmath>
+#include <vector>
+#include <algorithm>
 
+// =====================================================================
+// COSTRUTTORE
+// =====================================================================
 Personaggio::Personaggio(std::string n) : nome(n) {
-    // Inizializzazione come da Manuale
-    stats["Forza"] = 8;
-    stats["Destrezza"] = 8;
-    stats["Costituzione"] = 8;
-    stats["Intelligenza"] = 8;
-    stats["Saggezza"] = 8;
-    stats["Carisma"] = 8;
-
+    // Statistiche Base
+    forza = destrezza = costituzione = intelligenza = saggezza = carisma = 8;
+    
+    // Punti Vita e Risorse
     pfFortuna = 15;
+    pfFortunaMax = 15;
     pfReali = 5;
     stamina = 5;
     fatica = 0;
+    
+    // Bisogni e Stati
     fame = 14;
     sete = 4;
     sonno = 8;
     follia = 0;
+    
+    // Progresso
     battaglieVinte = 0;
+    giorniAttivi = 0;
+    puntiCreazione = 27;
+    moneteArgento = 0;
+    inSpedizione = false;
+    
+    // Materiali
+    componentiMedici = 0;
+    componentiAlchemici = 0;
+    ingranaggi = 0;
 
-    // Inizializzazione mappe per evitare errori di chiave non trovata
+    // Buff/Debuff iniziali
+    buffForza = buffDestrezza = buffCostituzione = 0;
+    buffIntelligenza = buffSaggezza = buffCarisma = 0;
+    metabolismoLentoCibo = false;
+    metabolismoLentoSete = false;
+
+    // Specializzazioni Artificeria
     specializzazioni["Balistica"] = {0, 0.0f};
     specializzazioni["Meccanica"] = {0, 0.0f};
     specializzazioni["Elettronica"] = {0, 0.0f};
+    artificeriaGenerale = {0, 0.0f};
     
+    // Competenze Armi
     competenzeArmi["Archi"] = {0, 0.0f};
     competenzeArmi["Armi da fuoco"] = {0, 0.0f};
     competenzeArmi["Lame Leggere"] = {0, 0.0f};
-    competenzeArmi["Fruste e Rampini"] = {0, 0.0f};
-    competenzeArmi["Armi con Asta"] = {0, 0.0f};
-    competenzeArmi["Balestre"] = {0, 0.0f};
-    competenzeArmi["Mazze e armi contundenti"] = {0, 0.0f};
-    bool inSpedizione = false;
-    int pfFortunaMax = 15;
+
+    lingueConosciute = "Verbum";
+    equipaggiamento = "Nullo";
+
+    // Inizializzazione Mappa Abilità
+    std::vector<std::string> listaAbilità = {
+        "Atletica", "Acrobazia", "Furtivita", "Rapidita di mano", 
+        "Arcano", "Storia", "Indagare", "Natura", "Religione",
+        "Intuizione", "Percezione", "Sopravvivenza", "Addestrare animali",
+        "Inganno", "Intimidire", "Intrattenere", "Persuasione",
+        "Cucina", "Manodopera"
+    };
+
+    for (const auto& ab : listaAbilità) {
+        abilità[ab] = 0; 
+    }
 }
+
+// =====================================================================
+// SISTEMA DI CALCOLO
+// =====================================================================
 
 int Personaggio::getModificatore(std::string stat) {
-    int valoreBase = stats[stat];
+    int valoreBase = 8;
     int bonus = 0;
 
-    // Applicazione Buff da Sopravvivenza
-    if (stat == "Forza") bonus = buffForza;
-    if (stat == "Costituzione") bonus = buffCostituzione;
-    if (stat == "Destrezza") bonus = buffDestrezza;
-    if (stat == "Saggezza") bonus = buffSaggezza;
-    if (stat == "Carisma") bonus = buffCarisma;
-    if (stat == "Intelligenza") bonus = buffIntelligenza;
+    if (stat == "Forza") { valoreBase = forza; bonus = buffForza; }
+    else if (stat == "Costituzione") { valoreBase = costituzione; bonus = buffCostituzione; }
+    else if (stat == "Destrezza") { valoreBase = destrezza; bonus = buffDestrezza; }
+    else if (stat == "Saggezza") { valoreBase = saggezza; bonus = buffSaggezza; }
+    else if (stat == "Carisma") { valoreBase = carisma; bonus = buffCarisma; }
+    else if (stat == "Intelligenza") { valoreBase = intelligenza; bonus = buffIntelligenza; }
 
-    return std::floor((valoreBase - 10) / 2.0) + bonus;
+    return static_cast<int>(std::floor((valoreBase - 10) / 2.0)) + bonus;
 }
 
-int Personaggio::calcolaCDArtificeria(int cdBase, std::string spec, bool haProgetto) {
-    int lvlAG = artificeriaGenerale.livello;
-    int lvlSpec = specializzazioni[spec].livello;
+int Personaggio::getBonusCompetenza() {
+    if (giorniAttivi < 7) return 2;
+    if (giorniAttivi < 14) return 3;
+    if (giorniAttivi < 21) return 4;
+    return 5;
+}
 
-    if (haProgetto) {
-        // CD finale = CD base – Livello AG – Livello Spec
-        return cdBase - lvlAG - lvlSpec;
-    } else {
-        // Senza competenza: CD base + 6 – (AG × 1) – (Spec × 2)
-        return cdBase + 6 - lvlAG - (lvlSpec * 2);
+int Personaggio::getTiroAbilità(std::string nomeAbilità, std::string statAssociata) {
+    int modStat = getModificatore(statAssociata);
+    int bonusComp = getBonusCompetenza();
+    int grado = abilità[nomeAbilità];
+
+    if (grado == 2) return modStat + (bonusComp * 2); // Maestria
+    if (grado == 1) return modStat + bonusComp;       // Competenza
+    if (grado == -1) return modStat - bonusComp;      // Competenza Negativa
+    return modStat;                                   // Grado 0
+}
+
+// =====================================================================
+// GESTIONE PROGRESSIONE E ABILITÀ
+// =====================================================================
+
+void Personaggio::aggiungiCompetenza(std::string nomeAbilità, int tipo) {
+    int& gradoAttuale = abilità[nomeAbilità];
+    if (tipo == 1) { 
+        if (gradoAttuale < 2) gradoAttuale++;
+    } 
+    else if (tipo == -1) { 
+        if (gradoAttuale > -1) gradoAttuale--;
     }
 }
 
@@ -71,95 +128,146 @@ void Personaggio::registraBattaglia() {
     }
 }
 
+// =====================================================================
+// ARTIFICERIA E ALLENAMENTO
+// =====================================================================
+
+int Personaggio::calcolaCDArtificeria(int cdBase, std::string spec, bool haProgetto) {
+    int lvlAG = artificeriaGenerale.livello;
+    int lvlSpec = specializzazioni[spec].livello;
+    return haProgetto ? (cdBase - lvlAG - lvlSpec) : (cdBase + 6 - lvlAG - (lvlSpec * 2));
+}
+
 void Personaggio::aggiungiPS(std::string spec, int punti) {
     specializzazioni[spec].puntiAccumulati += punti;
-    // Ogni PS fornisce 0.25 PAG
     artificeriaGenerale.puntiAccumulati += (punti * 0.25f);
     
-    // Logica Level up Specializzazione (es: Lv1 a 5 PS)
     int soglieSpec[] = {0, 5, 15, 35, 65, 125};
-    if (specializzazioni[spec].livello < 5 && 
-        specializzazioni[spec].puntiAccumulati >= soglieSpec[specializzazioni[spec].livello + 1]) {
-        specializzazioni[spec].livello++;
-    }
-
-    // Logica Level up Artificeria Generale (es: Lv1 a 4 PAG)
     int soglieAG[] = {0, 4, 7, 10, 15, 20};
-    if (artificeriaGenerale.livello < 5 && 
-        artificeriaGenerale.puntiAccumulati >= soglieAG[artificeriaGenerale.livello + 1]) {
+
+    while (specializzazioni[spec].livello < 5 && specializzazioni[spec].puntiAccumulati >= soglieSpec[specializzazioni[spec].livello + 1]) 
+        specializzazioni[spec].livello++;
+
+    while (artificeriaGenerale.livello < 5 && artificeriaGenerale.puntiAccumulati >= soglieAG[artificeriaGenerale.livello + 1]) 
         artificeriaGenerale.livello++;
+}
+
+void Personaggio::aggiungiPCA(std::string arma, float punti) {
+    if (competenzeArmi.find(arma) == competenzeArmi.end()) competenzeArmi[arma] = {0, 0.0f};
+    competenzeArmi[arma].puntiAccumulati += punti;
+    
+    int soglieArmi[] = {0, 6, 15, 22, 34, 50};
+    while (competenzeArmi[arma].livello < 5 && competenzeArmi[arma].puntiAccumulati >= soglieArmi[competenzeArmi[arma].livello + 1]) {
+        competenzeArmi[arma].livello++;
+        std::cout << "LOG: Livello " << arma << " aumentato a " << competenzeArmi[arma].livello << "!" << std::endl;
     }
 }
 
-void Personaggio::avanzaTempo(int ore) {
-    // Riduzione ogni 6 ore
-    int cicli = ore / 6;
-    
-    for (int i = 0; i < cicli; i++) {
-        // CIBO: 0.25 tacche ogni 6 ore (1 al giorno)
-        float ridCibo = 0.25f;
-        if (metabolismoLentoCibo) ridCibo *= 0.66f; // Riduzione a 2/3
-        
-        // ACQUA: 0.25 tacche ogni 6 ore (1 al giorno)
-        float ridSete = 0.25f;
-        if (metabolismoLentoSete) ridSete *= 0.66f;
+void Personaggio::allenamentoArma(std::string arma, int ore) {
+    if (inSpedizione) return;
+    if (ore > 2) stamina -= (ore - 2 + 1) / 2;
+    aggiungiPCA(arma, static_cast<float>(ore * 2.0f));
+    if (fame > 0) fame--;
+    std::cout << "Allenamento completato per " << arma << std::endl;
+}
 
-        // Applicazione (gestiamo come float e castiamo o usiamo variabili float per precisione)
-        // Per semplicità qui riduciamo 1 tacca intera ogni 24 ore se preferisci
-        // ma seguiamo la tua logica dei quarti:
-        if (fame > 0) fame--; // Semplificato a interi per le tacche del manuale
+// =====================================================================
+// MECCANICHE DI GIOCO
+// =====================================================================
+
+void Personaggio::avanzaTempo(int ore) {
+    int cicli = ore / 6;
+    for (int i = 0; i < cicli; i++) {
+        if (fame > 0) fame--;
         if (sete > 0) sete--;
-        
-        // Reset buff se scendi sotto il massimo
         if (fame < 14) { buffForza = 0; buffCostituzione = 0; metabolismoLentoCibo = false; }
         if (sete < 4) { buffDestrezza = 0; buffSaggezza = 0; metabolismoLentoSete = false; }
     }
 }
 
+void Personaggio::preparaSpedizione() {
+    componentiMedici = 0;
+    componentiAlchemici = 0;
+    ingranaggi = 0;
+    inSpedizione = true;
+    std::cout << ">>> Spedizione pronta! Materiali depositati nel magazzino base.\n";
+}
+
+int Personaggio::calcolaCostoStat(int valoreAttuale) {
+    if (valoreAttuale >= 8 && valoreAttuale < 12) return 1;
+    if (valoreAttuale >= 12 && valoreAttuale < 16) return 2;
+    if (valoreAttuale >= 16 && valoreAttuale < 19) return 3;
+    if (valoreAttuale == 19) return 4;
+    return 999; 
+}
+
+void Personaggio::aumentaStatistica(std::string stat) {
+    int* s = nullptr;
+    if (stat == "Forza") s = &forza;
+    else if (stat == "Destrezza") s = &destrezza;
+    else if (stat == "Costituzione") s = &costituzione;
+    else if (stat == "Intelligenza") s = &intelligenza;
+    else if (stat == "Saggezza") s = &saggezza;
+    else if (stat == "Carisma") s = &carisma;
+
+    if (s && *s < 20) {
+        int costo = calcolaCostoStat(*s);
+        if (puntiCreazione >= costo) {
+            puntiCreazione -= costo;
+            (*s)++;
+            std::cout << stat << " +1! Punti rimasti: " << puntiCreazione << "\n";
+        }
+    }
+}
+
+void Personaggio::aggiungiPerk(Perk p) {
+    perksAttivi.push_back(p);
+}
+
+// =====================================================================
+// INTERFACCIA UTENTE
+// =====================================================================
+
 void Personaggio::mostraScheda() {
-    std::cout << "\n=== SCHEDA PERSONAGGIO: " << nome << " ===" << std::endl;
-    std::cout << "PF Fortuna: " << pfFortuna << " | PF Reali: " << pfReali << std::endl;
-    std::cout << "Fame: [" << fame << "/14] Sete: [" << sete << "/4] Sonno: [" << sonno << "/8]" << std::endl;
-    std::cout << "Fatica: " << fatica << " | Follia: (Nascosta)" << std::endl;
-    std::cout << "---------------------------------------" << std::endl;
-}
-
-void Personaggio::aggiungiPCA(std::string arma, float punti) {
-    // Se l'arma non esiste nella mappa, la inizializziamo
-    if (competenzeArmi.find(arma) == competenzeArmi.end()) {
-        competenzeArmi[arma] = {0, 0.0f};
-    }
-
-    competenzeArmi[arma].puntiAccumulati += punti;
+    std::cout << "\n==================================================" << std::endl;
+    std::cout << " SCHEDA PERSONAGGIO: " << nome << std::endl;
+    std::cout << "==================================================" << std::endl;
     
-    // Tabella avanzamento armi: 1:6, 2:15, 3:22, 4:34, 5:50
-    int soglieArmi[] = {0, 6, 15, 22, 34, 50};
-    int lvl = competenzeArmi[arma].livello;
+    // --- STATISTICHE ---
+    std::cout << " FOR: " << forza << " (" << (getModificatore("Forza") >= 0 ? "+" : "") << getModificatore("Forza") << ")"
+              << " | INT: " << intelligenza << " (" << (getModificatore("Intelligenza") >= 0 ? "+" : "") << getModificatore("Intelligenza") << ")\n"
+              << " DES: " << destrezza << " (" << (getModificatore("Destrezza") >= 0 ? "+" : "") << getModificatore("Destrezza") << ")"
+              << " | SAG: " << saggezza << " (" << (getModificatore("Saggezza") >= 0 ? "+" : "") << getModificatore("Saggezza") << ")\n"
+              << " COS: " << costituzione << " (" << (getModificatore("Costituzione") >= 0 ? "+" : "") << getModificatore("Costituzione") << ")"
+              << " | CAR: " << carisma << " (" << (getModificatore("Carisma") >= 0 ? "+" : "") << getModificatore("Carisma") << ")\n";
 
-    if (lvl < 5 && competenzeArmi[arma].puntiAccumulati >= soglieArmi[lvl + 1]) {
-        competenzeArmi[arma].livello++;
-        std::cout << "LOG: Competenza " << arma << " aumentata a livello " << competenzeArmi[arma].livello << "!" << std::endl;
-    }
-}
-
-void Personaggio::allenamentoArma(std::string arma, int ore) {
-    if (inSpedizione) {
-        std::cout << "Non puoi allenarti seriamente mentre sei in spedizione!" << std::endl;
-        return;
-    }
-
-    // 2 ore gratis, oltre consuma stamina (1 ogni 2 ore)
-    if (ore > 2) {
-        int oreExtra = ore - 2;
-        int costoStamina = (oreExtra + 1) / 2; // Arrotonda per eccesso
-        stamina -= costoStamina;
-    }
-
-    // Effetto: +2 PCA per ora, fame aumenta del 10% (circa 1.4 tacche)
-    float puntiOttenuti = ore * 2.0f;
-    aggiungiPCA(arma, puntiOttenuti);
+    std::cout << "--------------------------------------------------" << std::endl;
+    std::cout << " PF Fortuna: " << pfFortuna << "/" << pfFortunaMax << " | PF Reali: " << pfReali << std::endl;
+    std::cout << " Monete Argento: " << moneteArgento << " | Lingue: " << lingueConosciute << std::endl;
     
-    // Aumento fame (10% del totale 14 = 1.4 tacche per sessione di allenamento)
-    fame -= 1; 
-    std::cout << "Allenamento completato: +" << puntiOttenuti << " PCA a " << arma << std::endl;
+    std::cout << "\n [ PROGRESSO TEMPORALE ]" << std::endl;
+    std::cout << " Giorni di attivita: " << giorniAttivi << " | Bonus Competenza: +" << getBonusCompetenza() << std::endl;
+
+    std::cout << "\n [ ABILITA' RILEVANTI ]" << std::endl;
+    for (auto const& [skillNome, grado] : abilità) {
+        if (grado != 0) {
+            std::string label = (grado == 2) ? "MAESTRIA" : (grado == 1 ? "COMPETENZA" : "NEGATIVA");
+            // Nota: Qui servirebbe una mappa per associare automaticamente l'abilità alla sua stat base
+            std::cout << " * " << skillNome << ": " << label << "\n"; 
+        }
+    }
+    
+    // --- PERK ATTIVI ---
+    std::cout << "\n [ PERK E MALUS ]" << std::endl;
+    if (perksAttivi.empty()) {
+        std::cout << " Nessun perk selezionato." << std::endl;
+    } else {
+        for (const auto& p : perksAttivi) {
+            std::cout << " * " << p.nome << ": " << p.descrizione << std::endl;
+            if (!p.motivoPanico.empty()) {
+                std::cout << "   > EFFETTO PANICO: " << p.motivoPanico << std::endl;
+            }
+        }
+    }
+    std::cout << "==================================================\n" << std::endl;
 }

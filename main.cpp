@@ -1,158 +1,169 @@
 #include <iostream>
-#include <string>
 #include <vector>
-#include <ctime>
-#include <cstdlib>
+#include <string>
+#include <limits>
+#include <algorithm>
 #include "personaggi.h"
 #include "magazzino.h"
 
-// Prototipi delle funzioni (Promesse al compilatore)
-void menuCombattimento(Personaggio& p);
-void eseguiEsplorazione(Magazzino& mag);
-int roll(int facce);
+// --- PROTOTIPI ---
+void menuCreazione(std::vector<Personaggio>& party);
+void gestisciPersonaggi(std::vector<Personaggio>& party, Magazzino& base);
+void menuSpedizione(Personaggio& p);
+void mostraIdentita(const Personaggio& p);
+
+// --- HELPER PER INPUT PULITO ---
+void clearCin() {
+    std::cin.clear();
+    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+}
 
 int main() {
-    std::srand(std::time(0)); 
-
-    // Inizializzazione gioco
-    Magazzino base(10.0f, 5.0f, 0, 0, 0); 
-    Personaggio p1("Marcus");
-
+    std::vector<Personaggio> party;
+    Magazzino base(10.0f, 5.0f, 0, 0, 0);
     int scelta = 0;
+
     while (scelta != 9) {
-        std::cout << "\n===============================" << std::endl;
-        std::cout << "   ZOMBIE ASYLUM GESTIONALE" << std::endl;
-        std::cout << "===============================" << std::endl;
-        std::cout << "Stato attuale: " << (p1.inSpedizione ? "[IN SPEDIZIONE]" : "[IN BASE]") << std::endl;
-        std::cout << "-------------------------------" << std::endl;
-        std::cout << "1. Esplora Nuova Zona (Loot)" << std::endl;
-        std::cout << "2. Mostra Scheda Personaggio" << std::endl;
-        std::cout << "3. Mostra Magazzino" << std::endl;
-        std::cout << "4. Sfamazione / Dissetamento" << std::endl;
-        std::cout << "5. Cambia Stato (Base / Spedizione)" << std::endl;
-        std::cout << "6. Registra Colpi Battaglia (GPA)" << std::endl;
-        std::cout << "7. Registra Fine Battaglia (Level Up PF)" << std::endl;
-        std::cout << "8. Allenamento Armi (Solo in Base)" << std::endl;
-        std::cout << "9. Esci dal gioco" << std::endl;
-        std::cout << "-------------------------------" << std::endl;
-        std::cout << "Scelta: ";
-        std::cin >> scelta;
+        std::cout << "\n========== ZOMBIE ASYLUM GESTIONALE ==========\n";
+        std::cout << "1. Crea Nuovo Personaggio\n";
+        std::cout << "2. Controlla Magazzino\n";
+        if (!party.empty()) {
+            std::cout << "3. GESTISCI PERSONAGGI (" << party.size() << " attivi)\n";
+        }
+        std::cout << "9. Esci\n";
+        std::cout << "----------------------------------------------\nScelta: ";
+        if (!(std::cin >> scelta)) { clearCin(); continue; }
 
         switch (scelta) {
-            case 1:
-                eseguiEsplorazione(base);
-                break;
-            case 2:
-                p1.mostraScheda();
-                break;
-            case 3:
-                base.mostraStato();
-                std::cout << "Med-Kit -> Base: " << base.medKit.base 
-                          << " | Avanzati: " << base.medKit.avanzati 
-                          << " | Critici: " << base.medKit.critici << std::endl;
-                break;
-            case 4: {
-                float q;
-                std::cout << "Quanto cibo/acqua vuoi usare? (0.25, 0.5, 0.75, 1.0+): ";
-                std::cin >> q;
-                // Esempio: sfama. Puoi aggiungere una scelta tra cibo e acqua qui.
-                base.sfama(p1, q);
-                break;
-            }
-            case 5:
-                p1.inSpedizione = !p1.inSpedizione;
-                std::cout << "\n>>> " << p1.nome << (p1.inSpedizione ? " e' uscito in SPEDIZIONE!" : " e' tornato alla BASE.") << std::endl;
-                break;
-            case 6:
-                menuCombattimento(p1);
-                break;
-            case 7:
-                if (p1.inSpedizione) {
-                    p1.registraBattaglia();
-                } else {
-                    std::cout << "\n[!] Devi essere in spedizione per registrare una battaglia vinta." << std::endl;
-                }
-                break;
-            case 8:
-                if (!p1.inSpedizione) {
-                    std::string arma;
-                    int ore;
-                    std::cout << "Quale arma vuoi allenare? "; std::cin >> arma;
-                    std::cout << "Quante ore? "; std::cin >> ore;
-                    p1.allenamentoArma(arma, ore);
-                } else {
-                    std::cout << "\n[!] Torna alla base per allenarti con calma." << std::endl;
-                }
-                break;    
-            case 9:
-                std::cout << "Uscita in corso..." << std::endl;
-                break;
-            default:
-                std::cout << "Opzione non valida." << std::endl;
+            case 1: menuCreazione(party); break;
+            case 2: base.mostraStato(); break;
+            case 3: if (!party.empty()) gestisciPersonaggi(party, base); break;
         }
     }
     return 0;
 }
 
-// --- DEFINIZIONI DELLE FUNZIONI ---
-
-void menuCombattimento(Personaggio& p) {
-    if (!p.inSpedizione) {
-        std::cout << "\n[!] Non puoi registrare punti GPA se non sei in spedizione!" << std::endl;
-        return;
+void mostraIdentita(const Personaggio& p) {
+    std::cout << "\n--- IDENTITA' ATTUALE ---\n";
+    std::cout << "Nome: " << p.nome << "\n";
+    std::cout << "Monete d'Argento: " << p.moneteArgento << "\n";
+    std::cout << "Lingue: " << p.lingueConosciute << "\n";
+    std::cout << "Equipaggiamento: " << p.equipaggiamento << "\n";
+    std::cout << "Fobie: ";
+    bool haFobie = false;
+    for(const auto& perk : p.perksAttivi) {
+        if(!perk.motivoPanico.empty()) { std::cout << "[" << perk.motivoPanico << "] "; haFobie = true; }
     }
+    if(!haFobie) std::cout << "Nessuna";
+    std::cout << "\n-------------------------\n";
+}
 
-    // Creiamo una lista (vector) per numerare le armi disponibili nella mappa
-    std::vector<std::string> listaArmi;
-    for (auto const& [nomeArma, prog] : p.competenzeArmi) {
-        listaArmi.push_back(nomeArma);
-    }
-
-    if (listaArmi.empty()) {
-        std::cout << "[!] Il personaggio non ha armi conosciute!" << std::endl;
-        return;
-    }
-
-    std::cout << "\n--- REGISTRAZIONE COLPI (GPA) ---" << std::endl;
-    for (int i = 0; i < listaArmi.size(); ++i) {
-        std::cout << i + 1 << ". " << listaArmi[i] << " (Liv. " << p.competenzeArmi[listaArmi[i]].livello << ")" << std::endl;
-    }
+void menuCreazione(std::vector<Personaggio>& party) {
+    std::string nome;
+    std::cout << "Inserisci il nome del sopravvissuto: ";
+    clearCin(); // Pulisce residui prima di getline
+    std::getline(std::cin, nome);
     
-    std::cout << "Seleziona il numero dell'arma: ";
-    int indice;
-    std::cin >> indice;
+    Personaggio p(nome);
+    
+    std::vector<Perk> catalogo = {
+        {"Amicizia", "Aumenta CA alleato di 2.", -2, "", false},
+        {"Leader nato", "+1 CAR ogni 2 alleati.", -3, "", true}, // Accumulabile
+        {"Abbandono", "Panico se solo.", 3, "Solitudine", false},
+        {"Paranoico", "Ossessione giornaliera.", 4, "Ansia", true} // Accumulabile
+    };
 
-    if (indice < 1 || indice > listaArmi.size()) {
-        std::cout << "Scelta non valida." << std::endl;
-        return;
+    int scelta = 0;
+    while (scelta != 4) {
+        mostraIdentita(p);
+        std::cout << "PUNTI DISPONIBILI: " << p.puntiCreazione << "\n";
+        std::cout << "1. Potenzia Caratteristiche (8-20)\n2. Scegli Perk/Malus\n3. Modifica Equip/Dati\n4. Salva e Chiudi\nScelta: ";
+        std::cin >> scelta;
+
+        if (scelta == 1) {
+            int s;
+            std::cout << "Scegli (1.FOR 2.DES 3.COS 4.INT 5.SAG 6.CAR): ";
+            std::cin >> s;
+            if (s < 1 || s > 6) { std::cout << "Errore!\n"; continue; }
+            
+            std::string statNome = (s==1)?"Forza":(s==2)?"Destrezza":(s==3)?"Costituzione":(s==4)?"Intelligenza":(s==5)?"Saggezza":"Carisma";
+            int* valAttuale = (s==1)?&p.forza:(s==2)?&p.destrezza:(s==3)?&p.costituzione:(s==4)?&p.intelligenza:(s==5)?&p.saggezza:&p.carisma;
+
+            int quanti;
+            std::cout << "Di quanti punti vuoi aumentare " << statNome << "? ";
+            std::cin >> quanti;
+
+            for (int i = 0; i < quanti; ++i) {
+                if (*valAttuale >= 20) {
+                    std::cout << "Raggiunto il limite di 20 per " << statNome << "!\n";
+                    break;
+                }
+                int costo = p.calcolaCostoStat(*valAttuale);
+                if (p.puntiCreazione >= costo) {
+                    p.puntiCreazione -= costo;
+                    (*valAttuale)++;
+                    std::cout << "Incremento effettuato! " << statNome << ": " << *valAttuale << " (Punti rimasti: " << p.puntiCreazione << ")\n";
+                } else {
+                    std::cout << "Punti insufficienti per l'ulteriore incremento a " << (*valAttuale + 1) << " (Costo: " << costo << ")\n";
+                    break;
+                }
+            }
+        }
+        else if (scelta == 2) {
+            for(int i=0; i<catalogo.size(); ++i) {
+                std::cout << i+1 << ". " << catalogo[i].nome << " (" << catalogo[i].costo << ")\n";
+            }
+            int iP; std::cin >> iP;
+            if (iP > 0 && iP <= catalogo.size()) {
+                Perk sel = catalogo[iP-1];
+                
+                // Controllo se già posseduto e non accumulabile
+                auto it = std::find_if(p.perksAttivi.begin(), p.perksAttivi.end(), [&](const Perk& pk){ return pk.nome == sel.nome; });
+                if (it != p.perksAttivi.end() && !sel.accumulabile) {
+                    std::cout << "Hai gia' questo Perk!\n";
+                } else if (p.puntiCreazione + sel.costo < 0 && sel.costo < 0) {
+                    std::cout << "Non puoi permettertelo!\n";
+                } else {
+                    p.puntiCreazione += sel.costo;
+                    p.perksAttivi.push_back(sel);
+                }
+            }
+        }
+        else if (scelta == 4 && p.puntiCreazione < 0) {
+            std::cout << "Debito di punti! Aggiungi Malus o riduci statistiche.\n";
+            scelta = 0;
+        }
     }
-
-    std::string armaScelta = listaArmi[indice - 1];
-
-    std::cout << "Esito per " << armaScelta << ":\n";
-    std::cout << "1. Mancato (+0.2)\n2. Segno (+1.0)\n3. Critico (+2.0)\nScelta: ";
-    int esito;
-    std::cin >> esito;
-
-    float pti = 0.0f;
-    if (esito == 1) pti = 0.2f;
-    else if (esito == 2) pti = 1.0f;
-    else if (esito == 3) pti = 2.0f;
-    else { std::cout << "Esito non valido."; return; }
-
-    p.aggiungiPCA(armaScelta, pti);
-    std::cout << ">>> Punti registrati su " << armaScelta << "!" << std::endl;
+    party.push_back(p);
 }
 
-int roll(int facce) {
-    if (facce <= 0) return 0;
-    return (std::rand() % facce) + 1;
+void gestisciPersonaggi(std::vector<Personaggio>& party, Magazzino& base) {
+    std::cout << "\n--- SELEZIONA PERSONAGGIO ---\n";
+    for(int i=0; i<party.size(); ++i) {
+        std::cout << i+1 << ". " << party[i].nome << (party[i].inSpedizione ? " [IN SPEDIZIONE]" : " [IN BASE]") << "\n";
+    }
+    int pIdx; std::cin >> pIdx;
+    if (pIdx < 1 || pIdx > party.size()) return;
+    Personaggio& p = party[pIdx-1];
+
+    if (p.inSpedizione) {
+        menuSpedizione(p);
+    } else {
+        std::cout << "1. Controlla Scheda\n2. Manda in Spedizione\n3. Sfamare/Dissetare\n4. Allenamento\nScelta: ";
+        int s; std::cin >> s;
+        if (s == 1) p.mostraScheda();
+        else if (s == 2) { p.inSpedizione = true; p.preparaSpedizione(); }
+        else if (s == 3) { base.sfama(p, 1.0f); base.disseta(p, 1.0f); }
+        else if (s == 4) { /* chiama p.allenamentoArma con input */ }
+    }
 }
 
-void eseguiEsplorazione(Magazzino& mag) {
-    std::cout << "\n--- ESPLORAZIONE IN CORSO ---" << std::endl;
-    // (Qui tieni il codice del loot che abbiamo scritto sopra)
-    int tiro = roll(20);
-    mag.aggiungiRisorse("ingranaggi", (tiro / 2.0f)); // Esempio rapido
-    std::cout << "Hai trovato risorse! Controlla il magazzino." << std::endl;
+void menuSpedizione(Personaggio& p) {
+    int s;
+    std::cout << "\n--- MENU SPEDIZIONE: " << p.nome << " ---\n";
+    std::cout << "1. Registra Colpi (GPA)\n2. Completa Battaglia\n3. Ritorna alla Base\nScelta: ";
+    std::cin >> s;
+    if (s == 1) { /* logica GPA */ }
+    else if (s == 2) p.registraBattaglia();
+    else if (s == 3) p.inSpedizione = false;
 }
