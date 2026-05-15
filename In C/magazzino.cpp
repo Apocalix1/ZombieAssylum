@@ -1,4 +1,4 @@
-#ifndef MAGAZZINO_H
+/*#ifndef MAGAZZINO_H
 #define MAGAZZINO_H
 
 #include <string>
@@ -42,3 +42,4 @@ public:
 };
 
 #endif
+*/

@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <title>Zombie Asylum Gestionale</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <header>
+        <div id="status-bar">
+            <span>📅 GIORNO: <b id="display-giorno">0</b></span>
+            <span>🕒 ORA: <b id="display-ora">00:00</b></span>
+            <span>🍞 CIBO: <b id="display-cibo">10</b></span>
+            <span>💧 ACQUA: <b id="display-acqua">10</b></span>
+        </div>
+    </header>
+
+    <main>
+        <div class="controlli-globali">
+            <button class="btn-hero" onclick="avviaCreazione()">➕ RECLUTA</button>
+            <button class="btn-hero" onclick="passaTempoGlobale()">⏳ ATTENDI</button>
+            <button class="btn-hero" onclick="toggleCimitero()">🪦 CADUTI</button>
+        </div>
+        <div id="party-container"></div>
+    </main>
+
+    <div id="side-cimitero">
+        <h2>I Caduti</h2>
+        <div id="cimitero-lista"></div>
+        <button class="btn-close-side" onclick="toggleCimitero()">CHIUDI</button>
+    </div>
+
+    <div id="modal-creazione" class="modal">
+        <div class="modal-content">
+            <h2 style="color: #ff0000; letter-spacing: 2px; margin-bottom:15px;">NUOVO SOPRAVVISSUTO</h2>
+            
+            <div class="input-group">
+                <input type="text" id="crea-nome" placeholder="Inserisci nome...">
+            </div>
+            
+            <div id="punti-residui">Punti Disponibili: <b style="color:#2ecc71">30</b></div>
+
+            <div id="stats-setup-container"></div>
+            
+            <button id="btn-perk-toggle" class="btn-perk-main" onclick="toggleSezionePerk()">
+                🛒 COMPETENZE E PERK
+            </button>
+            
+            <div id="perks-setup-container" style="display:none;"></div>
+
+            <div class="modal-footer">
+                <button class="btn-big btn-cancel" onclick="annullaCreazione()">ANNULLA</button>
+                <button class="btn-big btn-confirm" onclick="confermaCreazione()">SALVA</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-scheda" class="modal">
+        <div class="modal-content">
+            <h2 id="scheda-nome"></h2>
+            <div id="scheda-stats"></div>
+            <div id="scheda-bio"></div>
+            <div class="modal-footer">
+                <button class="btn-big btn-cancel" onclick="chiudiScheda()">CHIUDI</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="perks.js"></script>
+    <script src="logic.js"></script>
+    <script src="ui.js"></script>
+</body>
+</html>

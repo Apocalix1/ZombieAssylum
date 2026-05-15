@@ -1,4 +1,4 @@
-#include "personaggi.h"
+/* #include "personaggi.h"
 #include <iostream>
 #include <cmath>
 #include <vector>
@@ -271,3 +271,4 @@ void Personaggio::mostraScheda() {
     }
     std::cout << "==================================================\n" << std::endl;
 }
+    */

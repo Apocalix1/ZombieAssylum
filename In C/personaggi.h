@@ -1,3 +1,4 @@
+/*
 #ifndef PERSONAGGI_H
 #define PERSONAGGI_H
 
@@ -105,3 +106,5 @@ public:
 };
 
 #endif
+
+*/
