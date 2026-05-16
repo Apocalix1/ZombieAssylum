@@ -1,7 +1,7 @@
 let oreTotali = 0;
 let party = [];
 let cimitero = [];
-let magazzino = { cibo: 20, acqua: 20 };
+let magazzino = { cibo: 20, acqua: 20, materiali: 5 };
 let tempP = null;
 
 // --- UTILITY: COLORI BARRE ---
@@ -11,6 +11,14 @@ function getColoreBarra(percentuale) {
     if (percentuale > 25) return "#e67e22"; // Arancione
     if (percentuale > 5)  return "#e74c3c"; // Rosso
     return "#000000";                       // Nero
+}
+
+function getBarra(val, max, color) {
+    const percent = max > 0 ? Math.max(0, Math.min(100, (val / max) * 100)) : 0;
+    return `
+        <div class="stat-bar" style="background:#111; margin:6px 0; border:1px solid #333;">
+            <div class="bar-fill" style="width:${percent}%; background:${color};"></div>
+        </div>`;
 }
 
 // --- NUOVA LOGICA: PASSA TEMPO GLOBALE (L'unico modo per far scorrere il tempo) ---
@@ -48,6 +56,7 @@ function aggiornaInterfaccia() {
     document.getElementById('display-ora').innerText = `${ora < 10 ? '0' : ''}${ora}:00`;
     document.getElementById('display-cibo').innerText = magazzino.cibo.toFixed(1);
     document.getElementById('display-acqua').innerText = magazzino.acqua.toFixed(1);
+    document.getElementById('display-materiali').innerText = magazzino.materiali;
 
     const container = document.getElementById('party-container');
     container.innerHTML = "";
@@ -91,17 +100,48 @@ function aggiornaInterfaccia() {
                 <h3 style="margin:0">${p.nome}</h3>
                 <span class="fatica-badge">Fatic. ${p.faticaTotale}</span>
             </div>
+            <div style="font-size:0.8em; margin-bottom:4px;">
+                <strong>PF Reali:</strong> ${p.puntiFeritaReali} / ${p.puntiFeritaRealiMax} - ${p.woundState}
+            </div>
+            ${getBarra(p.puntiFeritaReali, p.puntiFeritaRealiMax, '#c0392b')}
+            <div style="font-size:0.75em; margin-bottom:10px; color:#aaa;">${p.woundEffectText}</div>
             <div style="font-size:0.7em; margin-bottom:10px;">Stato: <b>${statoAzione}</b></div>
             
             <div class="mini-bars-container">${barsHtml}</div>
 
-            <div class="azioni-card" style="margin-top: 12px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px;">
-                <button onclick="apriScheda(${idx})" title="Scheda">📋</button>
-                <button onclick="pianificaAzione(${idx}, 'dormi')" title="Dormi">😴</button>
-                <button onclick="toggleSpedizione(${idx})" title="Spedizione">${p.inSpedizione ? '🔙' : '🚚'}</button>
-                <button onclick="nutri(${idx})" title="Nutri">🍞</button>
-                <button onclick="disseta(${idx})" title="Disseta">💧</button>
-                <button style="color:gray" title="Coda">${p.codaAzioni.length}</button>
+            <button onclick="apriScheda(${idx})" style="width:100%; margin-bottom:10px;">Visualizza Scheda</button>
+            <div class="action-dropdowns" style="margin-top: 12px; display:grid; gap:6px;">
+                <details class="action-dropdown">
+                    <summary>SOPRAVVIVI</summary>
+                    <div class="dropdown-buttons">
+                        <button onclick="nutri(${idx})">Nutri</button>
+                        <button onclick="disseta(${idx})">Disseta</button>
+                        <button onclick="pianificaAzione(${idx}, 'dormi')">Dormi</button>
+                        <button onclick="trattaMedica(${idx})">Medica</button>
+                    </div>
+                </details>
+                <details class="action-dropdown">
+                    <summary>CREA</summary>
+                    <div class="dropdown-buttons">
+                        <button onclick="avviaCreazione()">Crea</button>
+                        <button onclick="alchimiaPersonaggio(${idx})">Alchimia</button>
+                        <button onclick="artificeriaPersonaggio(${idx})">Artificeria</button>
+                    </div>
+                </details>
+                <details class="action-dropdown">
+                    <summary>MIGLIORA</summary>
+                    <div class="dropdown-buttons">
+                        <button onclick="allenamento(${idx})">Allenamento</button>
+                        <button onclick="studio(${idx})">Studio</button>
+                    </div>
+                </details>
+                <details class="action-dropdown">
+                    <summary>ESPLORA</summary>
+                    <div class="dropdown-buttons">
+                        <button onclick="spedisciPersonaggio(${idx})">Spedisci</button>
+                        <button onclick="esplora(${idx})">Esplora</button>
+                    </div>
+                </details>
             </div>
         `;
         container.appendChild(card);
@@ -130,6 +170,269 @@ function pianificaAzione(idx, tipo) {
 
 function toggleSpedizione(idx) {
     party[idx].inSpedizione = !party[idx].inSpedizione;
+    aggiornaInterfaccia();
+}
+
+function trattaMedica(idx) {
+    const p = party[idx];
+    if (p.woundState === 'Illeso') {
+        alert(`${p.nome} non ha ferite reali da curare.`);
+        return;
+    }
+
+    const modInt = p.getStatDettagliata('Intelligenza').mod;
+    const modCost = p.getStatDettagliata('Costituzione').mod;
+    const baseDC = {
+        'Ferita lieve': 12,
+        'Ferita profonda': 16,
+        'Funzionalità a rischio': 20,
+        'Rischio di morte': 24
+    }[p.woundState] || 12;
+
+    const dc = Math.max(5, baseDC - modCost);
+    const tiro = Math.floor(Math.random() * 20) + 1 + modInt;
+    const successo = tiro >= dc;
+
+    if (successo) {
+        p.receiveMedicalTreatment(true);
+        alert(`${p.nome} ottiene un colpo di cura! Tiro ${tiro} vs DC ${dc}.`);
+    } else {
+        alert(`${p.nome} fallisce la cura. Tiro ${tiro} vs DC ${dc}.`);
+    }
+    aggiornaInterfaccia();
+}
+
+function alchimiaPersonaggio(idx) {
+    alert('Funzione Alchimia per il personaggio in sviluppo.');
+}
+
+function artificeriaPersonaggio(idx) {
+    alert('Funzione Artificeria per il personaggio in sviluppo.');
+}
+
+function allenamento(idx) {
+    alert('Funzione Allenamento in sviluppo.');
+}
+
+function studio(idx) {
+    alert('Funzione Studio in sviluppo.');
+}
+
+function spedisciPersonaggio(idx) {
+    party[idx].inSpedizione = true;
+    aggiornaInterfaccia();
+    openSpedizioneModal();
+}
+
+function mandaTuttiInSpedizione() {
+    party.forEach(p => p.inSpedizione = true);
+    aggiornaInterfaccia();
+    openSpedizioneModal();
+}
+
+function openSpedizioneModal() {
+    renderSpedizioneModal();
+    const panel = document.getElementById('side-spedizione');
+    if (panel) panel.classList.add('open');
+}
+
+function chiudiSpedizione() {
+    const panel = document.getElementById('side-spedizione');
+    if (panel) panel.classList.remove('open');
+}
+
+function ritiraTutti() {
+    party.forEach(p => p.inSpedizione = false);
+    chiudiSpedizione();
+    aggiornaInterfaccia();
+}
+
+function ritiraPersonaggio(idx) {
+    party[idx].inSpedizione = false;
+    renderSpedizioneModal();
+    aggiornaInterfaccia();
+}
+
+function degradaInCombat(idx) {
+    const p = party[idx];
+    p.puntiFeritaReali = Math.max(0, p.puntiFeritaReali - 1);
+    if (p.puntiFeritaReali <= 0) {
+        alert(`Condoglianze ${p.nome} è morto in combattimento`);
+        party.splice(idx, 1);
+        renderSpedizioneModal();
+        aggiornaInterfaccia();
+        return;
+    }
+    renderSpedizioneModal();
+    aggiornaInterfaccia();
+}
+
+function ferisciInCombat(idx) {
+    const p = party[idx];
+    let input = prompt(`Quanti danni vuoi infliggere a ${p.nome}?`, '1');
+    let danno = parseInt(input);
+    if (isNaN(danno) || danno <= 0) return;
+    const assorbito = Math.min(p.puntiFortuna, danno);
+    p.puntiFortuna -= assorbito;
+    let residuo = danno - assorbito;
+    if (residuo > 0) {
+        const colpiReali = Math.ceil(residuo / 5);
+        p.puntiFeritaReali = Math.max(0, p.puntiFeritaReali - colpiReali);
+    }
+    if (p.puntiFeritaReali <= 0) {
+        alert(`Condoglianze ${p.nome} è morto in combattimento`);
+        party.splice(idx, 1);
+    }
+    renderSpedizioneModal();
+    aggiornaInterfaccia();
+}
+
+function registraColpo(idx) {
+    alert('Registra un colpo: funzione in sviluppo.');
+}
+
+function segnaVittoria(idx) {
+    const p = party[idx];
+    const oldMax = p.puntiFeritaRealiMax;
+    p.vittorieCombattimento += 1;
+    const newMax = p.puntiFeritaRealiMax;
+    if (newMax > oldMax) {
+        p.puntiFeritaReali = Math.min(newMax, p.puntiFeritaReali);
+    }
+    renderSpedizioneModal();
+    aggiornaInterfaccia();
+}
+
+function renderSpedizioneModal() {
+    const container = document.getElementById('spedizione-content');
+    if (!container) return;
+    const inSpedizione = party.filter(p => p.inSpedizione);
+    if (inSpedizione.length === 0) {
+        container.innerHTML = `<p>Nessun personaggio in spedizione.</p>`;
+        return;
+    }
+
+    container.innerHTML = inSpedizione.map(p => {
+        const idx = party.indexOf(p);
+        const perkList = p.perks.length > 0 ? p.perks.map(perk => typeof perk === 'string' ? perk : perk.nome).join(' • ') : 'Nessuno';
+        return `
+            <div class="combat-card">
+                <div class="combat-card-header">
+                    <strong>${p.nome}</strong>
+                    <button class="combat-retreat" onclick="ritiraPersonaggio(${idx})">RITIRA</button>
+                </div>
+                <div style="margin:10px 0; font-size:0.9rem;">
+                    <div>❤️ PF Reali: ${p.puntiFeritaReali} / ${p.puntiFeritaRealiMax}</div>
+                    ${getBarra(p.puntiFeritaReali, p.puntiFeritaRealiMax, '#c0392b')}
+                    <div>✨ PF Fortuna: ${p.puntiFortuna} / ${p.puntiFortunaMax}</div>
+                    ${getBarra(p.puntiFortuna, p.puntiFortunaMax, '#f1c40f')}
+                    <div style="margin-top:8px; font-size:0.85rem; color:#aaa;">Vittorie comb.: ${p.vittorieCombattimento}</div>
+                </div>
+                <div class="combat-buttons" style="display:grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap:8px; margin-bottom:12px;">
+                    <button onclick="degradaInCombat(${idx})">Degrada</button>
+                    <button onclick="ferisciInCombat(${idx})">Ferisci</button>
+                    <button onclick="registraColpo(${idx})">Registra un colpo</button>
+                    <button onclick="segnaVittoria(${idx})">Segna vittoria</button>
+                </div>
+                <details style="background:#111; border:1px solid #333; padding:10px; border-radius:6px;">
+                    <summary style="cursor:pointer; font-weight:bold;">Mostra perks di combattimento</summary>
+                    <div style="margin-top:8px; color:#eee; font-size:0.9rem;">${perkList}</div>
+                </details>
+            </div>`;
+    }).join('');
+}
+
+function esplora(idx) {
+    alert('Funzione Esplora in sviluppo.');
+}
+
+function apriMedica() {
+    const modal = document.getElementById('modal-medica');
+    if (!modal) return;
+    renderMedicaModal();
+    modal.style.display = 'block';
+}
+
+function renderMedicaModal() {
+    const container = document.getElementById('medica-content');
+    if (!container) return;
+
+    if (party.length === 0) {
+        container.innerHTML = `<p>Nessun sopravvissuto in squadra.</p>`;
+        return;
+    }
+
+    const righe = party.map((p, idx) => {
+        const costo = getMedicalCost(p);
+        const chance = Math.round(getMedicalSuccessChance(p) * 100);
+        const disabled = costo === 0 || magazzino.materiali < costo;
+        return `
+            <div class="stat-row" style="margin-bottom:8px; background:#111;">
+                <div style="flex:1; text-align:left;">
+                    <strong>${p.nome}</strong><br>
+                    <small>${p.woundState} - PF Reali ${p.puntiFeritaReali}/${p.puntiFeritaRealiMax}</small><br>
+                    <small>PF Fortuna ${p.puntiFortuna}/${p.puntiFortunaMax}</small><br>
+                    <small>CD stimata: ${chance}% - Costo: ${costo} materiali</small>
+                </div>
+                <button onclick="provaTrattamentoMedico(${idx})" style="min-width:100px; background:${disabled ? '#444 !important' : '#27ae60 !important'}; color:white !important;" ${disabled ? 'disabled' : ''}>
+                    ${costo === 0 ? 'Nessuna cura' : 'Cura'}
+                </button>
+            </div>`;
+    }).join('');
+
+    container.innerHTML = `
+        <div style="margin-bottom:12px; font-size:0.9rem; color:#ddd;">
+            Materiali disponibili: <strong>${magazzino.materiali}</strong><br>
+            L'efficacia della cura dipende dalla Costituzione, dallo stato di ferite e dalla preparazione del personaggio.
+        </div>
+        ${righe}`;
+}
+
+function getMedicalCost(p) {
+    switch (p.woundState) {
+        case 'Ferita lieve': return 2;
+        case 'Ferita profonda': return 4;
+        case 'Funzionalità a rischio': return 6;
+        case 'Rischio di morte': return 10;
+        default: return 0;
+    }
+}
+
+function getMedicalSuccessChance(p) {
+    let chance = 0.35 + p.constitutionModifier * 0.04 + p.getBonusCompetenza() * 0.025;
+    if (p.hasCompetenza('Natura') || p.hasCompetenza('Cucina')) chance += 0.15;
+    if (p.perks.some(perk => typeof perk === 'object' && perk.nome === 'Agofobico')) chance -= 0.15;
+    switch (p.woundState) {
+        case 'Ferita profonda': chance -= 0.10; break;
+        case 'Funzionalità a rischio': chance -= 0.18; break;
+        case 'Rischio di morte': chance -= 0.28; break;
+    }
+    return Math.max(0.05, Math.min(0.95, chance));
+}
+
+function provaTrattamentoMedico(idx) {
+    const p = party[idx];
+    const costo = getMedicalCost(p);
+    if (costo === 0) {
+        alert(`${p.nome} non ha ferite reali da trattare in questo momento.`);
+        return;
+    }
+    if (magazzino.materiali < costo) {
+        alert('Materiali insufficienti per questo trattamento.');
+        return;
+    }
+
+    magazzino.materiali -= costo;
+    const success = Math.random() < getMedicalSuccessChance(p);
+    const guarito = p.receiveMedicalTreatment(success);
+
+    if (guarito) {
+        alert(`Trattamento riuscito su ${p.nome}! +1 PF Reali e stabilizzazione temporanea.`);
+    } else {
+        alert(`Il trattamento su ${p.nome} fallisce. Le ferite rimangono critiche.`);
+    }
+
+    renderMedicaModal();
     aggiornaInterfaccia();
 }
 
@@ -342,21 +645,19 @@ function togglePerk(nomePerk) {
     const index = tempP.perks.findIndex(p => p.nome === nomePerk);
 
     if (index > -1) {
-        // Se lo ha già, lo rimuoviamo e ridiamo i punti
         tempP.perks.splice(index, 1);
-        puntiCreazione += perkDati.costo;
+        tempP.puntiCreazione += perkDati.costo;
     } else {
-        // Se non lo ha, controlliamo se ha abbastanza punti
-        if (puntiCreazione >= perkDati.costo) {
+        if (tempP.puntiCreazione >= perkDati.costo) {
             tempP.perks.push(perkDati);
-            puntiCreazione -= perkDati.costo;
+            tempP.puntiCreazione -= perkDati.costo;
         } else {
             alert("Punti insufficienti!");
+            return;
         }
     }
 
-    // Aggiorniamo l'interfaccia
-    document.querySelector('#punti-residui b').innerText = puntiCreazione;
+    document.querySelector('#punti-residui b').innerText = tempP.puntiCreazione;
     renderSetupPerks();
 }
 
@@ -384,6 +685,14 @@ function apriScheda(idx) {
     });
     statsHtml += `</div>`;
 
+    const lingueHtml = `
+        <div style="margin-top:14px; background:#111; padding:12px; border:1px solid #333; border-radius:6px; text-align:left;">
+            <div style="font-weight:bold; color:#f1c40f; margin-bottom:6px;">LINGUE CONOSCIUTE</div>
+            <div style="color:#eee; font-size:0.9rem;">${p.lingue.join(' • ')}</div>
+        </div>`;
+
+    statsHtml += lingueHtml;
+
     // 2. Generazione Colonna Effetti Attivi
     let effettiHtml = `
         <div class="timer-column" style="text-align:left; font-size:0.85rem; background:#111; padding:12px; border-left:2px solid #ff0000;">
@@ -409,14 +718,25 @@ function apriScheda(idx) {
         <div class="scheda-grid" style="display: grid; grid-template-columns: 320px 1fr 220px; gap: 20px;">
             ${statsHtml}
             <div class="bio-column" style="text-align:left;">
+                <p>❤️ <b>PF Reali:</b> ${p.puntiFeritaReali} / ${p.puntiFeritaRealiMax} - ${p.woundState}</p>
+                ${getBarra(p.puntiFeritaReali, p.puntiFeritaRealiMax, '#c0392b')}
+                <p>✨ <b>PF Fortuna:</b> ${p.puntiFortuna} / ${p.puntiFortunaMax}</p>
+                ${getBarra(p.puntiFortuna, p.puntiFortunaMax, '#f1c40f')}
+                <p style="font-size:0.85em; color:#aaa;">${p.woundEffectText}</p>
                 <p>🏅 <b>COMPETENZA:</b> <span style="color:#f1c40f">+${p.getBonusCompetenza()}</span></p>
                 <p>⚡ <b>STAMINA:</b> <span style="color:#3498db">${p.staminaAttuale} / ${p.staminaMax}</span></p>
                 <p>🏃 <b>FATICA TOTALE:</b> <span style="color:#e74c3c">${p.faticaTotale}</span></p>
                 <p style="font-size:0.75em; color:#888;">${p.malusFaticaDettagliati.join(" • ")}</p>
                 <hr style="border:0; border-top:1px solid #444; margin:15px 0;">
-                <p style="font-size:0.85em; color:#aaa;"><b>PERK ACQUISITI:</b></p>
+                <p style="font-size:0.85em; color:#aaa;"><b>COMPETENZE:</b></p>
                 <div style="font-size:0.85em; color:#eee; background:#111; padding:8px;">
-                    ${p.perks.map(perk => typeof perk === 'string' ? perk : perk.nome).join(" • ") || "Nessuno"}
+                    ${p.competenze.length > 0 ? p.competenze.join(' • ') : 'Nessuna'}
+                </div>
+                <p style="font-size:0.85em; color:#aaa; margin-top:12px;"><b>MAESTRIE:</b></p>
+                <div style="font-size:0.85em; color:#eee; background:#111; padding:8px; text-align:left;">
+                    ${p.competenze.filter(skill => SKILL_SYSTEM.masteryDescriptions[skill])
+                        .map(skill => `<strong>${skill}:</strong> ${SKILL_SYSTEM.masteryDescriptions[skill]}`)
+                        .join('<br>') || 'Nessuna maestria acquisita.'}
                 </div>
             </div>
             ${effettiHtml}

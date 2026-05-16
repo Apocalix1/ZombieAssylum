@@ -143,12 +143,114 @@ body {
 }
 #side-cimitero.open { right: 0; }
 
+#side-spedizione {
+    position: fixed;
+    left: -360px;
+    top: 0;
+    width: 360px;
+    height: 100%;
+    background: #111;
+    border-right: 2px solid #ff0000;
+    transition: 0.4s;
+    padding: 20px;
+    overflow-y: auto;
+    z-index: 3000;
+}
+#side-spedizione.open { left: 0; }
+#side-spedizione h2 {
+    color: #ff0000;
+    margin-top: 0;
+    margin-bottom: 16px;
+}
+.side-panel-footer {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 18px;
+    gap: 10px;
+}
+
 #party-container {
     display: flex;
     flex-wrap: wrap;
     justify-content: center; /* Centra le card nella pagina */
     gap: 20px;
     padding: 20px;
+}
+.action-dropdowns {
+    display: grid;
+    gap: 8px;
+}
+.action-dropdown {
+    background: #111;
+    border: 1px solid #333;
+    border-radius: 6px;
+    overflow: hidden;
+}
+.action-dropdown summary {
+    list-style: none;
+    cursor: pointer;
+    padding: 10px 12px;
+    font-weight: bold;
+    color: #e74c3c;
+    background: #161616;
+}
+.action-dropdown summary::-webkit-details-marker { display: none; }
+.action-dropdown summary:after {
+    content: ' ▾';
+    float: right;
+}
+.action-dropdown[open] summary:after { content: ' ▴'; }
+.action-dropdown .dropdown-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 10px 12px 14px;
+    background: #111;
+}
+.action-dropdown .dropdown-buttons button {
+    flex: 1 1 calc(50% - 6px);
+    min-width: 100px;
+    padding: 10px;
+    background: #222 !important;
+    color: #f1c40f !important;
+    border: 1px solid #333 !important;
+}
+.action-dropdown .dropdown-buttons button:hover {
+    background: #f1c40f !important;
+    color: #111 !important;
+}
+.combat-card {
+    background: #121212;
+    border: 1px solid #333;
+    border-radius: 10px;
+    padding: 14px;
+    margin-bottom: 14px;
+}
+.combat-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+}
+.combat-card-header strong {
+    font-size: 1rem;
+}
+.combat-retreat {
+    background: #222 !important;
+    color: #e74c3c !important;
+    border: 1px solid #e74c3c !important;
+    padding: 6px 10px;
+    font-size: 0.8rem;
+}
+.combat-buttons button {
+    background: #222 !important;
+    border: 1px solid #333 !important;
+    color: #f1c40f !important;
+    padding: 10px;
+}
+.combat-buttons button:hover {
+    background: #f1c40f !important;
+    color: #111 !important;
 }
 .card-personaggio {
     background: #1a1a1a;
