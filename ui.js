@@ -10,12 +10,31 @@ let magazzino = {
         base: 2,
         avanzati: 1,
         critici: 0
-    }
+    },
+    libri: []
 };
-// inizializza biblioteca libri per argomenti
-magazzino.libri = {};
-Object.keys(SKILL_SYSTEM.semantics).forEach(k => { magazzino.libri[k] = 0; });
-magazzino.libri['Medicina'] = 0;
+
+function rollDiceNotation(notation) {
+    const match = notation.match(/(\d+)d(\d+)/);
+    if (!match) return 0;
+    return rollDice(parseInt(match[1], 10), parseInt(match[2], 10));
+}
+
+function randomStudyHours() {
+    const r = Math.random();
+    if (r < 0.04) return 24;
+    const distribution = [3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23];
+    const midpoint = 13.5;
+    const weights = distribution.map(v => 1 / (1 + Math.abs(v - midpoint)));
+    let total = weights.reduce((sum, w) => sum + w, 0);
+    let pick = Math.random() * total;
+    for (let i = 0; i < distribution.length; i++) {
+        pick -= weights[i];
+        if (pick <= 0) return distribution[i];
+    }
+    return 23;
+}
+
 let tempP = null;
 
 // --- UTILITY: COLORI BARRE ---
@@ -42,17 +61,20 @@ function passaTempoGlobale() {
     if (isNaN(ore) || ore <= 0) return;
 
     // Avanza il tempo globale di 'ore' ore in blocco
+    const giornoPrecedente = Math.floor(oreTotali / 24);
     oreTotali += ore;
+    const giornoAttuale = Math.floor(oreTotali / 24);
     for (let i = party.length - 1; i >= 0; i--) {
         const p = party[i];
+        if (typeof p.resetDailyStudy === 'function') p.resetDailyStudy(oreTotali);
         const causaMorte = (typeof p.tickOre === 'function') ? p.tickOre(ore) : null;
         if (causaMorte) {
             alert(`CONDOGLIANZE: ${p.nome} è morto per ${causaMorte}.`);
             cimitero.push({
                 nome: p.nome,
                 causa: causaMorte,
-                giorni: Math.floor(oreTotali / 24) - p.giornoInizio,
-                data: `${Math.floor(oreTotali / 24)}° Giorno`
+                giorni: giornoAttuale - p.giornoInizio,
+                data: `${giornoAttuale}° Giorno`
             });
             party.splice(i, 1);
             if (typeof chiudiScheda === 'function') chiudiScheda();
@@ -169,16 +191,45 @@ function aggiornaInterfaccia() {
 }
 
 // --- LOGICA DELLE AZIONI (Thread e Code) ---
-function pianificaAzione(idx, tipo) {
-    const p = party[idx];
-    let ore = prompt(`Quante ore vuoi dedicare a: ${tipo.toUpperCase()}?`, tipo === 'dormi' ? "8" : "1");
-    ore = parseFloat(ore);
-    if (isNaN(ore) || ore <= 0) return;
+function toggleSpedizione(idx) {
+    party[idx].inSpedizione = !party[idx].inSpedizione;
+    aggiornaInterfaccia();
+}
 
-    const nuovaAzione = { tipo: tipo, oreTotali: ore, oreRimanenti: ore };
-    if (tipo === 'studio') {
+function alchimiaPersonaggio(idx) {
+    alert('Funzione Alchimia per il personaggio in sviluppo.');
+}
+
+function artificeriaPersonaggio(idx) {
+    alert('Funzione Artificeria per il personaggio in sviluppo.');
+}
+
+function allenamento(idx) {
+    alert('Funzione Allenamento in sviluppo.');
+}
+
+function pianificaAzione(idx, tipo, bookId = null, subject = null, bookTitle = null, ore = null, teacherName = null) {
+    const p = party[idx];
+    let plannedHours;
+    if (tipo === 'studio-libro') {
+        if (!bookId || !ore) return;
+        plannedHours = ore;
+    } else {
+        plannedHours = prompt(`Quante ore vuoi dedicare a: ${tipo.toUpperCase()}?`, tipo === 'dormi' ? '8' : '1');
+        plannedHours = parseFloat(plannedHours);
+        if (isNaN(plannedHours) || plannedHours <= 0) return;
+    }
+
+    const nuovaAzione = { tipo: tipo, oreTotali: plannedHours, oreRimanenti: plannedHours };
+    if (tipo === 'studio-libro') {
+        nuovaAzione.bookId = bookId;
+        nuovaAzione.subject = subject;
+        nuovaAzione.bookTitle = bookTitle;
+        nuovaAzione.teacherName = teacherName;
+        nuovaAzione.onComplete = () => completaStudioBookAction(p, nuovaAzione);
+    } else if (tipo === 'studio') {
         nuovaAzione.onComplete = () => {
-            const guadagno = awardStudyPM(p, ore);
+            const guadagno = awardStudyPM(p, plannedHours);
             if (guadagno > 0) {
                 alert(`${p.nome} impara Medicina: +${guadagno} PM (massimo ${getStudyPMCap(p)} totali per il livello corrente).`);
             } else {
@@ -195,195 +246,6 @@ function pianificaAzione(idx, tipo) {
         p.azioneCorrente = nuovaAzione;
     }
     aggiornaInterfaccia();
-}
-
-function toggleSpedizione(idx) {
-    party[idx].inSpedizione = !party[idx].inSpedizione;
-    aggiornaInterfaccia();
-}
-
-function apriMedica(idxMedico) {
-    medicoCorrente = idxMedico;
-    const feriti = party.filter(p => p.puntiFeritaReali < p.puntiFeritaRealiMax);
-    if (feriti.length === 0) {
-        alert('Tutti in perfetta salute per ora');
-        return;
-    }
-    renderMedicaModal();
-    const modal = document.getElementById('modal-medica');
-    if (modal) modal.style.display = 'block';
-}
-
-function renderMedicaModal() {
-    const container = document.getElementById('medica-content');
-    if (!container) return;
-    const medico = party[medicoCorrente];
-    const feriti = party.filter(p => p.puntiFeritaReali < p.puntiFeritaRealiMax);
-    if (!medico || feriti.length === 0) {
-        container.innerHTML = `<p>Tutti in perfetta salute per ora.</p>`;
-        return;
-    }
-    container.innerHTML = `
-        <div style="margin-bottom:12px; font-size:0.9rem; color:#ddd;">
-            <strong>Medico:</strong> ${medico.nome} (Int +${medico.getStatDettagliata('Intelligenza').mod})<br>
-            Risorse mediche: base ${magazzino.materialiMedici.base}, avanzati ${magazzino.materialiMedici.avanzati}, critici ${magazzino.materialiMedici.critici}<br>
-            Scegli il personaggio da curare:
-        </div>
-        ${feriti.map((p, idx) => {
-            const targetIdx = party.indexOf(p);
-            const req = getMedicalData(p.woundState);
-            const available = hasEnoughMedicalMaterials(req);
-            return `
-                <div class="stat-row" style="margin-bottom:8px; background:#111;">
-                    <div style="flex:1; text-align:left;">
-                        <strong>${p.nome}</strong><br>
-                        <small>${p.woundState} - PF Reali ${p.puntiFeritaReali}/${p.puntiFeritaRealiMax}</small><br>
-                        <small>Costituzione: ${p.costituzione} (mod ${p.getStatDettagliata('Costituzione').mod >= 0 ? '+' : ''}${p.getStatDettagliata('Costituzione').mod})</small><br>
-                        <small>CD base: ${req.cd}, PM: ${req.pm}, Materiali: ${req.base} base, ${req.avanzati} avanzati, ${req.critici} critici</small>
-                    </div>
-                    <button onclick="curaTarget(${targetIdx})" style="min-width:100px; background:${available ? '#27ae60 !important' : '#555 !important'}; color:white !important;" ${available ? '' : 'disabled'}>Cura</button>
-                </div>`;
-        }).join('')}
-    `;
-}
-
-function getMedicalData(woundState) {
-    const data = {
-        'Ferita lieve': { cd: 12, pm: 1, base: 5, avanzati: 0, critici: 0, lvReq: 0 },
-        'Ferita profonda': { cd: 16, pm: 3, base: 10, avanzati: 2, critici: 0, lvReq: 2 },
-        'Funzionalità a rischio': { cd: 20, pm: 7, base: 15, avanzati: 8, critici: 1, lvReq: 3 },
-        'Rischio di morte': { cd: 24, pm: 10, base: 30, avanzati: 16, critici: 5, lvReq: 4 }
-    };
-    return data[woundState] || null;
-}
-
-function hasEnoughMedicalMaterials(req) {
-    return magazzino.materialiMedici.base >= req.base &&
-           magazzino.materialiMedici.avanzati >= req.avanzati &&
-           magazzino.materialiMedici.critici >= req.critici;
-}
-
-function takeMedicalMaterials(req, half = false) {
-    const divisor = half ? 2 : 1;
-    magazzino.materialiMedici.base = Math.max(0, magazzino.materialiMedici.base - Math.ceil(req.base / divisor));
-    magazzino.materialiMedici.avanzati = Math.max(0, magazzino.materialiMedici.avanzati - Math.ceil(req.avanzati / divisor));
-    magazzino.materialiMedici.critici = Math.max(0, magazzino.materialiMedici.critici - Math.ceil(req.critici / divisor));
-}
-
-function getMedicineLevelBonus(level) {
-    switch (level) {
-        case 2: return 1;
-        case 3: return 2;
-        case 5: return 3;
-        default: return 0;
-    }
-}
-
-function curaTarget(targetIdx) {
-    const medico = party[medicoCorrente];
-    const target = party[targetIdx];
-    const req = getMedicalData(target.woundState);
-
-    if (!req) return;
-    if (medico.livelloMedicina < req.lvReq) {
-        alert(`Livello Medicina insufficiente! Richiesto: ${req.lvReq}`);
-        return;
-    }
-    if (!hasEnoughMedicalMaterials(req)) {
-        alert('Risorse insufficienti.');
-        return;
-    }
-
-    // NUOVO: Calcolo CD influenzato dalla Costituzione del paziente
-    // Se mod positivo -> sottrae (es 24 - 3). Se mod negativo -> somma (es 24 + 2)
-    const modCostPaziente = target.getStatDettagliata('Costituzione').mod;
-    const dcFinale = req.cd - modCostPaziente;
-
-    // NUOVO: Tiro d20 + INT + Bonus Livello
-    const bonusLivello = getMedicineLevelBonus(medico.livelloMedicina);
-    const modInt = medico.getStatDettagliata('Intelligenza').mod;
-    const tiroDado = Math.floor(Math.random() * 20) + 1;
-    const totale = tiroDado + modInt + bonusLivello;
-    
-    const successo = totale >= dcFinale;
-    const scarto = dcFinale - totale; // Quanto è mancato per riuscire
-
-    if (successo) {
-        takeMedicalMaterials(req, false);
-        target.receiveMedicalTreatment(true);
-        medico.pmMedicina += req.pm;
-        checkMedicineLevelUp(medico); // Controlla se sale di livello
-        alert(`SUCCESSO! ${medico.nome} cura ${target.nome}. (Tiro: ${totale} vs CD: ${dcFinale})`);
-    } else {
-        // FALLIMENTO: perdi 50% materiali
-        takeMedicalMaterials(req, true);
-        alert(`FALLIMENTO! ${medico.nome} non riesce a curare ${target.nome}. Perso il 50% dei materiali.`);
-        
-        // NUOVO: Se scarto >= 5, la ferita peggiora
-        if (scarto >= 5) {
-            target.puntiFeritaReali = Math.max(0, target.puntiFeritaReali - 1);
-            target.resetWoundTimer();
-            alert(`GRAVE: Le condizioni di ${target.nome} sono peggiorate a causa dell'intervento errato!`);
-        }
-    }
-    renderMedicaModal();
-    aggiornaInterfaccia();
-}
-
-function infestazioneWound(target) {
-    if (!target || target.puntiFeritaReali <= 0) return;
-    target.puntiFeritaReali = Math.max(0, target.puntiFeritaReali - 1);
-    target.resetWoundTimer();
-}
-
-function checkMedicineLevelUp(p) {
-    const soglie = { 1: 8, 2: 24, 3: 40, 4: 56, 5: 72 };
-    let nuovoLivello = p.livelloMedicina;
-
-    for (let lv = 1; lv <= 5; lv++) {
-        if (p.pmMedicina >= soglie[lv]) {
-            nuovoLivello = lv;
-        }
-    }
-
-    if (nuovoLivello > p.livelloMedicina) {
-        p.livelloMedicina = nuovoLivello;
-        mostraNotificaInAlto(`${p.nome} è ora Livello ${nuovoLivello} in Medicina!`, "successo");
-    }
-}
-
-function alchimiaPersonaggio(idx) {
-    alert('Funzione Alchimia per il personaggio in sviluppo.');
-}
-
-function artificeriaPersonaggio(idx) {
-    alert('Funzione Artificeria per il personaggio in sviluppo.');
-}
-
-function allenamento(idx) {
-    alert('Funzione Allenamento in sviluppo.');
-}
-
-function studio(idx) {
-    const p = party[idx];
-    if (!p) return;
-    pianificaAzione(idx, 'studio');
-}
-
-function getStudyPMCap(p) {
-    const livelli = [8, 24, 40, 56, 72];
-    const next = livelli[p.livelloMedicina] || 72;
-    return Math.floor(next * 0.4);
-}
-
-function awardStudyPM(p, ore) {
-    const guadagno = Math.floor(ore / 2);
-    if (guadagno <= 0) return 0;
-    const cap = getStudyPMCap(p);
-    const nuovoTotale = Math.min(cap, p.pmMedicina + guadagno);
-    const effettivo = nuovoTotale - p.pmMedicina;
-    p.pmMedicina = nuovoTotale;
-    return effettivo;
 }
 
 function spedisciPersonaggio(idx) {
@@ -725,7 +587,6 @@ function lootCiboAcqua(tiro) {
 }
 
 function lootBooks(tiro) {
-    // Count by roll
     let count = 0;
     if (tiro <= 3) count = 0;
     else if (tiro <= 8) count = 1;
@@ -737,20 +598,34 @@ function lootBooks(tiro) {
     const topics = [
         ['Addestrare animali',0.07], ['Arcano',0.08], ['Cucina',0.08], ['Indagare',0.04], ['Giochi di carte',0.03],
         ['Inganno',0.03], ['Storia',0.09], ['Manodopera',0.04], ['Strumenti da scasso',0.04], ['Sopravvivenza',0.06],
-        ['Religione',0.08], ['Persuasione',0.05], ['Natura',0.08], ['Manodopera',0.06], ['Intrattenere',0.05],
+        ['Religione',0.08], ['Persuasione',0.05], ['Natura',0.08], ['Intrattenere',0.05],
         ['Intimidire',0.02], ['Medicina',0.06]
     ];
-    // normalize weights
     const total = topics.reduce((s,t)=>s+t[1],0);
     const normalized = topics.map(t=>[t[0], t[1]/total]);
 
-    for (let i=0;i<count;i++) {
+    for (let i = 0; i < count; i++) {
         let r = Math.random();
         let cum = 0;
-        for (let j=0;j<normalized.length;j++) {
+        let subject = 'Medicina';
+        for (let j = 0; j < normalized.length; j++) {
             cum += normalized[j][1];
-            if (r <= cum) { magazzino.libri[normalized[j][0]] = (magazzino.libri[normalized[j][0]]||0) + 1; break; }
+            if (r <= cum) {
+                subject = normalized[j][0];
+                break;
+            }
         }
+        const hours = randomStudyHours();
+        const titleList = BOOK_SUBJECT_TITLES[subject] || [subject];
+        const title = titleList[Math.floor(Math.random() * titleList.length)];
+        magazzino.libri.push({
+            id: `libro-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
+            subject,
+            title,
+            hours,
+            maxStudyHours: hours * 2,
+            usedHours: 0
+        });
     }
     return count;
 }
@@ -774,11 +649,19 @@ function apriBiblioteca() {
     const content = document.getElementById('biblioteca-content');
     if (!modal || !content) return;
     let html = '<h3>Libri nella biblioteca</h3>';
-    html += '<div style="display:grid; grid-template-columns: 1fr 80px; gap:6px;">';
-    Object.keys(magazzino.libri).forEach(k => {
-        html += `<div style="padding:6px; background:#0f0f0f; border:1px solid #222;">${k}</div><div style="padding:6px; text-align:right; background:#0f0f0f; border:1px solid #222;">${magazzino.libri[k]}</div>`;
-    });
-    html += '</div>';
+    if (!magazzino.libri.length) {
+        html += '<p>No books available at the moment.</p>';
+    } else {
+        html += '<div style="display:grid; grid-template-columns: 1fr 140px 120px 120px; gap:6px; align-items:center; font-weight:bold; margin-bottom:8px;">';
+        html += '<div>Titolo</div><div>Materia</div><div>Ore restanti</div><div>Ore libro</div>';
+        html += '</div>';
+        magazzino.libri.forEach(book => {
+            html += `<div style="padding:6px; background:#0f0f0f; border:1px solid #222;">${book.title}</div>`;
+            html += `<div style="padding:6px; background:#0f0f0f; border:1px solid #222;">${book.subject}</div>`;
+            html += `<div style="padding:6px; background:#0f0f0f; border:1px solid #222; text-align:right;">${Math.max(0, book.maxStudyHours - book.usedHours)}h</div>`;
+            html += `<div style="padding:6px; background:#0f0f0f; border:1px solid #222; text-align:right;">${book.hours}h</div>`;
+        });
+    }
     content.innerHTML = html;
     modal.style.display = 'block';
 }

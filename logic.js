@@ -21,6 +21,16 @@ class Personaggio {
         this.oreRiposoAccumulate = 0;
         this.giornoInizio = giornoPartenza;
 
+        this.apprendimento = {}; // progresso di studio per materia
+        this.oreStudioPerMateria = {}; // ore accumulate per materia
+        this.oreStudioGiornaliere = 0;
+        this.studyOverload = false;
+        this.masteries = [];
+        this.vantaggi = {}; // { 'Intelligenza': true, 'sopravvivenza': true }
+        this.svantaggi = {}; // same shape for disadvantages
+        this.ultimoGiornoStudio = 0;
+        this.ultimoStudioOre = 0;
+
         // --- SISTEMA THREAD ---
         this.azioneCorrente = null; // { tipo: 'dormi', oreRimanenti: 5, oreTotali: 5 }
         this.codaAzioni = [];
@@ -153,12 +163,22 @@ class Personaggio {
                 });
             }
         });
+        // Include competenze apprese manualmente
+        if (Array.isArray(this.competenze)) {
+            this.competenze.forEach(s => {
+                const key = (s || '').toLowerCase().trim();
+                if (key) counts[key] = (counts[key] || 0) + 1;
+            });
+        }
         return counts;
     }
 
     getSkillRating(skill) {
         // returns -2, -1, 0, 1, 2
         const skillKey = (skill || '').toLowerCase().trim();
+        if (this.masteries && this.masteries.map(m => m.toLowerCase()).includes(skillKey)) {
+            return 2;
+        }
         const counts = this.getPerkSkillCounts();
         const baseCount = counts[skillKey] || 0;
         let rating = 0;
@@ -168,14 +188,13 @@ class Personaggio {
         // Detect negative perks that explicitly mention the skill in their description
         // only consider perks with negative cost as malus sources.
         let worstNeg = 0; // 0 none, 1 = svantaggio, 2 = disastro
-        const escapeRegExp = str => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const escapeRegExp = str => str.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&');
         const pattern = new RegExp('\\b' + escapeRegExp(skillKey) + '\\b', 'i');
         this.perks.forEach(perk => {
             if (!perk) return;
             const p = (typeof perk === 'string') ? null : perk;
             if (!p || !p.desc) return;
             if ((p.costo || 0) < 0 && pattern.test(p.desc.toLowerCase())) {
-                // Use cost magnitude heuristic: very negative costs imply disastro
                 if ((p.costo || 0) <= -6) worstNeg = Math.max(worstNeg, 2);
                 else worstNeg = Math.max(worstNeg, 1);
             }
@@ -186,7 +205,7 @@ class Personaggio {
     }
 
     getSkillModifierForCheck(skill) {
-        // returns { modifier: number, disadvantage: bool }
+        // returns { modifier: number, advantage: bool, disadvantage: bool }
         const rating = this.getSkillRating(skill);
         // map skill -> attribute
         const map = {
@@ -198,15 +217,54 @@ class Personaggio {
         const attrMod = this.getStatDettagliata(attr).mod;
         const prof = this.getBonusCompetenza();
 
-        if (rating === 2) return { modifier: attrMod + prof * 2, disadvantage: false };
-        if (rating === 1) return { modifier: attrMod + prof, disadvantage: false };
-        if (rating === -1) return { modifier: attrMod, disadvantage: true };
-        if (rating === -2) return { modifier: attrMod - prof, disadvantage: false };
-        return { modifier: attrMod, disadvantage: false };
+        let modifier = attrMod;
+        if (rating === 2) modifier = attrMod + prof * 2;
+        else if (rating === 1) modifier = attrMod + prof;
+        else if (rating === -2) modifier = attrMod - prof;
+
+        // detect advantage/disadvantage from perks/flags
+        const skillKey = (skill || '').toLowerCase().trim();
+        const attrKey = attr;
+        const advantage = !!(this.vantaggi && (this.vantaggi[attrKey] || this.vantaggi[skillKey]));
+        const disadvantageFromFlags = !!(this.svantaggi && (this.svantaggi[attrKey] || this.svantaggi[skillKey]));
+
+        // negative rating of -1 implies disadvantage
+        const disadvantageFromRating = (rating === -1);
+
+        // overload produces a small disadvantage for mental stats
+        const overloadDisadvantage = this.studyOverload && ['Intelligenza', 'Saggezza', 'Carisma'].includes(attr);
+
+        // combine disadvantages; advantage/disadvantage cancel each other when both present
+        let disadvantage = false;
+        if (!advantage) {
+            disadvantage = disadvantageFromFlags || disadvantageFromRating || overloadDisadvantage;
+        }
+
+        return { modifier: modifier, advantage: advantage, disadvantage: disadvantage };
+    }
+
+    resetDailyStudy(currentHour) {
+        if (this.ultimoStudioOre && currentHour - this.ultimoStudioOre >= 8) {
+            this.oreStudioGiornaliere = 0;
+            this.studyOverload = false;
+            this.ultimoStudioOre = 0;
+        }
+    }
+
+    getStudyPoints(skill) {
+        const key = (skill || '').toLowerCase().trim();
+        let points = this.apprendimento[skill] || 0;
+        if (this.hasCompetenza(skill) && points < 70) points = 70;
+        if (this.masteries && this.masteries.map(m => m.toLowerCase()).includes(key) && points < 210) points = 210;
+        return points;
     }
 
     hasCompetenza(skill) {
-        return this.competenze.includes(skill);
+        const key = (skill || '').toLowerCase().trim();
+        if (this.competenze.some(s => (s || '').toLowerCase().trim() === key)) return true;
+        if (this.masteries && this.masteries.map(m => m.toLowerCase()).includes(key)) return true;
+        const counts = this.getPerkSkillCounts();
+        return (counts[key] || 0) > 0;
     }
 
     get woundState() {
