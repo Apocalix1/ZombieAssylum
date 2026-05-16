@@ -17,6 +17,8 @@ class Personaggio {
         this.livelloMedicina = 0;
         this.woundTimer = 0;
         this.woundTreated = false;
+        this.medicalHealPending = false;
+        this.oreRiposoAccumulate = 0;
         this.giornoInizio = giornoPartenza;
 
         // --- SISTEMA THREAD ---
@@ -66,18 +68,28 @@ class Personaggio {
     // --- RISORSE DINAMICHE ---
     get faticaTotale() {
         let f = this.faticaBase;
+        // Debuff da bisogni primari
         if (this.stadioFame >= 3) f += 1;
         if (this.stadioSete >= 2) f += 1;
         if (this.stadioSonno >= 2) f += 1;
-        if (this.woundState === "Funzionalità a rischio" || this.woundState === "Rischio di morte") f += 2;
-        return Math.min(f, 6);
+
+        // Debuff da Ferite (Cumulativi)
+        // Rischio Funzionalità (2PF) E Rischio Morte (1PF) danno entrambi +2 fatica
+        if (this.puntiFeritaReali <= 2 && this.puntiFeritaReali > 0) {
+            f += 2; 
+        }
+        return Math.min(f, 6); // Cap massimo a 6 (Morte)
     }
 
     get staminaMax() {
         let s = this.staminaBase;
+        // Debuff da bisogni
         if (this.stadioFame >= 2) s -= 1;
         if (this.stadioSete >= 3) s -= 2;
         if (this.faticaTotale >= 2) s -= 1;
+        if (this.puntiFeritaReali <= 3 && this.puntiFeritaReali > 0) {
+            s -= 1;
+        }
         return Math.max(0, s);
     }
 
@@ -128,6 +140,71 @@ class Personaggio {
         return 5;
     }
 
+    // --- SISTEMA COMPETENZE (calcolo rating per abilità basato su perk e malus) ---
+    getPerkSkillCounts() {
+        const counts = {};
+        this.perks.forEach(perk => {
+            if (!perk) return;
+            const p = (typeof perk === 'string') ? null : perk;
+            if (p && Array.isArray(p.skills)) {
+                p.skills.forEach(s => {
+                    const key = (s || '').toLowerCase().trim();
+                    counts[key] = (counts[key] || 0) + 1;
+                });
+            }
+        });
+        return counts;
+    }
+
+    getSkillRating(skill) {
+        // returns -2, -1, 0, 1, 2
+        const skillKey = (skill || '').toLowerCase().trim();
+        const counts = this.getPerkSkillCounts();
+        const baseCount = counts[skillKey] || 0;
+        let rating = 0;
+        if (baseCount >= 2) rating = 2;
+        else if (baseCount === 1) rating = 1;
+
+        // Detect negative perks that explicitly mention the skill in their description
+        // only consider perks with negative cost as malus sources.
+        let worstNeg = 0; // 0 none, 1 = svantaggio, 2 = disastro
+        const escapeRegExp = str => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const pattern = new RegExp('\\b' + escapeRegExp(skillKey) + '\\b', 'i');
+        this.perks.forEach(perk => {
+            if (!perk) return;
+            const p = (typeof perk === 'string') ? null : perk;
+            if (!p || !p.desc) return;
+            if ((p.costo || 0) < 0 && pattern.test(p.desc.toLowerCase())) {
+                // Use cost magnitude heuristic: very negative costs imply disastro
+                if ((p.costo || 0) <= -6) worstNeg = Math.max(worstNeg, 2);
+                else worstNeg = Math.max(worstNeg, 1);
+            }
+        });
+
+        if (worstNeg > 0) return -worstNeg;
+        return rating;
+    }
+
+    getSkillModifierForCheck(skill) {
+        // returns { modifier: number, disadvantage: bool }
+        const rating = this.getSkillRating(skill);
+        // map skill -> attribute
+        const map = {
+            'Atletica': 'Forza', 'Acrobazia': 'Destrezza', 'Acrobazie': 'Destrezza', 'Sopravvivenza': 'Saggezza',
+            'Inganno': 'Carisma', 'Indagare': 'Intelligenza', 'Giochi di carte': 'Carisma', 'Rapidità di mano': 'Destrezza',
+            'Percezione': 'Saggezza', 'Persuasione': 'Carisma', 'Furtività': 'Destrezza', 'Manodopera': 'Destrezza'
+        };
+        const attr = map[skill] || map[skill.charAt(0).toUpperCase() + skill.slice(1)] || 'Intelligenza';
+        const attrMod = this.getStatDettagliata(attr).mod;
+        const prof = this.getBonusCompetenza();
+
+        if (rating === 2) return { modifier: attrMod + prof * 2, disadvantage: false };
+        if (rating === 1) return { modifier: attrMod + prof, disadvantage: false };
+        if (rating === -1) return { modifier: attrMod, disadvantage: true };
+        if (rating === -2) return { modifier: attrMod - prof, disadvantage: false };
+        return { modifier: attrMod, disadvantage: false };
+    }
+
     hasCompetenza(skill) {
         return this.competenze.includes(skill);
     }
@@ -139,7 +216,7 @@ class Personaggio {
         if (pf === 3) return "Ferita profonda";
         if (pf === 2) return "Funzionalità a rischio";
         if (pf === 1) return "Rischio di morte";
-        return "Irrecuperabile";
+        return "Morto";
     }
 
     get puntiFeritaRealiMax() {
@@ -149,10 +226,10 @@ class Personaggio {
     get woundEffectText() {
         switch (this.woundState) {
             case "Ferita lieve": return "30% peggiora dopo 5h se non curata";
-            case "Ferita profonda": return "Dopo 3h diventa Rischio di funzionalità";
+            case "Ferita profonda": return "Dopo 3h diventa Funzionalità a rischio";
             case "Funzionalità a rischio": return "Dopo 1h diventa Rischio di morte, +2 fatica";
             case "Rischio di morte": return "Dopo 10 min: morte. Il personaggio è privo di sensi";
-            case "Irrecuperabile": return "Morte immediata";
+            case "Morto": return "Personaggio deceduto";
             default: return "Nessun danno reale";
         }
     }
@@ -163,7 +240,7 @@ class Personaggio {
 
     get woundTimeBase() {
         switch (this.woundState) {
-            case "Ferita lieve": return 5;
+            case "Ferita lieve": return 6;
             case "Ferita profonda": return 3;
             case "Funzionalità a rischio": return 1;
             case "Rischio di morte": return 0.1667;
@@ -173,7 +250,8 @@ class Personaggio {
 
     get woundTimeToWorsen() {
         const base = this.woundTimeBase;
-        const factor = 1 + this.constitutionModifier * 0.1;
+        // ogni +1 al modificatore di Costituzione aumenta il tempo del 15% (accumulativo)
+        const factor = 1 + this.constitutionModifier * 0.15;
         return Math.max(0.5, base * factor);
     }
 
@@ -213,20 +291,24 @@ class Personaggio {
     }
 
     worsenWoundDueToTime() {
-        if (this.woundState === "Illeso") return;
+        if (this.woundState === "Illeso" || this.woundState === "Morto") return;
+
         if (this.woundState === "Ferita lieve") {
-            const chance = Math.max(0.05, Math.min(0.9, 0.3 - this.constitutionModifier * 0.05));
-            if (Math.random() < chance) {
-                this.applyRealDamage(4);
+            // probabilità base 30%, ridotta di 5% per ogni +1 di Costituzione
+            const baseProb = 0.30;
+            const mod = this.constitutionModifier || 0;
+            let prob = baseProb - (0.05 * mod);
+            prob = Math.max(0, Math.min(1, prob));
+            if (Math.random() < prob) {
+                this.puntiFeritaReali = 3; // Diventa profonda (valore indicativo)
+                mostraNotificaInAlto(`${this.nome}: La ferita lieve si è infettata!`, "pericolo");
             } else {
-                this.woundTimer = this.woundTimeToWorsen;
+                this.resetWoundTimer();
                 return;
             }
-        } else if (this.woundState === "Rischio di morte") {
-            this.puntiFeritaReali = 0;
-            this.woundTimer = 0;
         } else {
-            this.applyRealDamage(4);
+            this.puntiFeritaReali = Math.max(0, this.puntiFeritaReali - 1);
+            mostraNotificaInAlto(`${this.nome}: Le condizioni peggiorano!`, "pericolo");
         }
         this.resetWoundTimer();
     }
@@ -250,8 +332,8 @@ class Personaggio {
     receiveMedicalTreatment(success) {
         if (!success) return false;
         if (this.woundState === "Illeso") return false;
-        this.puntiFeritaReali = Math.min(this.puntiFeritaRealiMax, this.puntiFeritaReali + 1);
         this.woundTreated = true;
+        this.medicalHealPending = true;
         this.woundTimer = this.woundTimeToWorsen * 1.5;
         return true;
     }
@@ -326,10 +408,24 @@ class Personaggio {
             }
         }
 
-        if (this.woundState !== "Illeso" && !this.woundTreated) {
-            this.woundTimer -= 1;
-            if (this.woundTimer <= 0) {
-                this.worsenWoundDueToTime();
+        if (this.woundState !== "Illeso" && this.woundState !== "Morto") {
+            if (this.woundTreated) {
+                this.woundTimer -= 1;
+                if (this.woundTimer <= 0) {
+                    if (this.medicalHealPending) {
+                        this.puntiFeritaReali = Math.min(this.puntiFeritaRealiMax, this.puntiFeritaReali + 1);
+                        this.medicalHealPending = false;
+                        this.woundTreated = false;
+                        this.resetWoundTimer();
+                    } else {
+                        this.worsenWoundDueToTime();
+                    }
+                }
+            } else {
+                this.woundTimer -= 1;
+                if (this.woundTimer <= 0) {
+                    this.worsenWoundDueToTime();
+                }
             }
         }
 
@@ -345,11 +441,59 @@ class Personaggio {
         for (let t in this.timers) if (this.timers[t] > 0) this.timers[t] -= 1;
 
         // 4. Controllo Morte
-        if (this.puntiFeritaReali <= 0) return "Irrecuperabile";
+        if (this.puntiFeritaReali <= 0) return "per emmorargia";
         if (this.fame <= 0) return "Inedia";
         if (this.sete <= 0) return "Disidratazione";
         if (this.sonno <= 0) return "Privazione Sonno";
+
+        const staRiposando = !this.inSpedizione && (!this.azioneCorrente || this.azioneCorrente.tipo !== 'esplora');
+
+    if (this.woundState !== "Illeso" && this.woundState !== "Morto" && staRiposando) {
+        
+        // 1. Calcolo del Bonus Rigenerazione (20% per ogni Buff)
+        let moltiplicatoreRigenerazione = 1; // 1 ora reale = 1 ora di recupero
+        if (this.timers.buffFame > 0) moltiplicatoreRigenerazione += 0.2;
+        if (this.timers.buffSete > 0) moltiplicatoreRigenerazione += 0.2;
+        if (this.timers.buffSonno > 0) moltiplicatoreRigenerazione += 0.2;
+
+        // 2. Accumulo ore (es. se moltiplicatore è 1.6, aggiunge 1.6 ore ogni ora reale)
+        this.oreRiposoAccumulate += moltiplicatoreRigenerazione;
+
+        // 3. Controllo soglie di guarigione
+        const sogliaNecessaria = this.getOreNecessarieGuarigione();
+        
+        if (this.oreRiposoAccumulate >= sogliaNecessaria) {
+            this.puntiFeritaReali = Math.min(this.puntiFeritaRealiMax, this.puntiFeritaReali + 1);
+            this.oreRiposoAccumulate = 0; // Reset dopo il miglioramento
+            this.resetWoundTimer(); // Reset del timer di peggioramento
+            mostraNotificaInAlto(`${this.nome}: La ferita sta guarendo grazie al riposo!`, "successo");
+        }
+    } else {
+        // Se si muove o non è in condizioni di riposo, il progresso si ferma (ma non si perde)
+        this.oreRiposoAccumulate = Math.max(0, this.oreRiposoAccumulate);
+    }
+
+    
         return null;
+    }
+
+    tickOre(ore) {
+        // Avanza 'ore' ore chiamando tickOra() iterativamente.
+        for (let i = 0; i < ore; i++) {
+            const causa = this.tickOra();
+            if (causa) return causa;
+        }
+        return null;
+    }
+
+    getOreNecessarieGuarigione() {
+    switch (this.woundState) {
+        case "Ferita lieve": return 8;
+        case "Ferita profonda": return 16;
+        case "Funzionalità a rischio": return 32;
+        case "Rischio di morte": return 64;
+        default: return Infinity;
+        }
     }
 
     completaAzione() {

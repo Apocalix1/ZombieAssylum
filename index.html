@@ -24,6 +24,7 @@
             <button class="btn-hero" onclick="avviaCreazione()">➕ RECLUTA</button>
             <button class="btn-hero" onclick="passaTempoGlobale()">⏳ ATTENDI</button>
             <button class="btn-hero" onclick="mandaTuttiInSpedizione()">🚚 SPEDISCI TUTTI</button>
+                <button class="btn-hero" onclick="apriBiblioteca()">📚 BIBLIOTECA</button>
             <button class="btn-hero" onclick="toggleCimitero()">🪦 CADUTI</button>
         </div>
         <div id="party-container"></div>
@@ -86,6 +87,16 @@
             <div id="medica-content" style="text-align:left;"></div>
             <div class="modal-footer">
                 <button class="btn-big btn-cancel" onclick="document.getElementById('modal-medica').style.display='none'">CHIUDI</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-biblioteca" class="modal">
+        <div class="modal-content">
+            <h2 style="color:#ff0000; letter-spacing: 2px; margin-bottom:15px;">BIBLIOTECA</h2>
+            <div id="biblioteca-content" style="text-align:left; max-height:400px; overflow-y:auto; background:#111; padding:10px; border:1px solid #333;"></div>
+            <div class="modal-footer">
+                <button class="btn-big btn-cancel" onclick="document.getElementById('modal-biblioteca').style.display='none'">CHIUDI</button>
             </div>
         </div>
     </div>

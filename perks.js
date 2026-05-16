@@ -141,5 +141,12 @@ const DATABASE_PERK = {
     "magici": [],
     "razziali": [],
     "sopravvivenza": [],
-    "studio": []
+    "studio": [],
+    "conoscenze": [
+        { nome: "Medicina Livello 1", desc: "Conoscenze di base medicina.", costo: 4, skills: ['Medicina'] },
+        { nome: "Medicina Livello 2", desc: "Conoscenze intermedie medicina.", costo: 6, skills: ['Medicina'], requires: 'Medicina Livello 1' },
+        { nome: "Medicina Livello 3", desc: "Conoscenze avanzate medicina.", costo: 9, skills: ['Medicina'], requires: 'Medicina Livello 2' },
+        { nome: "Medicina Livello 4", desc: "Conoscenze esperte medicina.", costo: 12, skills: ['Medicina'], requires: 'Medicina Livello 3' },
+        { nome: "Medicina Livello 5", desc: "Conoscenze da chirurgo rianimatore.", costo: 15, skills: ['Medicina'], requires: 'Medicina Livello 4' }
+    ]
 };
