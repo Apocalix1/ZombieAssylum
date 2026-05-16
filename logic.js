@@ -13,6 +13,8 @@ class Personaggio {
         this.puntiFortunaMax = 15;
         this.puntiFortuna = 15;
         this.vittorieCombattimento = 0;
+        this.pmMedicina = 0;
+        this.livelloMedicina = 0;
         this.woundTimer = 0;
         this.woundTreated = false;
         this.giornoInizio = giornoPartenza;
@@ -360,7 +362,11 @@ class Personaggio {
             this.timers.sonnoSoddisfatto = 8;
         }
 
+        const onComplete = this.azioneCorrente?.onComplete;
         this.azioneCorrente = null;
+        if (typeof onComplete === 'function') {
+            onComplete();
+        }
         // Se c'è qualcosa in coda, inizia subito
         if (this.codaAzioni.length > 0) {
             this.azioneCorrente = this.codaAzioni.shift();

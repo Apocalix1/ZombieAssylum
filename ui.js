@@ -1,7 +1,17 @@
 let oreTotali = 0;
 let party = [];
 let cimitero = [];
-let magazzino = { cibo: 20, acqua: 20, materiali: 5 };
+let magazzino = {
+    cibo: 20,
+    acqua: 20,
+    materialiAlchemici: 5,
+    ingranaggi: 3,
+    materialiMedici: {
+        base: 2,
+        avanzati: 1,
+        critici: 0
+    }
+};
 let tempP = null;
 
 // --- UTILITY: COLORI BARRE ---
@@ -56,7 +66,11 @@ function aggiornaInterfaccia() {
     document.getElementById('display-ora').innerText = `${ora < 10 ? '0' : ''}${ora}:00`;
     document.getElementById('display-cibo').innerText = magazzino.cibo.toFixed(1);
     document.getElementById('display-acqua').innerText = magazzino.acqua.toFixed(1);
-    document.getElementById('display-materiali').innerText = magazzino.materiali;
+    document.getElementById('display-alchemici').innerText = magazzino.materialiAlchemici;
+    document.getElementById('display-ingranaggi').innerText = magazzino.ingranaggi;
+    document.getElementById('display-medici-base').innerText = magazzino.materialiMedici.base;
+    document.getElementById('display-medici-avanzati').innerText = magazzino.materialiMedici.avanzati;
+    document.getElementById('display-medici-critici').innerText = magazzino.materialiMedici.critici;
 
     const container = document.getElementById('party-container');
     container.innerHTML = "";
@@ -139,7 +153,7 @@ function aggiornaInterfaccia() {
                     <summary>ESPLORA</summary>
                     <div class="dropdown-buttons">
                         <button onclick="spedisciPersonaggio(${idx})">Spedisci</button>
-                        <button onclick="esplora(${idx})">Esplora</button>
+                        <button onclick="esplora(${idx})">🔎 Esplora</button>
                     </div>
                 </details>
             </div>
@@ -157,6 +171,16 @@ function pianificaAzione(idx, tipo) {
     if (isNaN(ore) || ore <= 0) return;
 
     const nuovaAzione = { tipo: tipo, oreTotali: ore, oreRimanenti: ore };
+    if (tipo === 'studio') {
+        nuovaAzione.onComplete = () => {
+            const guadagno = awardStudyPM(p, ore);
+            if (guadagno > 0) {
+                alert(`${p.nome} impara Medicina: +${guadagno} PM (massimo ${getStudyPMCap(p)} totali per il livello corrente).`);
+            } else {
+                alert(`${p.nome} studia Medicina ma non ottiene PM aggiuntivi oltre il limite attuale.`);
+            }
+        };
+    }
 
     if (p.azioneCorrente) {
         if (confirm(`${p.nome} sta già facendo altro. Vuoi metterlo in coda?`)) {
@@ -199,30 +223,56 @@ function renderMedicaModal() {
     container.innerHTML = `
         <div style="margin-bottom:12px; font-size:0.9rem; color:#ddd;">
             <strong>Medico:</strong> ${medico.nome} (Int +${medico.getStatDettagliata('Intelligenza').mod})<br>
+            Risorse mediche: base ${magazzino.materialiMedici.base}, avanzati ${magazzino.materialiMedici.avanzati}, critici ${magazzino.materialiMedici.critici}<br>
             Scegli il personaggio da curare:
         </div>
         ${feriti.map((p, idx) => {
             const targetIdx = party.indexOf(p);
+            const req = getMedicalData(p.woundState);
+            const available = hasEnoughMedicalMaterials(req);
             return `
                 <div class="stat-row" style="margin-bottom:8px; background:#111;">
                     <div style="flex:1; text-align:left;">
                         <strong>${p.nome}</strong><br>
                         <small>${p.woundState} - PF Reali ${p.puntiFeritaReali}/${p.puntiFeritaRealiMax}</small><br>
-                        <small>Costituzione: ${p.costituzione} (mod ${p.getStatDettagliata('Costituzione').mod >= 0 ? '+' : ''}${p.getStatDettagliata('Costituzione').mod})</small>
+                        <small>Costituzione: ${p.costituzione} (mod ${p.getStatDettagliata('Costituzione').mod >= 0 ? '+' : ''}${p.getStatDettagliata('Costituzione').mod})</small><br>
+                        <small>CD base: ${req.cd}, PM: ${req.pm}, Materiali: ${req.base} base, ${req.avanzati} avanzati, ${req.critici} critici</small>
                     </div>
-                    <button onclick="curaTarget(${targetIdx})" style="min-width:100px; background:#27ae60 !important; color:white !important;">Cura</button>
+                    <button onclick="curaTarget(${targetIdx})" style="min-width:100px; background:${available ? '#27ae60 !important' : '#555 !important'}; color:white !important;" ${available ? '' : 'disabled'}>Cura</button>
                 </div>`;
         }).join('')}
     `;
 }
 
-function getMedicineBaseDC(woundState) {
+function getMedicalData(woundState) {
     switch (woundState) {
-        case 'Ferita lieve': return 12;
-        case 'Ferita profonda': return 16;
-        case 'Funzionalità a rischio': return 20;
-        case 'Rischio di morte': return 24;
-        default: return 10;
+        case 'Ferita lieve': return { cd: 12, pm: 1, base: 5, avanzati: 0, critici: 0 };
+        case 'Ferita profonda': return { cd: 16, pm: 3, base: 10, avanzati: 2, critici: 0 };
+        case 'Funzionalità a rischio': return { cd: 20, pm: 7, base: 15, avanzati: 8, critici: 1 };
+        case 'Rischio di morte': return { cd: 24, pm: 10, base: 30, avanzati: 16, critici: 5 };
+        default: return { cd: 12, pm: 0, base: 0, avanzati: 0, critici: 0 };
+    }
+}
+
+function hasEnoughMedicalMaterials(req) {
+    return magazzino.materialiMedici.base >= req.base &&
+           magazzino.materialiMedici.avanzati >= req.avanzati &&
+           magazzino.materialiMedici.critici >= req.critici;
+}
+
+function takeMedicalMaterials(req, half = false) {
+    const divisor = half ? 2 : 1;
+    magazzino.materialiMedici.base = Math.max(0, magazzino.materialiMedici.base - Math.ceil(req.base / divisor));
+    magazzino.materialiMedici.avanzati = Math.max(0, magazzino.materialiMedici.avanzati - Math.ceil(req.avanzati / divisor));
+    magazzino.materialiMedici.critici = Math.max(0, magazzino.materialiMedici.critici - Math.ceil(req.critici / divisor));
+}
+
+function getMedicineLevelBonus(level) {
+    switch (level) {
+        case 2: return 1;
+        case 3: return 2;
+        case 5: return 3;
+        default: return 0;
     }
 }
 
@@ -230,19 +280,39 @@ function curaTarget(targetIdx) {
     const medico = party[medicoCorrente];
     const target = party[targetIdx];
     if (!medico || !target) return;
-    const targetCostituzione = target.getStatDettagliata('Costituzione').mod;
-    const baseDC = getMedicineBaseDC(target.woundState);
-    const dc = Math.max(5, baseDC - targetCostituzione);
-    const tiro = Math.floor(Math.random() * 20) + 1 + medico.getStatDettagliata('Intelligenza').mod;
+    const req = getMedicalData(target.woundState);
+    if (!hasEnoughMedicalMaterials(req)) {
+        alert('Risorse mediche insufficienti per questo intervento.');
+        return;
+    }
+
+    const modCost = target.getStatDettagliata('Costituzione').mod;
+    const dc = Math.max(5, req.cd - modCost);
+    const tiro = Math.floor(Math.random() * 20) + 1 + medico.getStatDettagliata('Intelligenza').mod + getMedicineLevelBonus(medico.livelloMedicina);
     const successo = tiro >= dc;
+    const scarto = tiro - dc;
+
     if (successo) {
+        takeMedicalMaterials(req, false);
         target.receiveMedicalTreatment(true);
-        alert(`${medico.nome} cura ${target.nome}! Tiro ${tiro} vs DC ${dc}.`);
+        target.pmMedicina += req.pm;
+        alert(`${medico.nome} cura ${target.nome}! Tiro ${tiro} vs DC ${dc}. PM +${req.pm}.`);
     } else {
-        alert(`${medico.nome} fallisce nel curare ${target.nome}. Tiro ${tiro} vs DC ${dc}.`);
+        takeMedicalMaterials(req, true);
+        alert(`${medico.nome} fallisce a curare ${target.nome}. Tiro ${tiro} vs DC ${dc}. Perdita 50% materiali.`);
+        if (scarto <= -5) {
+            infestazioneWound(target);
+            alert(`Fallimento critico: la ferita di ${target.nome} peggiora di grado.`);
+        }
     }
     renderMedicaModal();
     aggiornaInterfaccia();
+}
+
+function infestazioneWound(target) {
+    if (!target || target.puntiFeritaReali <= 0) return;
+    target.puntiFeritaReali = Math.max(0, target.puntiFeritaReali - 1);
+    target.resetWoundTimer();
 }
 
 function alchimiaPersonaggio(idx) {
@@ -258,7 +328,25 @@ function allenamento(idx) {
 }
 
 function studio(idx) {
-    alert('Funzione Studio in sviluppo.');
+    const p = party[idx];
+    if (!p) return;
+    pianificaAzione(idx, 'studio');
+}
+
+function getStudyPMCap(p) {
+    const livelli = [8, 24, 40, 56, 72];
+    const next = livelli[p.livelloMedicina] || 72;
+    return Math.floor(next * 0.4);
+}
+
+function awardStudyPM(p, ore) {
+    const guadagno = Math.floor(ore / 2);
+    if (guadagno <= 0) return 0;
+    const cap = getStudyPMCap(p);
+    const nuovoTotale = Math.min(cap, p.pmMedicina + guadagno);
+    const effettivo = nuovoTotale - p.pmMedicina;
+    p.pmMedicina = nuovoTotale;
+    return effettivo;
 }
 
 function spedisciPersonaggio(idx) {
@@ -386,97 +474,136 @@ function renderSpedizioneModal() {
 }
 
 function esplora(idx) {
-    alert('Funzione Esplora in sviluppo.');
-}
-
-function apriMedica() {
-    const modal = document.getElementById('modal-medica');
-    if (!modal) return;
-    renderMedicaModal();
-    modal.style.display = 'block';
-}
-
-function renderMedicaModal() {
-    const container = document.getElementById('medica-content');
-    if (!container) return;
-
-    if (party.length === 0) {
-        container.innerHTML = `<p>Nessun sopravvissuto in squadra.</p>`;
-        return;
-    }
-
-    const righe = party.map((p, idx) => {
-        const costo = getMedicalCost(p);
-        const chance = Math.round(getMedicalSuccessChance(p) * 100);
-        const disabled = costo === 0 || magazzino.materiali < costo;
-        return `
-            <div class="stat-row" style="margin-bottom:8px; background:#111;">
-                <div style="flex:1; text-align:left;">
-                    <strong>${p.nome}</strong><br>
-                    <small>${p.woundState} - PF Reali ${p.puntiFeritaReali}/${p.puntiFeritaRealiMax}</small><br>
-                    <small>PF Fortuna ${p.puntiFortuna}/${p.puntiFortunaMax}</small><br>
-                    <small>CD stimata: ${chance}% - Costo: ${costo} materiali</small>
-                </div>
-                <button onclick="provaTrattamentoMedico(${idx})" style="min-width:100px; background:${disabled ? '#444 !important' : '#27ae60 !important'}; color:white !important;" ${disabled ? 'disabled' : ''}>
-                    ${costo === 0 ? 'Nessuna cura' : 'Cura'}
-                </button>
-            </div>`;
-    }).join('');
-
-    container.innerHTML = `
-        <div style="margin-bottom:12px; font-size:0.9rem; color:#ddd;">
-            Materiali disponibili: <strong>${magazzino.materiali}</strong><br>
-            L'efficacia della cura dipende dalla Costituzione, dallo stato di ferite e dalla preparazione del personaggio.
-        </div>
-        ${righe}`;
-}
-
-function getMedicalCost(p) {
-    switch (p.woundState) {
-        case 'Ferita lieve': return 2;
-        case 'Ferita profonda': return 4;
-        case 'Funzionalità a rischio': return 6;
-        case 'Rischio di morte': return 10;
-        default: return 0;
-    }
-}
-
-function getMedicalSuccessChance(p) {
-    let chance = 0.35 + p.constitutionModifier * 0.04 + p.getBonusCompetenza() * 0.025;
-    if (p.hasCompetenza('Natura') || p.hasCompetenza('Cucina')) chance += 0.15;
-    if (p.perks.some(perk => typeof perk === 'object' && perk.nome === 'Agofobico')) chance -= 0.15;
-    switch (p.woundState) {
-        case 'Ferita profonda': chance -= 0.10; break;
-        case 'Funzionalità a rischio': chance -= 0.18; break;
-        case 'Rischio di morte': chance -= 0.28; break;
-    }
-    return Math.max(0.05, Math.min(0.95, chance));
-}
-
-function provaTrattamentoMedico(idx) {
     const p = party[idx];
-    const costo = getMedicalCost(p);
-    if (costo === 0) {
-        alert(`${p.nome} non ha ferite reali da trattare in questo momento.`);
-        return;
-    }
-    if (magazzino.materiali < costo) {
-        alert('Materiali insufficienti per questo trattamento.');
-        return;
-    }
+    if (!p) return;
 
-    magazzino.materiali -= costo;
-    const success = Math.random() < getMedicalSuccessChance(p);
-    const guarito = p.receiveMedicalTreatment(success);
+    const nuovaAzione = {
+        tipo: 'esplora',
+        oreTotali: 6,
+        oreRimanenti: 6,
+        onComplete: () => terminaEsplorazione(p)
+    };
 
-    if (guarito) {
-        alert(`Trattamento riuscito su ${p.nome}! +1 PF Reali e stabilizzazione temporanea.`);
+    if (p.azioneCorrente) {
+        if (confirm(`${p.nome} sta già facendo un'altra azione. Vuoi mettere l'esplorazione in coda?`)) {
+            p.codaAzioni.push(nuovaAzione);
+            alert(`${p.nome} esplorerà non appena avrà finito l'azione corrente.`);
+        }
     } else {
-        alert(`Il trattamento su ${p.nome} fallisce. Le ferite rimangono critiche.`);
+        p.azioneCorrente = nuovaAzione;
+        alert(`${p.nome} parte per un'esplorazione di 6 ore. Usa ATTENDI per completarla.`);
     }
-
-    renderMedicaModal();
     aggiornaInterfaccia();
+}
+
+function terminaEsplorazione(p) {
+    if (!p) return;
+    const bonus = getExplorationBonus(p);
+
+    const mediciTiro = Math.min(20, rollD20() + bonus);
+    const ingranaggiTiro = Math.min(20, rollD20() + bonus);
+    const alchemiciTiro = Math.min(20, rollD20() + bonus);
+    const ciboTiro = Math.min(20, rollD20() + bonus);
+    const acquaTiro = Math.min(20, rollD20() + bonus);
+
+    const medici = lootMedici(mediciTiro);
+    const ingranaggi = lootIngranaggi(ingranaggiTiro);
+    const alchemici = lootAlchemici(alchemiciTiro);
+    const cibo = lootCiboAcqua(ciboTiro);
+    const acqua = lootCiboAcqua(acquaTiro);
+
+    magazzino.materialiAlchemici += alchemici;
+    magazzino.ingranaggi += ingranaggi;
+    magazzino.materialiMedici.base += medici.base;
+    magazzino.materialiMedici.avanzati += medici.avanzati;
+    magazzino.materialiMedici.critici += medici.critici;
+    magazzino.cibo += cibo;
+    magazzino.acqua += acqua;
+
+    alert(`Esplorazione completata da ${p.nome}!\n
+Risultati:\n` +
+        `• Materiali alchemici: +${alchemici} (d20 ${alchemiciTiro})\n` +
+        `• Ingranaggi: +${ingranaggi} (d20 ${ingranaggiTiro})\n` +
+        `• Materiali medici: base +${medici.base}, avanzati +${medici.avanzati}, critici +${medici.critici} (d20 ${mediciTiro})\n` +
+        `• Cibo: +${cibo} (d20 ${ciboTiro})\n` +
+        `• Acqua: +${acqua} (d20 ${acquaTiro})\n` +
+        `Bonus esplorazione: ${bonus >= 0 ? '+' : ''}${bonus}`);
+    aggiornaInterfaccia();
+}
+
+function rollD20() {
+    return Math.floor(Math.random() * 20) + 1;
+}
+
+function rollDice(count, faces) {
+    let total = 0;
+    for (let i = 0; i < count; i++) {
+        total += Math.floor(Math.random() * faces) + 1;
+    }
+    return total;
+}
+
+function getExplorationBonus(p) {
+    let bonus = p.getStatDettagliata('Saggezza').mod;
+    if (p.hasCompetenza('Sopravvivenza')) bonus += p.getBonusCompetenza();
+    return bonus;
+}
+
+function lootMedici(tiro) {
+    let base = 0;
+    let avanzati = 0;
+    let critici = 0;
+
+    if (tiro >= 5 && tiro <= 8) {
+        base = rollDice(1, 4);
+    } else if (tiro <= 11) {
+        base = rollDice(2, 4);
+    } else if (tiro <= 14) {
+        base = rollDice(2, 4);
+        avanzati = rollDice(1, 4);
+    } else if (tiro <= 17) {
+        base = rollDice(2, 6);
+        avanzati = rollDice(2, 4);
+        critici = rollDice(1, 4);
+    } else if (tiro <= 19) {
+        base = rollDice(2, 8);
+        avanzati = rollDice(2, 6);
+        critici = rollDice(2, 4);
+    } else if (tiro === 20) {
+        base = rollDice(3, 8);
+        avanzati = rollDice(2, 8);
+        critici = rollDice(2, 6);
+    }
+    return { base, avanzati, critici };
+}
+
+function lootIngranaggi(tiro) {
+    if (tiro === 1) return 0;
+    if (tiro <= 7) return rollDice(1, 4) + 1;
+    if (tiro <= 13) return rollDice(1, 6) + 2;
+    if (tiro <= 17) return rollDice(2, 6) + 4;
+    if (tiro <= 19) return rollDice(2, 8) + 8;
+    return rollDice(2, 12) + 16;
+}
+
+function lootAlchemici(tiro) {
+    if (tiro <= 4) return 0;
+    if (tiro <= 8) return rollDice(1, 4);
+    if (tiro <= 11) return rollDice(2, 4);
+    if (tiro <= 14) return rollDice(3, 4);
+    if (tiro <= 17) return rollDice(3, 6);
+    if (tiro <= 19) return rollDice(5, 6);
+    return rollDice(8, 6);
+}
+
+function lootCiboAcqua(tiro) {
+    if (tiro <= 2) return rollDice(1, 4) / 2;
+    if (tiro <= 4) return rollDice(1, 4);
+    if (tiro <= 9) return rollDice(1, 6) + 1;
+    if (tiro <= 13) return rollDice(1, 8) + 2;
+    if (tiro <= 17) return rollDice(1, 12) + 4;
+    if (tiro <= 19) return rollDice(2, 10) + 6;
+    return rollDice(3, 12) + 10;
 }
 
 // --- RISORSE (Istantanee, 1 Unità = 1 Tacca) ---
@@ -775,6 +902,7 @@ function apriScheda(idx) {
                 <div style="font-size:0.85em; color:#eee; background:#111; padding:8px;">
                     ${p.competenze.length > 0 ? p.competenze.join(' • ') : 'Nessuna'}
                 </div>
+                <p style="font-size:0.85em; color:#aaa; margin-top:12px;"><b>LIVELLO MEDICINA:</b> ${p.livelloMedicina} • <b>PM MEDICINA:</b> ${p.pmMedicina}</p>
                 <p style="font-size:0.85em; color:#aaa; margin-top:12px;"><b>MAESTRIE:</b></p>
                 <div style="font-size:0.85em; color:#eee; background:#111; padding:8px; text-align:left;">
                     ${p.competenze.filter(skill => SKILL_SYSTEM.masteryDescriptions[skill])
