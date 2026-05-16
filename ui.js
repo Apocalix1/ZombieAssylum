@@ -117,7 +117,7 @@ function aggiornaInterfaccia() {
                         <button onclick="nutri(${idx})">Nutri</button>
                         <button onclick="disseta(${idx})">Disseta</button>
                         <button onclick="pianificaAzione(${idx}, 'dormi')">Dormi</button>
-                        <button onclick="trattaMedica(${idx})">Medica</button>
+                        <button onclick="apriMedica(${idx})">Medica</button>
                     </div>
                 </details>
                 <details class="action-dropdown">
@@ -173,32 +173,75 @@ function toggleSpedizione(idx) {
     aggiornaInterfaccia();
 }
 
-function trattaMedica(idx) {
-    const p = party[idx];
-    if (p.woundState === 'Illeso') {
-        alert(`${p.nome} non ha ferite reali da curare.`);
+let medicoCorrente = null;
+
+function apriMedica(idxMedico) {
+    medicoCorrente = idxMedico;
+    const feriti = party.filter(p => p.puntiFeritaReali < p.puntiFeritaRealiMax);
+    if (feriti.length === 0) {
+        alert('Tutti in perfetta salute per ora');
         return;
     }
+    renderMedicaModal();
+    const modal = document.getElementById('modal-medica');
+    if (modal) modal.style.display = 'block';
+}
 
-    const modInt = p.getStatDettagliata('Intelligenza').mod;
-    const modCost = p.getStatDettagliata('Costituzione').mod;
-    const baseDC = {
-        'Ferita lieve': 12,
-        'Ferita profonda': 16,
-        'Funzionalità a rischio': 20,
-        'Rischio di morte': 24
-    }[p.woundState] || 12;
-
-    const dc = Math.max(5, baseDC - modCost);
-    const tiro = Math.floor(Math.random() * 20) + 1 + modInt;
-    const successo = tiro >= dc;
-
-    if (successo) {
-        p.receiveMedicalTreatment(true);
-        alert(`${p.nome} ottiene un colpo di cura! Tiro ${tiro} vs DC ${dc}.`);
-    } else {
-        alert(`${p.nome} fallisce la cura. Tiro ${tiro} vs DC ${dc}.`);
+function renderMedicaModal() {
+    const container = document.getElementById('medica-content');
+    if (!container) return;
+    const medico = party[medicoCorrente];
+    const feriti = party.filter(p => p.puntiFeritaReali < p.puntiFeritaRealiMax);
+    if (!medico || feriti.length === 0) {
+        container.innerHTML = `<p>Tutti in perfetta salute per ora.</p>`;
+        return;
     }
+    container.innerHTML = `
+        <div style="margin-bottom:12px; font-size:0.9rem; color:#ddd;">
+            <strong>Medico:</strong> ${medico.nome} (Int +${medico.getStatDettagliata('Intelligenza').mod})<br>
+            Scegli il personaggio da curare:
+        </div>
+        ${feriti.map((p, idx) => {
+            const targetIdx = party.indexOf(p);
+            return `
+                <div class="stat-row" style="margin-bottom:8px; background:#111;">
+                    <div style="flex:1; text-align:left;">
+                        <strong>${p.nome}</strong><br>
+                        <small>${p.woundState} - PF Reali ${p.puntiFeritaReali}/${p.puntiFeritaRealiMax}</small><br>
+                        <small>Costituzione: ${p.costituzione} (mod ${p.getStatDettagliata('Costituzione').mod >= 0 ? '+' : ''}${p.getStatDettagliata('Costituzione').mod})</small>
+                    </div>
+                    <button onclick="curaTarget(${targetIdx})" style="min-width:100px; background:#27ae60 !important; color:white !important;">Cura</button>
+                </div>`;
+        }).join('')}
+    `;
+}
+
+function getMedicineBaseDC(woundState) {
+    switch (woundState) {
+        case 'Ferita lieve': return 12;
+        case 'Ferita profonda': return 16;
+        case 'Funzionalità a rischio': return 20;
+        case 'Rischio di morte': return 24;
+        default: return 10;
+    }
+}
+
+function curaTarget(targetIdx) {
+    const medico = party[medicoCorrente];
+    const target = party[targetIdx];
+    if (!medico || !target) return;
+    const targetCostituzione = target.getStatDettagliata('Costituzione').mod;
+    const baseDC = getMedicineBaseDC(target.woundState);
+    const dc = Math.max(5, baseDC - targetCostituzione);
+    const tiro = Math.floor(Math.random() * 20) + 1 + medico.getStatDettagliata('Intelligenza').mod;
+    const successo = tiro >= dc;
+    if (successo) {
+        target.receiveMedicalTreatment(true);
+        alert(`${medico.nome} cura ${target.nome}! Tiro ${tiro} vs DC ${dc}.`);
+    } else {
+        alert(`${medico.nome} fallisce nel curare ${target.nome}. Tiro ${tiro} vs DC ${dc}.`);
+    }
+    renderMedicaModal();
     aggiornaInterfaccia();
 }
 
