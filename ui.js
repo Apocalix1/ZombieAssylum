@@ -37,6 +37,25 @@ function randomStudyHours() {
 
 let tempP = null;
 
+const MEDICINA_LIVELLI = [
+    { livello: 0, effetto: "Nessuna conoscenza specifica; usi base con medicine improvvisate.", costo: 0 },
+    { livello: 1, effetto: "Preparazione semplice e medicazioni di base.", costo: 0 },
+    { livello: 2, effetto: "Interventi di primo soccorso più efficaci.", costo: 1 },
+    { livello: 3, effetto: "Trattamenti avanzati per ferite moderate.", costo: 2 },
+    { livello: 4, effetto: "Cura efficiente delle malattie e medicazioni complesse.", costo: 3 },
+    { livello: 5, effetto: "Padronanza totale della medicina da campo.", costo: 4 }
+];
+
+const TABELLA_ARMI = [
+    { nome: 'Lame leggere', descrizione: 'Colpo veloce, critici più frequenti, richiede livello precedente.', livelloBase: 1 },
+    { nome: 'Mazze e armi contundenti', descrizione: 'Infligge danno robusto e stordisce, richiede livello precedente.', livelloBase: 1 },
+    { nome: 'Archi', descrizione: 'Attacchi a distanza; capacità di tiro e penetranza.', livelloBase: 1 },
+    { nome: 'Balestre', descrizione: 'Colpi potenti a distanza, lentezza compensata da danno maggiore.', livelloBase: 1 },
+    { nome: 'Armi con l\'asta', descrizione: 'Portata extra e controllo della creatura in mischia.', livelloBase: 1 },
+    { nome: 'Armi da fuoco', descrizione: 'Danno esplosivo, richiede rinculo e mira stabilizzata.', livelloBase: 1 },
+    { nome: 'Rampini e fruste', descrizione: 'Controllo del campo e disarmo; utile sui bersagli mobili.', livelloBase: 1 }
+];
+
 // --- UTILITY: COLORI BARRE ---
 function getColoreBarra(percentuale) {
     if (percentuale > 80) return "#2ecc71"; // Verde
@@ -205,7 +224,164 @@ function artificeriaPersonaggio(idx) {
 }
 
 function allenamento(idx) {
-    alert('Funzione Allenamento in sviluppo.');
+    const modal = document.getElementById('modal-allenamento');
+    const content = document.getElementById('allenamento-content');
+    const p = party[idx];
+    
+    const categorie = ['Archi', 'Balestre', 'Armi con l\'asta', 'Lame leggere', 'Armi da fuoco', 'Rampini e fruste', 'Mazze e armi contundenti'];
+    const giornoAttuale = Math.floor(oreTotali / 24);
+    const gratuite = p.calcolaOreAllenamentoGratuite(giornoAttuale);
+    const rimanenti = Math.max(0, gratuite - p.oreAllenamento);
+    
+    let html = `<div style="margin-bottom:12px; color:#ddd;">
+        <p><strong>${p.nome}</strong></p>
+        <p>Ore allenamento gratuite oggi: <span style="color:#2ecc71">${rimanenti}/${gratuite}</span></p>
+        <p>Stamina attuale: ${p.staminaAttuale}/${p.staminaMax}</p>
+    </div>
+    <p style="font-weight:bold; color:#f1c40f; margin-bottom:10px;">Seleziona categoria arma e ore:</p>
+    <div style="display:grid; gap:10px;">`;
+    
+    categorie.forEach(cat => {
+        const pca = p.pca[cat] || 0;
+        html += `<div style="background:#222; padding:8px; border:1px solid #333; border-radius:4px;">
+            <div style="margin-bottom:6px;"><strong>${cat}</strong> - PCA: ${pca.toFixed(1)}</div>
+            <div style="display:flex; gap:4px; margin-bottom:4px;">
+                <input type="number" id="ore-${cat}" min="1" value="1" max="${rimanenti + 4}" style="width:50px; padding:4px;">
+                <button class="btn-big" style="flex:1;" onclick="executeAllenamento(${idx}, '${cat}', ${giornoAttuale})">Allena</button>
+            </div>
+        </div>`;
+    });
+    
+    html += `</div>`;
+    content.innerHTML = html;
+    modal.style.display = 'block';
+}
+
+function executeAllenamento(idx, categoria, giornoAttuale) {
+    const p = party[idx];
+    const inputId = `ore-${categoria}`;
+    const oraElement = document.getElementById(inputId);
+    if (!oraElement) return;
+    const ore = parseInt(oraElement.value);
+    if (isNaN(ore) || ore <= 0) { alert('Inserisci un numero valido di ore.'); return; }
+    
+    const result = p.addestraArma(categoria, ore, giornoAttuale);
+    alert(`${p.nome} si è allenato!\n
+Ore gratuite usate: ${result.oreGratuite}\n
+Ore a pagamento: ${result.oreAGagoPagato}\n
+Stamina consumata: ${result.staminaUsata}\n
+PCA guadagnato: +${result.pcaGuadagnato}`);
+    
+    allenamento(idx); // Refresh
+    aggiornaInterfaccia();
+}
+
+function registraAttaccoModal(idx) {
+    const modal = document.getElementById('modal-regista-attacco');
+    const content = document.getElementById('regista-attacco-content');
+    const p = party[idx];
+    
+    const categorie = ['Archi', 'Balestre', 'Armi con l\'asta', 'Lame leggere', 'Armi da fuoco', 'Rampini e fruste', 'Mazze e armi contundenti'];
+    
+    let html = `<div style="margin-bottom:12px; color:#ddd;">
+        <p><strong>${p.nome}</strong></p>
+        <p style="font-size:0.9rem; color:#aaa;">Registra i tuoi colpi per guadagnare PCA!</p>
+    </div>
+    <p style="font-weight:bold; color:#f1c40f; margin-bottom:10px;">Seleziona arma e risultato:</p>
+    <div style="display:grid; gap:10px;">`;
+    
+    categorie.forEach(cat => {
+        const pca = p.pca[cat] || 0;
+        html += `<div style="background:#222; padding:10px; border:1px solid #333; border-radius:4px;">
+            <div style="margin-bottom:8px;"><strong>${cat}</strong> - PCA: ${pca.toFixed(1)}</div>
+            <div style="display:flex; gap:4px; flex-wrap:wrap;">
+                <button class="btn-big" style="flex:1; min-width:80px; background:#2ecc71;" onclick="registraColpo(${idx}, '${cat}', 'success')">✓ Colpo (+1)</button>
+                <button class="btn-big" style="flex:1; min-width:80px; background:#f39c12;" onclick="registraColpo(${idx}, '${cat}', 'critical')">⚡ Critico (+2)</button>
+                <button class="btn-big" style="flex:1; min-width:80px; background:#e74c3c;" onclick="registraColpo(${idx}, '${cat}', 'fail')">✗ Mancato (+0.2)</button>
+            </div>
+        </div>`;
+    });
+    
+    html += `</div>`;
+    content.innerHTML = html;
+    modal.style.display = 'block';
+}
+
+function registraColpo(idx, categoria, risultato) {
+    const p = party[idx];
+    p.registraColpoCombattimento(categoria, risultato);
+    
+    const labels = { success: 'Colpo riuscito', critical: 'Colpo critico', fail: 'Colpo fallito' };
+    const gains = { success: 1, critical: 2, fail: 0.2 };
+    
+    alert(`${p.nome} ha registrato un ${labels[risultato]} con ${categoria}!\n+${gains[risultato]} PCA`);
+    registraAttaccoModal(idx); // Refresh
+    aggiornaInterfaccia();
+}
+
+function visualizzaPerk(idx) {
+    const modal = document.getElementById('modal-perk-viewer');
+    const content = document.getElementById('perk-viewer-content');
+    const p = party[idx];
+    
+    let html = `<div style="margin-bottom:12px; color:#ddd;">
+        <p><strong>Competenze di ${p.nome}</strong></p>
+    </div>`;
+    
+    if (p.competenze && p.competenze.length > 0) {
+        html += `<div style="margin-bottom:14px; background:#1a1a1a; padding:10px; border:1px solid #333; border-radius:6px;">
+            <p style="color:#f1c40f; font-weight:bold; margin-bottom:8px;">COMPETENZE (${p.competenze.length})</p>
+            ${p.competenze.map(c => `<div style="color:#2ecc71; margin-bottom:4px;">✓ ${c}</div>`).join('')}
+        </div>`;
+    }
+    
+    if (p.masteries && p.masteries.length > 0) {
+        html += `<div style="margin-bottom:14px; background:#1a1a1a; padding:10px; border:1px solid #333; border-radius:6px;">
+            <p style="color:#f1c40f; font-weight:bold; margin-bottom:8px;">MAESTRIE (${p.masteries.length})</p>
+            ${p.masteries.map(m => `<div style="color:#ff9800; margin-bottom:4px;">⭐ ${m}</div>`).join('')}
+        </div>`;
+    }
+    
+    if (p.perks && p.perks.length > 0) {
+        html += `<div style="margin-bottom:14px; background:#1a1a1a; padding:10px; border:1px solid #333; border-radius:6px;">
+            <p style="color:#f1c40f; font-weight:bold; margin-bottom:8px;">PERK (${p.perks.length})</p>`;
+        p.perks.forEach(perk => {
+            if (typeof perk !== 'string') {
+                html += `<div style="background:#111; padding:6px; margin-bottom:6px; border-left:3px solid #3498db; border-radius:3px;">
+                    <div style="color:#3498db; font-weight:bold; margin-bottom:2px;">${perk.nome}</div>
+                    <div style="color:#aaa; font-size:0.9rem;">${perk.desc}</div>
+                    <div style="color:#888; font-size:0.85rem; margin-top:2px;"><em>Costo: ${perk.costo}</em></div>
+                </div>`;
+            }
+        });
+        html += `</div>`;
+    }
+
+    html += `<div style="margin-bottom:14px; background:#1a1a1a; padding:10px; border:1px solid #333; border-radius:6px;">
+        <div style="color:#f1c40f; font-weight:bold; margin-bottom:8px;">ARMATURE E ARMI</div>
+        <div style="color:#aaa; font-size:0.9rem; margin-bottom:8px;">Ogni arma ha livello e descrizione. Per salire al livello successivo serve aver già ottenuto il livello precedente.</div>`;
+    TABELLA_ARMI.forEach(arma => {
+        const livello = p.armiLivello ? (p.armiLivello[arma.nome] || 0) : 0;
+        html += `<div style="background:#111; padding:8px; margin-bottom:6px; border-left:3px solid #9b59b6; border-radius:3px;">
+            <div style="color:#9b59b6; font-weight:bold;">${arma.nome} - Livello ${livello}</div>
+            <div style="color:#ccc; font-size:0.9rem;">${arma.descrizione}</div>
+        </div>`;
+    });
+    html += `</div>`;
+
+    html += `<div style="margin-bottom:14px; background:#1a1a1a; padding:10px; border:1px solid #333; border-radius:6px;">
+        <div style="color:#f1c40f; font-weight:bold; margin-bottom:8px;">MEDICINA</div>
+        <div style="color:#aaa; font-size:0.9rem; margin-bottom:8px;">La tabella Medicina mostra i progressi di trattamento curativo.</div>`;
+    MEDICINA_LIVELLI.forEach(entry => {
+        html += `<div style="background:#111; padding:8px; margin-bottom:6px; border-left:3px solid #16a085; border-radius:3px;">
+            <div style="color:#16a085; font-weight:bold;">Livello ${entry.livello}</div>
+            <div style="color:#ccc; font-size:0.9rem;">${entry.effetto}</div>
+        </div>`;
+    });
+    html += `</div>`;
+
+    content.innerHTML = html;
+    modal.style.display = 'block';
 }
 
 function pianificaAzione(idx, tipo, bookId = null, subject = null, bookTitle = null, ore = null, teacherName = null) {
@@ -377,12 +553,7 @@ function registraColpo(idx) {
 
 function segnaVittoria(idx) {
     const p = party[idx];
-    const oldMax = p.puntiFeritaRealiMax;
-    p.vittorieCombattimento += 1;
-    const newMax = p.puntiFeritaRealiMax;
-    if (newMax > oldMax) {
-        p.puntiFeritaReali = Math.min(newMax, p.puntiFeritaReali);
-    }
+    p.registraVittoriaCombattimento();
     renderSpedizioneModal();
     aggiornaInterfaccia();
 }
@@ -411,11 +582,15 @@ function renderSpedizioneModal() {
                     <div>✨ PF Fortuna: ${p.puntiFortuna} / ${p.puntiFortunaMax}</div>
                     ${getBarra(p.puntiFortuna, p.puntiFortunaMax, '#f1c40f')}
                     <div style="margin-top:8px; font-size:0.85rem; color:#aaa;">Vittorie comb.: ${p.vittorieCombattimento}</div>
+                    <div style="margin-top:8px; font-size:0.85rem; color:#ddd;">
+                        <strong>PCA:</strong> 
+                        ${Object.entries(p.pca).filter(([, v]) => v > 0).map(([cat, val]) => `${cat.split(' ')[0]} ${val.toFixed(1)}`).join(' • ') || 'Nessuno'}
+                    </div>
                 </div>
                 <div class="combat-buttons" style="display:grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap:8px; margin-bottom:12px;">
                     <button onclick="degradaInCombat(${idx})">Degrada</button>
                     <button onclick="ferisciInCombat(${idx})">Ferisci</button>
-                    <button onclick="registraColpo(${idx})">Registra un colpo</button>
+                    <button onclick="registraAttaccoModal(${idx})">📈 Reg. Attacco</button>
                     <button onclick="segnaVittoria(${idx})">Segna vittoria</button>
                     ${(() => {
                         let extras = '';
@@ -473,12 +648,13 @@ function esplora(idx) {
 function terminaEsplorazione(p) {
     if (!p) return;
     const bonus = getExplorationBonus(p);
+    const skill = p.getSkillModifierForCheck ? p.getSkillModifierForCheck('Sopravvivenza') : { modifier: 0, advantage: false, disadvantage: false };
 
-    const mediciTiro = Math.min(20, rollD20() + bonus);
-    const ingranaggiTiro = Math.min(20, rollD20() + bonus);
-    const alchemiciTiro = Math.min(20, rollD20() + bonus);
-    const ciboTiro = Math.min(20, rollD20() + bonus);
-    const acquaTiro = Math.min(20, rollD20() + bonus);
+    const mediciTiro = Math.min(20, rollD20WithAdv(skill.advantage, skill.disadvantage) + bonus);
+    const ingranaggiTiro = Math.min(20, rollD20WithAdv(skill.advantage, skill.disadvantage) + bonus);
+    const alchemiciTiro = Math.min(20, rollD20WithAdv(skill.advantage, skill.disadvantage) + bonus);
+    const ciboTiro = Math.min(20, rollD20WithAdv(skill.advantage, skill.disadvantage) + bonus);
+    const acquaTiro = Math.min(20, rollD20WithAdv(skill.advantage, skill.disadvantage) + bonus);
 
     const medici = lootMedici(mediciTiro);
     const ingranaggi = lootIngranaggi(ingranaggiTiro);
@@ -512,6 +688,20 @@ function rollD20() {
     return Math.floor(Math.random() * 20) + 1;
 }
 
+function rollD20WithAdv(advantage, disadvantage) {
+    if (advantage && !disadvantage) {
+        const a = rollD20();
+        const b = rollD20();
+        return Math.max(a, b);
+    }
+    if (disadvantage && !advantage) {
+        const a = rollD20();
+        const b = rollD20();
+        return Math.min(a, b);
+    }
+    return rollD20();
+}
+
 function rollDice(count, faces) {
     let total = 0;
     for (let i = 0; i < count; i++) {
@@ -521,12 +711,8 @@ function rollDice(count, faces) {
 }
 
 function getExplorationBonus(p) {
-    let base = p.getStatDettagliata('Saggezza').mod;
-    const skill = p.getSkillModifierForCheck ? p.getSkillModifierForCheck('Sopravvivenza') : { modifier: 0, disadvantage: false };
-    let bonus = base + (skill.modifier || 0);
-    // penalizza se svantaggio
-    if (skill.disadvantage) bonus -= 2;
-    return bonus;
+    const skill = p.getSkillModifierForCheck ? p.getSkillModifierForCheck('Sopravvivenza') : { modifier: 0, advantage: false, disadvantage: false };
+    return skill.modifier || 0;
 }
 
 function lootMedici(tiro) {
@@ -1021,12 +1207,28 @@ function apriScheda(idx) {
                 <p>⚡ <b>STAMINA:</b> <span style="color:#3498db">${p.staminaAttuale} / ${p.staminaMax}</span></p>
                 <p>🏃 <b>FATICA TOTALE:</b> <span style="color:#e74c3c">${p.faticaTotale}</span></p>
                 <p style="font-size:0.75em; color:#888;">${p.malusFaticaDettagliati.join(" • ")}</p>
+                ${(() => {
+                    const pcaEntry = Object.entries(p.pca || {}).filter(([, v]) => v > 0);
+                    if (!pcaEntry.length) return '';
+                    return `<p style="margin-top:10px; font-size:0.85em; color:#aaa;"><b>PCA ARMI:</b></p>
+                        <div style="font-size:0.85em; color:#2ecc71; background:#111; padding:8px; border-radius:4px;">
+                            ${pcaEntry.map(([cat, val]) => `<div>${cat}: ${val.toFixed(1)}</div>`).join('')}
+                        </div>`;
+                })()}
                 <hr style="border:0; border-top:1px solid #444; margin:15px 0;">
                 <p style="font-size:0.85em; color:#aaa;"><b>COMPETENZE:</b></p>
                 <div style="font-size:0.85em; color:#eee; background:#111; padding:8px;">
                     ${p.competenze.length > 0 ? p.competenze.join(' • ') : 'Nessuna'}
                 </div>
                 <p style="font-size:0.85em; color:#aaa; margin-top:12px;"><b>LIVELLO MEDICINA:</b> ${p.livelloMedicina} • <b>PM MEDICINA:</b> ${p.pmMedicina}</p>
+                ${(() => {
+                    const entries = Object.entries(p.apprendimento || {}).filter(([, punti]) => punti > 0);
+                    if (!entries.length) return '';
+                    return `<div style="margin-top:12px; background:#111; padding:10px; border:1px solid #333; border-radius:6px;">
+                        <div style="font-weight:bold; color:#f1c40f; margin-bottom:6px;">PROGRESSO STUDIO</div>
+                        ${entries.map(([materia, punti]) => `<div style="font-size:0.85rem; margin-bottom:4px;"><strong>${materia}:</strong> ${punti}/210 punti</div>`).join('')}
+                    </div>`;
+                })()}
                 <div style="margin-top:10px; display:flex; gap:8px;">
                     <div style="flex:1;">
                         <p style="font-size:0.85em; color:#aaa;"><b>SVANTAGGI</b></p>
@@ -1060,7 +1262,8 @@ function apriScheda(idx) {
             </div>
             ${effettiHtml}
         </div>
-        <div class="modal-footer" style="margin-top:20px;">
+        <div class="modal-footer" style="margin-top:20px; display:flex; gap:10px;">
+            <button class="btn-hero" style="flex:1;" onclick="visualizzaPerk(${party.indexOf(p)})">COMPETENZE/PERK</button>
             <button class="btn-hero" onclick="chiudiScheda()">CHIUDI</button>
         </div>
     `;

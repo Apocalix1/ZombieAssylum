@@ -10,19 +10,19 @@ const DATABASE_PERK = {
         { nome: "Artigiano Arcano", desc: "Competenza in Manodopera e Arcano", costo: 3, skills: ["Manodopera", "Arcano"] },
         { nome: "Artista accademico", desc: "Competenza in Storia e Intrattenere", costo: 2, skills: ["Storia", "Intrattenere"] },
         { nome: "Ballerina", desc: "Competenza in Intrattenere e Acrobazia", costo: 3, skills: ["Intrattenere", "Acrobazia"] },
-        { nome: "Borseggiatore", desc: "Competenza in Rapidità di mano e Acrobazia", costo: 4, skills: ["Rapidità di mano", "Acrobazia"] },
+        { nome: "Borseggiatore", desc: "Competenza in Rapidità di mano e Acrobazia", costo: 5, skills: ["Rapidità di mano", "Acrobazia"] },
         { nome: "Bruto", desc: "Competenza in Atletica e Intimidire", costo: 3, skills: ["Atletica", "Intimidire"] },
         { nome: "Cacciatore", desc: "Competenza in Sopravvivenza e Percezione", costo: 4, skills: ["Sopravvivenza", "Percezione"] },
-        { nome: "Casalingo", desc: "Competenza in Manodopera e Cucina", costo: 3, skills: ["Manodopera", "Cucina"] },
-        { nome: "Cuoco", desc: "Competenza in Natura e Cucina", costo: 3, skills: ["Natura", "Cucina"] },
+        { nome: "Casalingo", desc: "Competenza in Manodopera e Cucina", costo: 4, skills: ["Manodopera", "Cucina"] },
+        { nome: "Cuoco", desc: "Competenza in Natura e Cucina", costo: 4, skills: ["Natura", "Cucina"] },
         { nome: "Detective", desc: "Competenza in Indagare e Intuizione", costo: 3, skills: ["Indagare", "Intuizione"] },
         { nome: "Escursionista", desc: "Competenza in Sopravvivenza e Cucina", costo: 3, skills: ["Sopravvivenza", "Cucina"] },
         { nome: "Esperto di Sopravvivenza", desc: "Competenza in Natura e Sopravvivenza", costo: 4, skills: ["Natura", "Sopravvivenza"] },
         { nome: "Esploratore di Rovine", desc: "Competenza in Storia e Acrobazia", costo: 3, skills: ["Storia", "Acrobazia"] },
         { nome: "Fuggiasco", desc: "Competenza in Rapidità di mano e Furtività", costo: 4, skills: ["Rapidità di mano", "Furtività"] },
-        { nome: "Infiltrato", desc: "Competenza in Furtività e Inganno", costo: 6, skills: ["Furtività", "Inganno"] },
-        { nome: "Ladro", desc: "Competenza in Furtività e Strumenti da scasso", costo: 5, skills: ["Furtività", "Strumenti da scasso"] },
-        { nome: "Mago", desc: "Competenza in Arcano e Intuizione", costo: 4, skills: ["Arcano", "Intuizione"] },
+        { nome: "Infiltrato", desc: "Competenza in Furtività e Inganno", costo: 5, skills: ["Furtività", "Inganno"] },
+        { nome: "Ladro", desc: "Competenza in Furtività e Strumenti da scasso", costo: 6, skills: ["Furtività", "Strumenti da scasso"] },
+        { nome: "Mago", desc: "Competenza in Arcano e Intuizione", costo: 3, skills: ["Arcano", "Intuizione"] },
         { nome: "Missionario", desc: "Competenza in Atletica e Religione", costo: 4, skills: ["Atletica", "Religione"] },
         { nome: "Pastore", desc: "Competenza in Persuasione e Religione", costo: 3, skills: ["Persuasione", "Religione"] },
         { nome: "Poker Face", desc: "Competenza in Inganno e Giochi di carte", costo: 3, skills: ["Inganno", "Giochi di carte"] },
@@ -32,14 +32,14 @@ const DATABASE_PERK = {
         { nome: "Oratore", desc: "Competenza in Intuizione e Intrattenere", costo: 4, skills: ["Intuizione", "Intrattenere"] },
         { nome: "Ricattatore", desc: "Competenza in Investigare e Intimidire", costo: 4, skills: ["Investigare", "Intimidire"] },
         { nome: "Ricercatore magico", desc: "Competenza in Arcano e Investigare", costo: 4, skills: ["Arcano", "Investigare"] },
-        { nome: "Scassinatore", desc: "Competenza in Percezione e Strumenti da scasso", costo: 4, skills: ["Percezione", "Strumenti da scasso"] },
+        { nome: "Scassinatore", desc: "Competenza in Percezione e Strumenti da scasso", costo: 5, skills: ["Percezione", "Strumenti da scasso"] },
         { nome: "Selvaggio", desc: "Competenza in Addestrare Animali e Atletica", costo: 4, skills: ["Addestrare Animali", "Atletica"] },
         { nome: "Spia", desc: "Competenza in Furtività e Indagare", costo: 5, skills: ["Furtività", "Indagare"] },
         { nome: "Storico", desc: "Competenza in Storia e Arcano", costo: 3, skills: ["Storia", "Arcano"] },
         { nome: "Taverniere", desc: "Competenza in Cucina e Giochi di Carte", costo: 3, skills: ["Cucina", "Giochi di Carte"] },
         { nome: "Truffatore", desc: "Competenza in Inganno e Intuizione", costo: 3, skills: ["Inganno", "Intuizione"] },
-        { nome: "Tuttofare", desc: "Competenza in Manodopera e Strumenti da Scasso", costo: 3, skills: ["Manodopera", "Strumenti da Scasso"] },
-        { nome: "Voce del popolo", desc: "Competenza in Inganno e Persuasione", costo: 3, skills: ["Inganno", "Persuasione"] }
+        { nome: "Tuttofare", desc: "Competenza in Manodopera e Strumenti da Scasso", costo: 4, skills: ["Manodopera", "Strumenti da Scasso"] },
+        { nome: "Voce del popolo", desc: "Competenza in Inganno e Persuasione", costo: 2, skills: ["Inganno", "Persuasione"] }
     ],
     // Categorie pronte per aggiornamenti futuri
     "background": [],
@@ -144,7 +144,7 @@ const DATABASE_PERK = {
     "studio": [
         { nome: "Insegnante", desc: "Hai esperienza didattica: ottieni vantaggio sui tiri di apprendimento dallo studio.", costo: 8, skills: [] }
     ],
-    "conoscenze": [
+    "medicina": [
         { nome: "Medicina Livello 1", desc: "Conoscenze di base medicina.", costo: 4, skills: ['Medicina'] },
         { nome: "Medicina Livello 2", desc: "Conoscenze intermedie medicina.", costo: 6, skills: ['Medicina'], requires: 'Medicina Livello 1' },
         { nome: "Medicina Livello 3", desc: "Conoscenze avanzate medicina.", costo: 9, skills: ['Medicina'], requires: 'Medicina Livello 2' },

@@ -21,6 +21,29 @@ class Personaggio {
         this.oreRiposoAccumulate = 0;
         this.giornoInizio = giornoPartenza;
 
+        // --- SISTEMA ARMI E PCA ---
+        this.pca = {
+            'Archi': 0,
+            'Balestre': 0,
+            'Armi con l\'asta': 0,
+            'Lame leggere': 0,
+            'Armi da fuoco': 0,
+            'Rampini e fruste': 0,
+            'Mazze e armi contundenti': 0
+        };
+        this.armiLivello = {
+            'Archi': 0,
+            'Balestre': 0,
+            'Armi con l\'asta': 0,
+            'Lame leggere': 0,
+            'Armi da fuoco': 0,
+            'Rampini e fruste': 0,
+            'Mazze e armi contundenti': 0
+        };
+        this.allattributeMax = {}; // tracciare max per ogni attributo
+        this.oreAllenamento = 0;
+        this.ultimoGiornoAllenamento = 0;
+
         this.apprendimento = {}; // progresso di studio per materia
         this.oreStudioPerMateria = {}; // ore accumulate per materia
         this.oreStudioGiornaliere = 0;
@@ -93,6 +116,7 @@ class Personaggio {
 
     get staminaMax() {
         let s = this.staminaBase;
+        s += this.getStatDettagliata('Forza').mod;
         // Debuff da bisogni
         if (this.stadioFame >= 2) s -= 1;
         if (this.stadioSete >= 3) s -= 2;
@@ -182,8 +206,7 @@ class Personaggio {
         const counts = this.getPerkSkillCounts();
         const baseCount = counts[skillKey] || 0;
         let rating = 0;
-        if (baseCount >= 2) rating = 2;
-        else if (baseCount === 1) rating = 1;
+        if (baseCount >= 1) rating = 1;
 
         // Detect negative perks that explicitly mention the skill in their description
         // only consider perks with negative cost as malus sources.
@@ -251,6 +274,32 @@ class Personaggio {
         }
     }
 
+    adjustStaminaForMaxChange() {
+        // Se staminaMax si riduce, riduci anche staminaAttuale proporzionalmente
+        const currentMax = this.staminaMax;
+        if (this.staminaAttuale > currentMax) {
+            this.staminaAttuale = Math.max(0, currentMax);
+        }
+    }
+
+    rollExplorationCheck() {
+        // Tiro per Sopravvivenza: 1d20 + mod Saggezza + bonus competenza
+        // Se maestria: competenza x2
+        const sagMod = this.getStatDettagliata('Saggezza').mod;
+        let competenzaBonus = 0;
+        const bonus = this.getBonusCompetenza();
+        
+        if (this.masteries && this.masteries.map(m => m.toLowerCase()).includes('sopravvivenza')) {
+            competenzaBonus = bonus * 2;
+        } else if (this.competenze.some(c => c.toLowerCase() === 'sopravvivenza')) {
+            competenzaBonus = bonus;
+        }
+
+        const d20 = Math.floor(Math.random() * 20) + 1;
+        const total = d20 + sagMod + competenzaBonus;
+        return { d20, sagMod, competenzaBonus, total };
+    }
+
     getStudyPoints(skill) {
         const key = (skill || '').toLowerCase().trim();
         let points = this.apprendimento[skill] || 0;
@@ -281,6 +330,14 @@ class Personaggio {
         return this.puntiFeritaRealiMaxBase + Math.floor(this.vittorieCombattimento / 2);
     }
 
+    registraVittoriaCombattimento() {
+        this.vittorieCombattimento += 1;
+        // Ogni 2 vittorie, aumenta punti fortuna
+        if (this.vittorieCombattimento % 2 === 0) {
+            this.puntiFortuna = Math.min(this.puntiFortunaMax, this.puntiFortuna + 1);
+        }
+    }
+
     get woundEffectText() {
         switch (this.woundState) {
             case "Ferita lieve": return "30% peggiora dopo 5h se non curata";
@@ -308,8 +365,8 @@ class Personaggio {
 
     get woundTimeToWorsen() {
         const base = this.woundTimeBase;
-        // ogni +1 al modificatore di Costituzione aumenta il tempo del 15% (accumulativo)
-        const factor = 1 + this.constitutionModifier * 0.15;
+        // ogni +1 al modificatore di Costituzione riduce del 5% il tempo; ogni -1 lo aumenta del 5%
+        const factor = 1 - (this.constitutionModifier * 0.05);
         return Math.max(0.5, base * factor);
     }
 
@@ -326,6 +383,11 @@ class Personaggio {
     applyRealDamage(danno) {
         const dannoReale = Math.max(1, Math.ceil(danno / 4));
         this.puntiFeritaReali = Math.max(0, this.puntiFeritaReali - dannoReale);
+        if (dannoReale > 0) {
+            const constitutionBonus = this.constitutionModifier || 0;
+            const fortunaRitrovata = Math.max(1, Math.floor(Math.random() * 4) + 1 + constitutionBonus);
+            this.puntiFortuna = Math.min(this.puntiFortunaMax, this.puntiFortuna + fortunaRitrovata);
+        }
         if (this.puntiFeritaReali > 0) {
             this.resetWoundTimer();
         } else {
@@ -398,6 +460,53 @@ class Personaggio {
 
     get woundDetail() {
         return `${this.woundState}: ${this.woundEffectText}`;
+    }
+
+    // --- SISTEMA COMBATTIMENTO E ARMI ---
+    registraColpoCombattimento(categoria, risultato) {
+        // risultato: 'success' (+1), 'critical' (+2), 'fail' (+0.2)
+        let guadagno = 0;
+        if (risultato === 'critical') guadagno = 2;
+        else if (risultato === 'success') guadagno = 1;
+        else if (risultato === 'fail') guadagno = 0.2;
+        
+        this.pca[categoria] = (this.pca[categoria] || 0) + guadagno;
+    }
+
+    // --- SISTEMA ALLENAMENTO ---
+    calcolaOreAllenamentoGratuite(giornoAttuale) {
+        // Reset ogni nuovo giorno
+        if (this.ultimoGiornoAllenamento !== giornoAttuale) {
+            this.oreAllenamento = 0;
+            this.ultimoGiornoAllenamento = giornoAttuale;
+        }
+        
+        const forzaMod = this.getStatDettagliata('Forza').mod;
+        const gratuite = Math.max(1, 1 + forzaMod);
+        return gratuite;
+    }
+
+    addestraArma(categoria, ore, giornoAttuale) {
+        // Allenamento: +2 PCA per ora
+        // Fame aumenta del 15% per le prossime 2 ore
+        const gratuite = this.calcolaOreAllenamentoGratuite(giornoAttuale);
+        const oreGratuite = Math.min(ore, gratuite - this.oreAllenamento);
+        const oreAGagoPagato = ore - oreGratuite;
+        
+        // Guadagno PCA
+        this.pca[categoria] = (this.pca[categoria] || 0) + (ore * 2);
+        
+        // Fame aumenta 15% per 2 ore
+        this.fame = Math.max(0, this.fame - (14 * 0.15)); // riduce la barra di fame
+        
+        // Se ore a carico pagato, consuma stamina (1 barra ogni 2 ore)
+        const staminaDaConsumara = Math.ceil(oreAGagoPagato / 2);
+        this.staminaAttuale = Math.max(0, this.staminaAttuale - staminaDaConsumara);
+        
+        // Traccia ore di allenamento
+        this.oreAllenamento += oreGratuite;
+        
+        return { oreGratuite, oreAGagoPagato, staminaUsata: staminaDaConsumara, pcaGuadagnato: ore * 2 };
     }
 
 
