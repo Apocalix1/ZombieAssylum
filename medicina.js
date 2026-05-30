@@ -85,6 +85,10 @@ function curaTarget(targetIdx) {
         alert(`Livello Medicina insufficiente! Richiesto: ${req.lvReq}`);
         return;
     }
+    const helper = (typeof assistenzaSelezionata !== 'undefined' && assistenzaSelezionata && assistenzaSelezionata.tipo === 'medicina') ? party[assistenzaSelezionata.idx] : null;
+    const assistAvailable = helper && helper !== medico && helper.livelloMedicina >= 1;
+    const materialHalf = assistAvailable;
+
     if (!hasEnoughMedicalMaterials(req)) {
         alert('Risorse insufficienti.');
         return;
@@ -93,7 +97,10 @@ function curaTarget(targetIdx) {
     // NUOVO: Calcolo CD influenzato dalla Costituzione del paziente
     // Se mod positivo -> sottrae (es 24 - 3). Se mod negativo -> somma (es 24 + 2)
     const modCostPaziente = target.getStatDettagliata('Costituzione').mod;
-    const dcFinale = req.cd - modCostPaziente;
+    let dcFinale = req.cd - modCostPaziente;
+    if (assistAvailable) {
+        dcFinale = Math.max(1, dcFinale - 2);
+    }
 
     // NUOVO: Tiro d20 + INT + Bonus Livello
     const bonusLivello = getMedicineLevelBonus(medico.livelloMedicina);
@@ -105,14 +112,22 @@ function curaTarget(targetIdx) {
     const scarto = dcFinale - totale; // Quanto è mancato per riuscire
 
     if (successo) {
-        takeMedicalMaterials(req, false);
+        takeMedicalMaterials(req, materialHalf);
         target.receiveMedicalTreatment(true);
+        if (assistAvailable) {
+            const helperName = helper.nome;
+            mostraNotificaInAlto(`${helperName} assiste ${medico.nome} e riduce la CD di 2.`, 'successo');
+            assistenzaSelezionata = null;
+        }
         medico.pmMedicina += req.pm;
         checkMedicineLevelUp(medico); // Controlla se sale di livello
         alert(`SUCCESSO! ${medico.nome} cura ${target.nome}. (Tiro: ${totale} vs CD: ${dcFinale})`);
     } else {
         // FALLIMENTO: perdi 50% materiali
         takeMedicalMaterials(req, true);
+        if (assistAvailable) {
+            assistenzaSelezionata = null;
+        }
         alert(`FALLIMENTO! ${medico.nome} non riesce a curare ${target.nome}. Perso il 50% dei materiali.`);
         
         // NUOVO: Se scarto >= 5, la ferita peggiora

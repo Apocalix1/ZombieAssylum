@@ -5,12 +5,16 @@ let magazzino = {
     cibo: 20,
     acqua: 20,
     materialiAlchemici: 5,
-    ingranaggi: 3,
+    ingranaggi: 10,
+    conserve: 0,
+    piattiDeliziosi: 0,
     materialiMedici: {
         base: 2,
         avanzati: 1,
         critici: 0
     },
+    postazioneAlchemica: false,
+    compounds: [],
     libri: []
 };
 
@@ -18,6 +22,38 @@ function rollDiceNotation(notation) {
     const match = notation.match(/(\d+)d(\d+)/);
     if (!match) return 0;
     return rollDice(parseInt(match[1], 10), parseInt(match[2], 10));
+}
+
+function hasPerk(personaggio, nomePerk) {
+    if (!personaggio || !Array.isArray(personaggio.perks)) return false;
+    return personaggio.perks.some(perk => {
+        if (typeof perk === 'string') return perk === nomePerk;
+        if (typeof perk === 'object' && perk && perk.nome) return perk.nome === nomePerk;
+        return false;
+    });
+}
+
+function getFoodEfficiency(p) {
+    let scale = 1;
+    if (hasPerk(p, 'Digiuno')) scale *= 1.2;
+    if (hasPerk(p, 'Insaziabile')) scale *= 0.8;
+    return scale;
+}
+
+function getWaterEfficiency(p) {
+    let scale = 1;
+    if (hasPerk(p, 'Dromedario')) scale *= 1.2;
+    if (hasPerk(p, 'Bocca asciutta')) scale *= 0.8;
+    return scale;
+}
+
+function recordResourceConsumption(p, amount, tipo = 'cibo') {
+    if (!p.resourceConsumption) p.resourceConsumption = { cibo: 0, acqua: 0 };
+    if (tipo === 'acqua') {
+        p.resourceConsumption.acqua += amount;
+    } else {
+        p.resourceConsumption.cibo += amount;
+    }
 }
 
 function randomStudyHours() {
@@ -36,6 +72,8 @@ function randomStudyHours() {
 }
 
 let tempP = null;
+let assistenzaSelezionata = null; // { tipo: 'studio'|'medicina'|'alchimia', idx: number }
+let alchimiaPersonaggioSelezionata = null;
 
 const MEDICINA_LIVELLI = [
     { livello: 0, effetto: "Nessuna conoscenza specifica; usi base con medicine improvvisate.", costo: 0 },
@@ -83,6 +121,31 @@ function passaTempoGlobale() {
     const giornoPrecedente = Math.floor(oreTotali / 24);
     oreTotali += ore;
     const giornoAttuale = Math.floor(oreTotali / 24);
+
+    // Degrado del cibo: 25% di probabilità per ogni giorno che passa
+    for (let giorno = giornoPrecedente + 1; giorno <= giornoAttuale; giorno++) {
+        if (magazzino.cibo > 0 && Math.random() < 0.25) {
+            const perduto = rollDice(1, 6);
+            const effettivo = Math.min(magazzino.cibo, perduto);
+            if (magazzino.conserve > 0) {
+                const ridotto = effettivo / 2;
+                magazzino.conserve = Math.max(0, magazzino.conserve - 1);
+                magazzino.cibo = Math.max(0, magazzino.cibo - ridotto);
+                alert(`Una conserva ha ridotto il degrado: perso solo ${ridotto.toFixed(1)} cibo, consume 1 conserva.`);
+            } else {
+                magazzino.cibo = Math.max(0, magazzino.cibo - effettivo);
+                alert(`Attenzione: il cibo è andato a male o è stato mangiato da animali! Perduti ${effettivo.toFixed(1)} unità di cibo.`);
+            }
+        }
+        if (magazzino.piattiDeliziosi > 0 && Math.random() < 0.40) {
+            const perduti = Math.min(magazzino.piattiDeliziosi, rollDice(1, 4));
+            magazzino.piattiDeliziosi = Math.max(0, magazzino.piattiDeliziosi - perduti);
+            if (perduti > 0) {
+                alert(`Attenzione: ${perduti} piatto/i delizioso/i si sono degradati durante il giorno ${giorno}.`);
+            }
+        }
+    }
+
     for (let i = party.length - 1; i >= 0; i--) {
         const p = party[i];
         if (typeof p.resetDailyStudy === 'function') p.resetDailyStudy(oreTotali);
@@ -97,6 +160,8 @@ function passaTempoGlobale() {
             });
             party.splice(i, 1);
             if (typeof chiudiScheda === 'function') chiudiScheda();
+        } else {
+            processAutomaticActions(p);
         }
     }
     aggiornaInterfaccia();
@@ -108,6 +173,10 @@ function aggiornaInterfaccia() {
     let ora = oreTotali % 24;
     document.getElementById('display-ora').innerText = `${ora < 10 ? '0' : ''}${ora}:00`;
     document.getElementById('display-cibo').innerText = magazzino.cibo.toFixed(1);
+    const conserveDisplay = document.getElementById('display-conserve');
+    if (conserveDisplay) conserveDisplay.innerText = magazzino.conserve;
+    const deliziosiDisplay = document.getElementById('display-piatti-deliziosi');
+    if (deliziosiDisplay) deliziosiDisplay.innerText = magazzino.piattiDeliziosi;
     document.getElementById('display-acqua').innerText = magazzino.acqua.toFixed(1);
     document.getElementById('display-alchemici').innerText = magazzino.materialiAlchemici;
     document.getElementById('display-ingranaggi').innerText = magazzino.ingranaggi;
@@ -117,6 +186,17 @@ function aggiornaInterfaccia() {
 
     const container = document.getElementById('party-container');
     container.innerHTML = "";
+
+    const assistStatus = assistenzaSelezionata ?
+        `<div style="margin-bottom:12px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+            <button class="btn-hero" onclick="apriAiutoModal()">🤝 Aiuta qualcuno</button>
+            <div style="flex:1; min-width:220px; color:#f1c40f;">Assistente selezionato: <strong>${party[assistenzaSelezionata.idx]?.nome || 'Nessuno'}</strong> per <strong>${assistenzaSelezionata.tipo}</strong></div>
+            <button class="btn-big" style="background:#c0392b;" onclick="annullaAssistente()">Annulla assistenza</button>
+        </div>` :
+        `<div style="margin-bottom:12px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+            <button class="btn-hero" onclick="apriAiutoModal()">🤝 Aiuta qualcuno</button>
+        </div>`;
+    container.innerHTML = assistStatus;
 
     // Applica effetti dei perk (retroattivo/continuo)
     party.forEach(papply => { if (typeof applyPerkEffects === 'function') applyPerkEffects(papply); });
@@ -163,6 +243,12 @@ function aggiornaInterfaccia() {
             <div style="font-size:0.8em; margin-bottom:4px;">
                 <strong>PF Reali:</strong> ${p.puntiFeritaReali} / ${p.puntiFeritaRealiMax} - ${p.woundState}
             </div>
+            <div style="font-size:0.8em; margin-bottom:6px; color:#ddd;">
+                <strong>PCA in corso:</strong> ${Object.entries(p.pca || {}).filter(([, v]) => v > 0).map(([cat, val]) => `${cat}: ${val.toFixed(1)}`).join(' • ') || 'Nessuno'}
+            </div>
+            <div style="font-size:0.8em; margin-bottom:6px; color:#ddd;">
+                <strong>Piatti deliziosi:</strong> ${magazzino.piattiDeliziosi}
+            </div>
             ${getBarra(p.puntiFeritaReali, p.puntiFeritaRealiMax, '#c0392b')}
             <div style="font-size:0.75em; margin-bottom:10px; color:#aaa;">${p.woundEffectText}</div>
             <div style="font-size:0.7em; margin-bottom:10px;">Stato: <b>${statoAzione}</b></div>
@@ -174,16 +260,16 @@ function aggiornaInterfaccia() {
                 <details class="action-dropdown">
                     <summary>SOPRAVVIVI</summary>
                     <div class="dropdown-buttons">
-                        <button onclick="nutri(${idx})">Nutri</button>
-                        <button onclick="disseta(${idx})">Disseta</button>
-                        <button onclick="pianificaAzione(${idx}, 'dormi')">Dormi</button>
+                        <button onclick="openRisorsaModal(${idx}, 'fame')">Nutri</button>
+                        <button onclick="openRisorsaModal(${idx}, 'sete')">Bevi</button>
+                        <button onclick="openRisorsaModal(${idx}, 'sonno')">Dormi</button>
                         <button onclick="apriMedica(${idx})">Medica</button>
                     </div>
                 </details>
                 <details class="action-dropdown">
                     <summary>CREA</summary>
                     <div class="dropdown-buttons">
-                        <button onclick="avviaCreazione()">Crea</button>
+                                <button onclick="openCucinaModal(${idx})">Cucina</button>
                         <button onclick="alchimiaPersonaggio(${idx})">Alchimia</button>
                         <button onclick="artificeriaPersonaggio(${idx})">Artificeria</button>
                     </div>
@@ -216,18 +302,267 @@ function toggleSpedizione(idx) {
 }
 
 function alchimiaPersonaggio(idx) {
-    alert('Funzione Alchimia per il personaggio in sviluppo.');
+    alchimiaPersonaggioSelezionata = idx;
+    renderAlchemyModal();
+    const modal = document.getElementById('modal-alchimia');
+    if (modal) modal.style.display = 'block';
+}
+
+function apriAiutoModal() {
+    renderAiutoModal();
+    const modal = document.getElementById('modal-aiuto');
+    if (modal) modal.style.display = 'block';
+}
+
+function annullaAssistente() {
+    assistenzaSelezionata = null;
+    aggiornaInterfaccia();
+    if (typeof mostraNotificaInAlto === 'function') mostraNotificaInAlto('Assistenza annullata.', 'avviso');
+}
+
+function selezionaAssistente(idx, tipo) {
+    const p = party[idx];
+    if (!p) return;
+    assistenzaSelezionata = { idx, tipo };
+    if (typeof mostraNotificaInAlto === 'function') mostraNotificaInAlto(`${p.nome} è pronto ad aiutare con ${tipo}.`, 'successo');
+    renderAiutoModal();
+    aggiornaInterfaccia();
+}
+
+function getCurrentActionText(p) {
+    if (p.inSpedizione) return '🚚 In spedizione';
+    if (p.azioneCorrente) {
+        const subject = p.azioneCorrente.subject ? ` ${p.azioneCorrente.subject}` : '';
+        return `🔨 ${p.azioneCorrente.tipo.toUpperCase()}${subject} (${p.azioneCorrente.oreRimanenti}h)`;
+    }
+    return 'In attesa';
+}
+
+function hasNaturaSupport(p) {
+    return p.hasCompetenza && p.hasCompetenza('Natura');
+}
+
+function renderAiutoModal() {
+    const content = document.getElementById('aiuto-content');
+    if (!content) return;
+
+    let html = `<div style="margin-bottom:14px; color:#ddd; font-size:0.9rem;">
+        <p>Seleziona un personaggio disponibile e scegli che tipo di aiuto può offrire.</p>
+        <p>Studiare: serve competenza nella materia studiata.</p>
+        <p>Curare: serve almeno Medicina Livello 1.</p>
+        <p>Alchimia: serve competenza in Natura.</p>
+    </div>`;
+
+    html += '<div style="display:grid; gap:10px;">';
+    party.forEach((p, idx) => {
+        const canHelpStudy = p.azioneCorrente && p.azioneCorrente.tipo === 'studio-libro' && p.hasCompetenza && p.hasCompetenza(p.azioneCorrente.subject);
+        const hasStudyCandidate = party.some(target => target !== p && target.azioneCorrente && target.azioneCorrente.tipo === 'studio-libro');
+        const canHelpMedicine = p.livelloMedicina >= 1;
+        const canHelpAlchemy = hasNaturaSupport(p);
+        html += `<div style="background:#111; padding:12px; border:1px solid #333; border-radius:6px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                <strong>${p.nome}</strong>
+                <span style="font-size:0.85em; color:#aaa;">${getCurrentActionText(p)}</span>
+            </div>
+            <div style="font-size:0.85em; color:#ccc; margin-bottom:10px;">
+                ${canHelpStudy ? 'Può assistere uno studente nella materia corrente.' : 'Assist. studio: ' + (hasStudyCandidate ? 'richiede la materia giusta' : 'nessuna azione di studio attiva')}<br>
+                ${canHelpMedicine ? 'Può aiutare in un intervento medico.' : 'Non può assistere in medicina'}<br>
+                ${canHelpAlchemy ? 'Può assistere in Alchimia.' : 'Non può assistere in alchimia'}
+            </div>
+            <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                <button class="btn-big" style="flex:1;" onclick="selezionaAssistente(${idx}, 'studio')" ${hasStudyCandidate ? '' : 'disabled'}>Assisti Studio</button>
+                <button class="btn-big" style="flex:1;" onclick="selezionaAssistente(${idx}, 'medicina')" ${canHelpMedicine ? '' : 'disabled'}>Assisti Medicina</button>
+                <button class="btn-big" style="flex:1;" onclick="selezionaAssistente(${idx}, 'alchimia')" ${canHelpAlchemy ? '' : 'disabled'}>Assisti Alchimia</button>
+            </div>
+        </div>`;
+    });
+    html += '</div>';
+    content.innerHTML = html;
+}
+
+function renderAlchemyModal() {
+    const container = document.getElementById('alchimia-content');
+    if (!container) return;
+    const p = party[alchimiaPersonaggioSelezionata];
+    if (!p) {
+        container.innerHTML = '<p>Seleziona prima un personaggio valido.</p>';
+        return;
+    }
+
+    const naturaRating = p.getSkillRating('Natura');
+    const naturaText = naturaRating >= 2 ? 'Maestria' : naturaRating === 1 ? 'Competenza' : 'Nessuna competenza';
+    const assistInfo = assistenzaSelezionata && assistenzaSelezionata.tipo === 'alchimia' ? `Assistente selezionato: <strong>${party[assistenzaSelezionata.idx]?.nome || 'Nessuno'}</strong>` : 'Nessun assistente alchemico selezionato.';
+
+    let html = `<div style="margin-bottom:14px; color:#ddd;">
+        <strong>Alchimista:</strong> ${p.nome}<br>
+        <strong>Intelligenza:</strong> ${p.intelligenza} (mod ${p.getStatDettagliata('Intelligenza').mod})<br>
+        <strong>Natura:</strong> ${naturaText}<br>
+        <strong>Stazione:</strong> ${magazzino.postazioneAlchemica ? 'Creata' : 'Non presente'}<br>
+        ${assistInfo}
+    </div>`;
+
+    if (!magazzino.postazioneAlchemica && magazzino.materialiAlchemici >= 15) {
+        html += `<div style="margin-bottom:12px;"><button class="btn-hero" onclick="creaPostazioneAlchemica()">Crea postazione alchemica (15 materiali alchemici)</button></div>`;
+    }
+
+    Object.entries(RICETTE).forEach(([grado, ricette]) => {
+        const gradeReq = grado === 'difficile' ? 'Maestria in Natura' : 'Competenza in Natura';
+        html += `<div style="background:#1a1a1a; padding:10px; border:1px solid #333; border-radius:8px; margin-bottom:10px;">
+            <div style="font-weight:bold; color:#f1c40f; margin-bottom:8px; text-transform:capitalize;">${grado}</div>
+            <div style="font-size:0.85rem; color:#aaa; margin-bottom:10px;">Requisito: ${gradeReq}</div>
+            <div style="display:grid; grid-template-columns: 1fr 60px 60px 60px 130px 100px; gap:8px; font-size:0.85rem; font-weight:bold; color:#bbb; margin-bottom:6px;">
+                <div>Nome</div><div>CD</div><div>Ore</div><div>Costo</div><div>Effetto</div><div>Azione</div>
+            </div>`;
+        ricette.forEach((recipe, recipeIdx) => {
+            const hasRequirement = grado === 'difficile' ? naturaRating >= 2 : naturaRating >= 1;
+            const canCraft = magazzino.materialiAlchemici >= recipe.costo && hasRequirement;
+            html += `<div style="display:grid; grid-template-columns: 1fr 60px 60px 60px 130px 100px; gap:8px; font-size:0.85rem; color:#eee; align-items:center; border-top:1px solid #222; padding-top:8px; margin-top:8px;">
+                <div>${recipe.nome}</div>
+                <div>${recipe.cd}</div>
+                <div>${recipe.tempo}</div>
+                <div>${recipe.costo}</div>
+                <div style="color:#ccc;">${recipe.desc}</div>
+                <button class="btn-small" onclick="startAlchemyRecipe('${grado}', ${recipeIdx})" ${canCraft ? '' : 'disabled'}>Inizia</button>
+            </div>`;
+        });
+        html += `</div>`;
+    });
+
+    if (magazzino.compounds && magazzino.compounds.length > 0) {
+        html += `<div style="margin-top:14px; color:#ddd; font-size:0.9rem;">
+            <strong>Composti creati:</strong> ${magazzino.compounds.length}
+            <div style="margin-top:6px; background:#111; padding:10px; border:1px solid #333; border-radius:6px;">
+                ${magazzino.compounds.map(c => `<div>${c.nome} ${c.stabile ? '(stabile)' : '(instabile)'}</div>`).join('')}
+            </div>
+        </div>`;
+    }
+
+    container.innerHTML = html;
+}
+
+function creaPostazioneAlchemica() {
+    if (magazzino.materialiAlchemici < 15) {
+        alert('Non ci sono abbastanza materiali alchemici per costruire la postazione. Servono 15.');
+        return;
+    }
+    magazzino.materialiAlchemici -= 15;
+    magazzino.postazioneAlchemica = true;
+    if (typeof mostraNotificaInAlto === 'function') mostraNotificaInAlto('Postazione alchemica creata.', 'successo');
+    aggiornaInterfaccia();
+    renderAlchemyModal();
+}
+
+function startAlchemyRecipe(grado, recipeIdx) {
+    const p = party[alchimiaPersonaggioSelezionata];
+    if (!p) return;
+    const recipe = RICETTE[grado] && RICETTE[grado][recipeIdx];
+    if (!recipe) return;
+    if (!magazzino.postazioneAlchemica) {
+        alert('Serve una postazione alchemica per creare compositi.');
+        return;
+    }
+    const naturaRating = p.getSkillRating('Natura');
+    const hasRequirement = grado === 'difficile' ? naturaRating >= 2 : naturaRating >= 1;
+    if (!hasRequirement) {
+        alert(`Non hai i requisiti di Natura per creare un composto di grado ${grado}.`);
+        return;
+    }
+    if (magazzino.materialiAlchemici < recipe.costo) {
+        alert('Materiali alchemici insufficienti.');
+        return;
+    }
+    let durata = recipe.tempo;
+    let cdBonus = 0;
+    let helperText = '';
+    if (assistenzaSelezionata && assistenzaSelezionata.tipo === 'alchimia') {
+        const helper = party[assistenzaSelezionata.idx];
+        if (helper && helper !== p && helper.hasCompetenza && helper.hasCompetenza('Natura')) {
+            durata = Math.max(1, Math.floor(durata * 0.65));
+            cdBonus = -3;
+            helperText = ` Assistente: ${helper.nome}`;
+        }
+    }
+    magazzino.materialiAlchemici -= recipe.costo;
+    const nuovaAzione = {
+        tipo: 'alchimia',
+        oreTotali: durata,
+        oreRimanenti: durata,
+        recipeGrade: grado,
+        recipeIdx: recipeIdx,
+        recipeData: recipe,
+        helperIdx: assistenzaSelezionata && assistenzaSelezionata.tipo === 'alchimia' ? assistenzaSelezionata.idx : null,
+        cdModifier: cdBonus,
+        helperText: helperText,
+        onComplete: () => completeAlchemyAction(p, nuovaAzione)
+    };
+
+    if (p.azioneCorrente) {
+        if (confirm(`${p.nome} sta già facendo un'azione. Vuoi metterla in coda?`)) {
+            p.codaAzioni.push(nuovaAzione);
+        }
+    } else {
+        p.azioneCorrente = nuovaAzione;
+    }
+    aggiornaInterfaccia();
+    renderAlchemyModal();
+}
+
+function completeAlchemyAction(p, action) {
+    if (!p || !action || !action.recipeData) return;
+    const d20 = Math.floor(Math.random() * 20) + 1;
+    const naturaRating = p.getSkillRating('Natura');
+    const competenzaNatura = naturaRating === 2 ? 2 : naturaRating === 1 ? 1 : 0;
+    const modInt = p.getStatDettagliata('Intelligenza').mod;
+    const totale = d20 + modInt + competenzaNatura;
+    const cdFinale = Math.max(1, action.recipeData.cd + (action.cdModifier || 0));
+    let message = `Tiro: ${d20} + INT ${modInt} + Natura ${competenzaNatura} = ${totale} vs CD ${cdFinale}.${action.helperText ? ' ' + action.helperText : ''}`;
+
+    if (totale >= cdFinale) {
+        magazzino.compounds = magazzino.compounds || [];
+        magazzino.compounds.push({ nome: action.recipeData.nome, grado: action.recipeGrade, stabile: true, effetto: action.recipeData.effetto });
+        if (typeof mostraNotificaInAlto === 'function') mostraNotificaInAlto(`${p.nome} ha creato con successo ${action.recipeData.nome}.`, 'successo');
+        alert(`Successo! ${message}`);
+    } else if (totale >= cdFinale - 2) {
+        magazzino.compounds = magazzino.compounds || [];
+        magazzino.compounds.push({ nome: action.recipeData.nome, grado: action.recipeGrade, stabile: false, effetto: action.recipeData.effetto });
+        if (typeof mostraNotificaInAlto === 'function') mostraNotificaInAlto(`${p.nome} ha creato ${action.recipeData.nome}, ma è instabile.`, 'avviso');
+        alert(`Instabile. ${message}`);
+    } else {
+        if (totale <= cdFinale - 5) {
+            p.puntiFeritaReali = Math.max(0, p.puntiFeritaReali - 1);
+            p.faticaBase += 2;
+            if (typeof mostraNotificaInAlto === 'function') mostraNotificaInAlto(`${p.nome} ha prodotto un composto tossico e subisce danni.`, 'errore');
+            alert(`Tossico! ${message}`);
+        } else {
+            if (typeof mostraNotificaInAlto === 'function') mostraNotificaInAlto(`${p.nome} non è riuscito a creare il composto.`, 'warning');
+            alert(`Fallimento. ${message}`);
+        }
+    }
+    assistenzaSelezionata = null;
+    aggiornaInterfaccia();
+    renderAlchemyModal();
 }
 
 function artificeriaPersonaggio(idx) {
-    alert('Funzione Artificeria per il personaggio in sviluppo.');
+    alert('Funzione Artificeria in sviluppo.');
+}
+
+function puoIniziareAzione(p, tipo) {
+    if (!p) return false;
+    const azioniConsentite = ['dormi', 'nutri', 'disseta'];
+    if (p.staminaAttuale <= 0 && !azioniConsentite.includes(tipo)) {
+        alert(`${p.nome} è troppo esausto per farlo. Deve riposare, bere o mangiare prima.`);
+        return false;
+    }
+    return true;
 }
 
 function allenamento(idx) {
     const modal = document.getElementById('modal-allenamento');
     const content = document.getElementById('allenamento-content');
     const p = party[idx];
-    
+    if (!puoIniziareAzione(p, 'allenamento')) return;
+
     const categorie = ['Archi', 'Balestre', 'Armi con l\'asta', 'Lame leggere', 'Armi da fuoco', 'Rampini e fruste', 'Mazze e armi contundenti'];
     const giornoAttuale = Math.floor(oreTotali / 24);
     const gratuite = p.calcolaOreAllenamentoGratuite(giornoAttuale);
@@ -238,16 +573,16 @@ function allenamento(idx) {
         <p>Ore allenamento gratuite oggi: <span style="color:#2ecc71">${rimanenti}/${gratuite}</span></p>
         <p>Stamina attuale: ${p.staminaAttuale}/${p.staminaMax}</p>
     </div>
-    <p style="font-weight:bold; color:#f1c40f; margin-bottom:10px;">Seleziona categoria arma e ore:</p>
+    <p style="font-weight:bold; color:#f1c40f; margin-bottom:10px;">Seleziona categoria arma e ore da programmare:</p>
     <div style="display:grid; gap:10px;">`;
     
     categorie.forEach(cat => {
         const pca = p.pca[cat] || 0;
         html += `<div style="background:#222; padding:8px; border:1px solid #333; border-radius:4px;">
             <div style="margin-bottom:6px;"><strong>${cat}</strong> - PCA: ${pca.toFixed(1)}</div>
-            <div style="display:flex; gap:4px; margin-bottom:4px;">
-                <input type="number" id="ore-${cat}" min="1" value="1" max="${rimanenti + 4}" style="width:50px; padding:4px;">
-                <button class="btn-big" style="flex:1;" onclick="executeAllenamento(${idx}, '${cat}', ${giornoAttuale})">Allena</button>
+            <div style="display:flex; gap:4px; align-items:center; margin-bottom:4px;">
+                <input type="number" id="ore-${cat}" min="1" value="1" style="width:60px; padding:4px;">
+                <button class="btn-big" style="flex:1;" onclick="scheduleAllenamento(${idx}, '${cat}')">Programma</button>
             </div>
         </div>`;
     });
@@ -257,22 +592,39 @@ function allenamento(idx) {
     modal.style.display = 'block';
 }
 
-function executeAllenamento(idx, categoria, giornoAttuale) {
+function scheduleAllenamento(idx, categoria) {
     const p = party[idx];
-    const inputId = `ore-${categoria}`;
-    const oraElement = document.getElementById(inputId);
+    if (!puoIniziareAzione(p, 'allenamento')) return;
+    const oraElement = document.getElementById(`ore-${categoria}`);
     if (!oraElement) return;
     const ore = parseInt(oraElement.value);
     if (isNaN(ore) || ore <= 0) { alert('Inserisci un numero valido di ore.'); return; }
-    
+
+    const nuovaAzione = {
+        tipo: 'allenamento',
+        categoria: categoria,
+        oreTotali: ore,
+        oreRimanenti: ore,
+        onComplete: () => completeAllenamento(p, categoria, ore)
+    };
+
+    if (p.azioneCorrente) {
+        if (confirm(`${p.nome} sta già facendo un'altra azione. Vuoi mettere questo allenamento in coda?`)) {
+            p.codaAzioni.push(nuovaAzione);
+            alert(`${p.nome} inizierà l'allenamento quando avrà finito l'azione corrente.`);
+        }
+    } else {
+        p.azioneCorrente = nuovaAzione;
+        alert(`${p.nome} inizia l'allenamento per ${ore} ore su ${categoria}.`);
+    }
+
+    aggiornaInterfaccia();
+}
+
+function completeAllenamento(p, categoria, ore) {
+    const giornoAttuale = Math.floor(oreTotali / 24);
     const result = p.addestraArma(categoria, ore, giornoAttuale);
-    alert(`${p.nome} si è allenato!\n
-Ore gratuite usate: ${result.oreGratuite}\n
-Ore a pagamento: ${result.oreAGagoPagato}\n
-Stamina consumata: ${result.staminaUsata}\n
-PCA guadagnato: +${result.pcaGuadagnato}`);
-    
-    allenamento(idx); // Refresh
+    alert(`${p.nome} ha completato l'allenamento di ${ore} ore su ${categoria}!\n\nOre gratuite usate: ${result.oreGratuite}\nOre a pagamento: ${result.oreAGagoPagato}\nStamina consumata: ${result.staminaUsata}\nPCA guadagnato: +${result.pcaGuadagnato}`);
     aggiornaInterfaccia();
 }
 
@@ -297,7 +649,7 @@ function registraAttaccoModal(idx) {
             <div style="display:flex; gap:4px; flex-wrap:wrap;">
                 <button class="btn-big" style="flex:1; min-width:80px; background:#2ecc71;" onclick="registraColpo(${idx}, '${cat}', 'success')">✓ Colpo (+1)</button>
                 <button class="btn-big" style="flex:1; min-width:80px; background:#f39c12;" onclick="registraColpo(${idx}, '${cat}', 'critical')">⚡ Critico (+2)</button>
-                <button class="btn-big" style="flex:1; min-width:80px; background:#e74c3c;" onclick="registraColpo(${idx}, '${cat}', 'fail')">✗ Mancato (+0.2)</button>
+                <button class="btn-big" style="flex:1; min-width:80px; background:#e74c3c;" onclick="registraColpo(${idx}, '${cat}', 'fail')">✗ Mancato (+0.5)</button>
             </div>
         </div>`;
     });
@@ -312,7 +664,7 @@ function registraColpo(idx, categoria, risultato) {
     p.registraColpoCombattimento(categoria, risultato);
     
     const labels = { success: 'Colpo riuscito', critical: 'Colpo critico', fail: 'Colpo fallito' };
-    const gains = { success: 1, critical: 2, fail: 0.2 };
+    const gains = { success: 1, critical: 2, fail: 0.5 };
     
     alert(`${p.nome} ha registrato un ${labels[risultato]} con ${categoria}!\n+${gains[risultato]} PCA`);
     registraAttaccoModal(idx); // Refresh
@@ -343,18 +695,50 @@ function visualizzaPerk(idx) {
     }
     
     if (p.perks && p.perks.length > 0) {
-        html += `<div style="margin-bottom:14px; background:#1a1a1a; padding:10px; border:1px solid #333; border-radius:6px;">
-            <p style="color:#f1c40f; font-weight:bold; margin-bottom:8px;">PERK (${p.perks.length})</p>`;
-        p.perks.forEach(perk => {
-            if (typeof perk !== 'string') {
-                html += `<div style="background:#111; padding:6px; margin-bottom:6px; border-left:3px solid #3498db; border-radius:3px;">
-                    <div style="color:#3498db; font-weight:bold; margin-bottom:2px;">${perk.nome}</div>
+        const medicinePerks = p.perks.filter(perk => {
+            if (typeof perk === 'string') return false;
+            return perk && perk.nome && perk.nome.toLowerCase().includes('medicina');
+        });
+        
+        // Mostra solo i perk di medicina se ne ha comprato
+        if (medicinePerks.length > 0) {
+            html += `<div style="margin-bottom:14px; background:#1a1a1a; padding:10px; border:1px solid #333; border-radius:6px;">
+                <p style="color:#f1c40f; font-weight:bold; margin-bottom:8px;">MEDICINA ACQUISITA (${medicinePerks.length})</p>`;
+            medicinePerks.forEach(perk => {
+                html += `<div style="background:#111; padding:6px; margin-bottom:6px; border-left:3px solid #16a085; border-radius:3px;">
+                    <div style="color:#16a085; font-weight:bold; margin-bottom:2px;">${perk.nome}</div>
                     <div style="color:#aaa; font-size:0.9rem;">${perk.desc}</div>
                     <div style="color:#888; font-size:0.85rem; margin-top:2px;"><em>Costo: ${perk.costo}</em></div>
                 </div>`;
-            }
+            });
+            html += `</div>`;
+        }
+        
+        // Mostra gli altri perk
+        const otherPerks = p.perks.filter(perk => {
+            if (typeof perk === 'string') return true;
+            return !perk || !perk.nome || !perk.nome.toLowerCase().includes('medicina');
         });
-        html += `</div>`;
+        
+        if (otherPerks.length > 0) {
+            html += `<div style="margin-bottom:14px; background:#1a1a1a; padding:10px; border:1px solid #333; border-radius:6px;">
+                <p style="color:#f1c40f; font-weight:bold; margin-bottom:8px;">PERK (${otherPerks.length})</p>`;
+            otherPerks.forEach(perk => {
+                if (typeof perk !== 'string') {
+                    html += `<div style="background:#111; padding:6px; margin-bottom:6px; border-left:3px solid #3498db; border-radius:3px;">
+                        <div style="color:#3498db; font-weight:bold; margin-bottom:2px;">${perk.nome}</div>
+                        <div style="color:#aaa; font-size:0.9rem;">${perk.desc}</div>
+                        <div style="color:#888; font-size:0.85rem; margin-top:2px;"><em>Costo: ${perk.costo}</em></div>
+                    </div>`;
+                }
+            });
+            html += `</div>`;
+        }
+    } else {
+        html += `<div style="margin-bottom:14px; background:#1a1a1a; padding:10px; border:1px solid #333; border-radius:6px;">
+            <p style="color:#f1c40f; font-weight:bold; margin-bottom:8px;">PERK</p>
+            <p style="color:#aaa;">Nessun perk acquisito.</p>
+        </div>`;
     }
 
     html += `<div style="margin-bottom:14px; background:#1a1a1a; padding:10px; border:1px solid #333; border-radius:6px;">
@@ -386,14 +770,23 @@ function visualizzaPerk(idx) {
 
 function pianificaAzione(idx, tipo, bookId = null, subject = null, bookTitle = null, ore = null, teacherName = null) {
     const p = party[idx];
+    if (!puoIniziareAzione(p, tipo)) return;
     let plannedHours;
     if (tipo === 'studio-libro') {
         if (!bookId || !ore) return;
         plannedHours = ore;
     } else {
-        plannedHours = prompt(`Quante ore vuoi dedicare a: ${tipo.toUpperCase()}?`, tipo === 'dormi' ? '8' : '1');
+        const defaultHours = tipo === 'dormi' ? '8' : '1';
+        plannedHours = prompt(`Quante ore vuoi dedicare a: ${tipo.toUpperCase()}?`, defaultHours);
         plannedHours = parseFloat(plannedHours);
         if (isNaN(plannedHours) || plannedHours <= 0) return;
+        if (tipo === 'dormi') {
+            const maxRiposo = p.maxOreRiposo || 24;
+            if (plannedHours > maxRiposo) {
+                if (!confirm(`Con la tua fame/sete puoi riposare al massimo ${maxRiposo} ore. Ridurre a ${maxRiposo}?`)) return;
+                plannedHours = maxRiposo;
+            }
+        }
     }
 
     const nuovaAzione = { tipo: tipo, oreTotali: plannedHours, oreRimanenti: plannedHours };
@@ -499,12 +892,22 @@ function useInizioCombattimento(idx) {
     aggiornaInterfaccia();
 }
 
+function useRigeneraCombattimento(idx) {
+    const p = party[idx];
+    if (!p) return;
+    const modDex = p.getStatDettagliata('Destrezza').mod;
+    const roll = Math.max(1, Math.floor(Math.random() * 4) + 1 + modDex);
+    p.puntiFortuna = Math.min(p.puntiFortunaMax, p.puntiFortuna + roll);
+    mostraNotificaInAlto(`${p.nome} rigenera ${roll} PF fortuna in combattimento.`, 'successo');
+    aggiornaInterfaccia();
+}
+
 function useGuerrieroRigenera(idx) {
     const p = party[idx];
     if (!p || !(p.perkFlags && p.perkFlags.guerriero)) return;
     // due volte al giorno: non gestiamo il reset giornaliero qui (semplificato)
     const modCon = p.getStatDettagliata('Costituzione').mod;
-    const roll = Math.floor(Math.random() * 4) + 1 + modCon; // 1d4 + modCon
+    const roll = Math.max(1, Math.floor(Math.random() * 4) + 1 + modCon); // 1d4 + modCon
     p.puntiFortuna = Math.min(p.puntiFortunaMax, p.puntiFortuna + roll);
     p.guerrieroUses = (p.guerrieroUses || 0) + 1;
     mostraNotificaInAlto(`${p.nome} usa Guerriero e rigenera ${roll} PF fortuna.`, 'successo');
@@ -547,10 +950,6 @@ function ferisciInCombat(idx) {
     aggiornaInterfaccia();
 }
 
-function registraColpo(idx) {
-    alert('Registra un colpo: funzione in sviluppo.');
-}
-
 function segnaVittoria(idx) {
     const p = party[idx];
     p.registraVittoriaCombattimento();
@@ -591,6 +990,7 @@ function renderSpedizioneModal() {
                     <button onclick="degradaInCombat(${idx})">Degrada</button>
                     <button onclick="ferisciInCombat(${idx})">Ferisci</button>
                     <button onclick="registraAttaccoModal(${idx})">📈 Reg. Attacco</button>
+                    <button onclick="useRigeneraCombattimento(${idx})">Rigenera</button>
                     <button onclick="segnaVittoria(${idx})">Segna vittoria</button>
                     ${(() => {
                         let extras = '';
@@ -625,6 +1025,7 @@ function renderSpedizioneModal() {
 function esplora(idx) {
     const p = party[idx];
     if (!p) return;
+    if (!puoIniziareAzione(p, 'esplora')) return;
 
     const nuovaAzione = {
         tipo: 'esplora',
@@ -654,13 +1055,14 @@ function terminaEsplorazione(p) {
     const ingranaggiTiro = Math.min(20, rollD20WithAdv(skill.advantage, skill.disadvantage) + bonus);
     const alchemiciTiro = Math.min(20, rollD20WithAdv(skill.advantage, skill.disadvantage) + bonus);
     const ciboTiro = Math.min(20, rollD20WithAdv(skill.advantage, skill.disadvantage) + bonus);
-    const acquaTiro = Math.min(20, rollD20WithAdv(skill.advantage, skill.disadvantage) + bonus);
+    const acquaTiro = Math.min(20, rollD20WithAdv(skill.advantage, skill.disadvantage) + bonus)*1.25;
 
     const medici = lootMedici(mediciTiro);
     const ingranaggi = lootIngranaggi(ingranaggiTiro);
     const alchemici = lootAlchemici(alchemiciTiro);
     const cibo = lootCiboAcqua(ciboTiro);
     const acqua = lootCiboAcqua(acquaTiro);
+    const deliziosi = lootPiattiDeliziosi(ciboTiro);
 
     magazzino.materialiAlchemici += alchemici;
     magazzino.ingranaggi += ingranaggi;
@@ -669,16 +1071,17 @@ function terminaEsplorazione(p) {
     magazzino.materialiMedici.critici += medici.critici;
     magazzino.cibo += cibo;
     magazzino.acqua += acqua;
+    magazzino.piattiDeliziosi += deliziosi;
     const booksTiro = Math.min(20, rollD20() + bonus);
     const booksFound = lootBooks(booksTiro);
 
-    alert(`Esplorazione completata da ${p.nome}!\n
-Risultati:\n` +
+    alert(`Esplorazione completata da ${p.nome}!\n\nRisultati:\n` +
         `• Materiali alchemici: +${alchemici} (d20 ${alchemiciTiro})\n` +
         `• Ingranaggi: +${ingranaggi} (d20 ${ingranaggiTiro})\n` +
         `• Materiali medici: base +${medici.base}, avanzati +${medici.avanzati}, critici +${medici.critici} (d20 ${mediciTiro})\n` +
         `• Cibo: +${cibo} (d20 ${ciboTiro})\n` +
         `• Acqua: +${acqua} (d20 ${acquaTiro})\n` +
+        `${deliziosi > 0 ? `• Piatti deliziosi: +${deliziosi} (d20 ${ciboTiro})\n` : ''}` +
         `• Libri: +${booksFound} (d20 ${booksTiro})\n` +
         `Bonus esplorazione: ${bonus >= 0 ? '+' : ''}${bonus}`);
     aggiornaInterfaccia();
@@ -772,6 +1175,14 @@ function lootCiboAcqua(tiro) {
     return rollDice(3, 12) + 10;
 }
 
+function lootPiattiDeliziosi(tiro) {
+    if (tiro <= 9) return 0;
+    if (tiro <= 13) return 1;
+    if (tiro <= 17) return 2;
+    if (tiro <= 19) return rollDice(1, 4) + 1;
+    return 3 + rollDice(1, 4);
+}
+
 function lootBooks(tiro) {
     let count = 0;
     if (tiro <= 3) count = 0;
@@ -825,8 +1236,8 @@ function nutri(idx) {
 
     magazzino.cibo -= qty;
     if (p.fame >= 14) p.timers.buffFame = 6;
-    p.fame = Math.min(16, p.fame + qty); // 1 Unità = 1 Tacca
-    p.timers.fameSoddisfatta = 6;
+    p.fame = Math.min(16, p.fame + qty * getFoodEfficiency(p)); // 1 Unità = 1 Tacca modificata dai perk
+    p.timers.fameSoddisfatta = 3;
     aggiornaInterfaccia();
 }
 
@@ -867,27 +1278,309 @@ function applyPerkEffects(p) {
     if (!p.inSpedizione) p.puntiFortuna = Math.min(p.puntiFortuna, p.puntiFortunaMax);
 }
 
-function disseta(idx) {
+function bevi(idx, qty = null) {
     const p = party[idx];
-    let qty = prompt(`Quanta acqua dare a ${p.nome}? (Disponibile: ${magazzino.acqua})`, "1");
-    qty = parseFloat(qty);
+    if (!p) return;
+    if (qty === null) {
+        qty = prompt(`Quanta acqua dare a ${p.nome}? (Disponibile: ${magazzino.acqua})`, "1");
+        qty = parseFloat(qty);
+    }
     if (isNaN(qty) || qty <= 0 || qty > magazzino.acqua) return;
 
     magazzino.acqua -= qty;
+    recordResourceConsumption(p, qty, 'acqua');
     if (p.sete >= 4) p.timers.buffSete = 6;
-    p.sete = Math.min(5, p.sete + qty); // 1 Unità = 1 Tacca
-    p.timers.seteSoddisfatta = 3;
+    p.sete = Math.min(5, p.sete + qty * getWaterEfficiency(p));
+    p.timers.seteSoddisfatta = 2;
     aggiornaInterfaccia();
 }
 
-// --- CREAZIONE E SCHEDA (Invariate ma integrate) ---
+function disseta(idx, qty = null) {
+    return bevi(idx, qty);
+}
+
+function openRisorsaModal(idx, tipo) {
+    const p = party[idx];
+    if (!p) return;
+    const modal = document.getElementById('modal-risorse');
+    const title = tipo === 'fame' ? 'NUTRI' : tipo === 'sete' ? 'BEVI' : 'DORMI';
+    const content = document.getElementById('risorse-content');
+    const labels = {
+        fame: { resource: 'Cibo', available: magazzino.cibo, stat: p.fame, max: 16, unit: 'unità' },
+        sete: { resource: 'Acqua', available: magazzino.acqua, stat: p.sete, max: 5, unit: 'unità' },
+        sonno: { resource: 'Sonno', available: null, stat: p.sonno, max: 8, unit: 'ore' }
+    };
+    const info = labels[tipo];
+    const autoSetting = p.autoRisorse[tipo] ? p.autoRisorse[tipo] : 'Nessuna impostazione';
+
+    let html = `<div style="margin-bottom:12px; color:#ddd;">
+        <p><strong>${p.nome}</strong></p>
+        <p>${title} - Stato attuale: ${info.stat.toFixed(1)} / ${info.max}</p>
+        <p>Impostazione automatica: <strong>${autoSetting}</strong></p>
+    </div>`;
+
+    if (tipo === 'fame') {
+        html += `<div style="margin-bottom:12px; color:#ddd;"><p>Piatti deliziosi: <strong>${magazzino.piattiDeliziosi}</strong></p></div>`;
+    }
+
+    html += `<div style="display:grid; gap:10px; margin-bottom:14px;">
+        <button class="btn-big" style="background:#27ae60;" onclick="manualRisorsa('${tipo}', ${idx})">${title} diretto</button>
+        <button class="btn-big" style="background:#e67e22;" onclick="setAutoRisorsa(${idx}, '${tipo}', 'bene')">${title} per star bene</button>
+        <button class="btn-big" style="background:#f39c12;" onclick="setAutoRisorsa(${idx}, '${tipo}', 'raziona')">Raziona</button>
+        <button class="btn-big" style="background:#d35400;" onclick="setAutoRisorsa(${idx}, '${tipo}', 'elevato')">Raziona elevato</button>
+        <button class="btn-big" style="background:#c0392b;" onclick="setAutoRisorsa(${idx}, '${tipo}', 'eccessivo')">Razionamento eccessivo</button>
+        <button class="btn-big btn-cancel" style="background:#444;" onclick="clearAutoRisorsa(${idx}, '${tipo}')">Annulla automatismo</button>
+    </div>`;
+
+    if (tipo !== 'sonno') {
+        html += `<div style="color:#aaa; font-size:0.85rem;">L'autonutrimento usa sempre cibo/acqua normale, non piatti deliziosi.</div>`;
+    }
+
+    content.innerHTML = html;
+    document.getElementById('risorse-titolo').innerText = title;
+    modal.style.display = 'block';
+}
+
+function manualRisorsa(tipo, idx) {
+    const p = party[idx];
+    if (!p) return;
+    if (tipo === 'fame') {
+        if (magazzino.piattiDeliziosi > 0) {
+            if (confirm('Vuoi utilizzare un pasto delizioso invece di cibo normale?')) {
+                nutri(idx, 'delizioso');
+                return;
+            }
+        }
+        nutri(idx);
+    } else if (tipo === 'sete') {
+        bevi(idx);
+    } else if (tipo === 'sonno') {
+        pianificaAzione(idx, 'dormi');
+    }
+    document.getElementById('modal-risorse').style.display = 'none';
+}
+
+function setAutoRisorsa(idx, tipo, livello) {
+    const p = party[idx];
+    if (!p) return;
+    p.autoRisorse[tipo] = livello;
+    document.getElementById('modal-risorse').style.display = 'none';
+    alert(`${p.nome} ora utilizzerà la modalità automatica '${livello}' per ${tipo}.`);
+    aggiornaInterfaccia();
+}
+
+function clearAutoRisorsa(idx, tipo) {
+    const p = party[idx];
+    if (!p) return;
+    p.autoRisorse[tipo] = null;
+    document.getElementById('modal-risorse').style.display = 'none';
+    alert(`Impostazione automatica di ${tipo} rimossa per ${p.nome}.`);
+    aggiornaInterfaccia();
+}
+
+function getAutoThreshold(tipo, livello) {
+    const map = {
+        fame: { bene: 12, raziona: 9, elevato: 7, eccessivo: 4 },
+        sete: { bene: 4, raziona: 3, elevato: 2, eccessivo: 1 },
+        sonno: { bene: 7, raziona: 5, elevato: 3, eccessivo: 1 }
+    };
+    return map[tipo] ? map[tipo][livello] : null;
+}
+
+function processAutomaticActions(p) {
+    if (!p || p.azioneCorrente || p.inSpedizione) return;
+    const stats = ['fame', 'sete', 'sonno'];
+    stats.sort((a,b) => {
+        const sa = p[`stadio${a.charAt(0).toUpperCase()+a.slice(1)}`];
+        const sb = p[`stadio${b.charAt(0).toUpperCase()+b.slice(1)}`];
+        return sb - sa;
+    });
+
+    for (const tipo of stats) {
+        const livello = p.autoRisorse[tipo];
+        if (!livello) continue;
+        const target = getAutoThreshold(tipo, livello);
+        if (!target) continue;
+        let current = tipo === 'fame' ? p.fame : tipo === 'sete' ? p.sete : p.sonno;
+        if (current >= target) continue;
+        if (tipo === 'fame') {
+            const needed = Math.min(target - current, magazzino.cibo);
+            if (needed > 0) {
+                nutri(party.indexOf(p), 'normale', needed);
+                alert(`${p.nome} si auto-nutre fino alla soglia '${livello}'.`);
+                return;
+            }
+        }
+        if (tipo === 'sete') {
+            const needed = Math.min(target - current, magazzino.acqua);
+            if (needed > 0) {
+                bevi(party.indexOf(p), needed);
+                alert(`${p.nome} si auto-idrata fino alla soglia '${livello}'.`);
+                return;
+            }
+        }
+        if (tipo === 'sonno') {
+            const oreNecessarie = Math.ceil(target - current);
+            if (oreNecessarie > 0) {
+                p.azioneCorrente = { tipo: 'dormi', oreTotali: oreNecessarie, oreRimanenti: oreNecessarie, onComplete: () => { const onComplete = p.azioneCorrente?.onComplete; if(typeof onComplete==='function') onComplete(); } };
+                alert(`${p.nome} inizierà automaticamente a dormire per ${oreNecessarie} ore per raggiungere '${livello}'.`);
+                return;
+            }
+        }
+    }
+}
+
+function nutri(idx, tipo = 'normale', qty = null) {
+    const p = party[idx];
+    if (!p) return;
+    if (tipo === 'delizioso') {
+        if (magazzino.piattiDeliziosi <= 0) {
+            alert('Nessun pasto delizioso disponibile.');
+            return;
+        }
+        magazzino.piattiDeliziosi -= 1;
+        recordResourceConsumption(p, 1);
+        const deliziosoGain = 0.3 * getFoodEfficiency(p);
+        p.fame = Math.min(16, p.fame + deliziosoGain);
+        if (p.fame >= 14) p.timers.buffFame = 6;
+        p.timers.fameSoddisfatta = 3;
+        p.follia = Math.max(0, p.follia - 1);
+        if (p.masteries && p.masteries.map(m => m.toLowerCase()).includes('cucina')) {
+            p.puntiFortuna = Math.min(p.puntiFortunaMax, p.puntiFortuna + 1);
+        }
+        alert(`${p.nome} ha mangiato un pasto delizioso: fame +${deliziosoGain.toFixed(2)}, follia ridotta. ${p.masteries && p.masteries.map(m => m.toLowerCase()).includes('cucina') ? 'Fortuna temporanea +1.' : ''}`);
+        aggiornaInterfaccia();
+        return;
+    }
+    if (qty === null) {
+        qty = prompt(`Quanto cibo dare a ${p.nome}? (Disponibile: ${magazzino.cibo})`, "1");
+        qty = parseFloat(qty);
+    }
+    if (isNaN(qty) || qty <= 0) return;
+    if (qty > magazzino.cibo) qty = magazzino.cibo;
+    if (qty <= 0) return;
+
+    magazzino.cibo -= qty;
+    recordResourceConsumption(p, qty);
+    if (p.fame >= 14) p.timers.buffFame = 6;
+    p.fame = Math.min(16, p.fame + qty * getFoodEfficiency(p)); // 1 Unità = 1 Tacca modificata dai perk
+    p.timers.fameSoddisfatta = 3;
+    aggiornaInterfaccia();
+}
+
+function openCucinaModal(idx) {
+    const p = party[idx];
+    if (!p) return;
+    const modal = document.getElementById('modal-cucina');
+    const content = document.getElementById('cucina-content');
+    let html = `<div style="margin-bottom:12px; color:#ddd;">
+        <p><strong>${p.nome}</strong></p>
+        <p>Piatti deliziosi disponibili: <strong>${magazzino.piattiDeliziosi}</strong></p>
+        <p>Cibo disponibile: ${magazzino.cibo.toFixed(1)}, Acqua: ${magazzino.acqua.toFixed(1)}</p>
+    </div>`;
+    const haCucina = p.hasCompetenza && p.hasCompetenza('Cucina');
+    const cucinaCost = hasPerk(p, 'Casalinga esperta') ? { ore: 2, cibo: 4, acqua: 0.5 } : { ore: 3, cibo: 5, acqua: 1 };
+    html += `<div style="display:grid; gap:10px;">
+            <button class="btn-big" style="background:#27ae60;" onclick="scheduleCucina(${idx})">Cucina ${cucinaCost.ore} ore</button>
+            <div style="color:#aaa; font-size:0.9rem;">${cucinaCost.ore} ore, ${cucinaCost.cibo} cibo, ${cucinaCost.acqua} acqua → 12 piatti deliziosi</div>
+        </div>`;
+    if (!haCucina) {
+        html += `<div style="color:#e74c3c; margin-top:8px;">Non hai passato abbastanza ore in cucina da giustificare l'uso delle risorse.</div>`;
+    }
+    if (hasPerk(p, 'Conserva')) {
+        html += `<div style="display:grid; gap:10px; margin-top:14px;">
+            <button class="btn-big" style="background:#8e44ad;" onclick="scheduleConserva(${idx})">Crea conserva 5 ore</button>
+            <div style="color:#aaa; font-size:0.9rem;">5 ore, 4 materiali alchemici → 1 conserva</div>
+        </div>`;
+    }
+    content.innerHTML = html;
+    modal.style.display = 'block';
+}
+
+function scheduleCucina(idx) {
+    const p = party[idx];
+    if (!p) return;
+    if (!p.hasCompetenza || !p.hasCompetenza('Cucina')) {
+        alert('Non hai passato abbastanza ore in cucina da giustificare l\'uso delle risorse.');
+        return;
+    }
+    const cucinaCost = hasPerk(p, 'Casalinga esperta') ? { ore: 2, cibo: 4, acqua: 0.5 } : { ore: 3, cibo: 5, acqua: 1 };
+    if (magazzino.cibo < cucinaCost.cibo || magazzino.acqua < cucinaCost.acqua) {
+        alert(`Non hai risorse sufficienti per cucinare. Servono ${cucinaCost.cibo} cibo e ${cucinaCost.acqua} acqua.`);
+        return;
+    }
+    magazzino.cibo = Math.max(0, magazzino.cibo - cucinaCost.cibo);
+    magazzino.acqua = Math.max(0, magazzino.acqua - cucinaCost.acqua);
+    const nuovaAzione = {
+        tipo: 'cucina',
+        oreTotali: cucinaCost.ore,
+        oreRimanenti: cucinaCost.ore,
+        onComplete: () => completeCucina(p)
+    };
+    if (p.azioneCorrente) {
+        if (confirm(`${p.nome} sta già facendo un'altra azione. Vuoi mettere la cucina in coda?`)) {
+            p.codaAzioni.push(nuovaAzione);
+            alert(`${p.nome} cucinerà non appena avrà finito l'azione corrente.`);
+        }
+    } else {
+        p.azioneCorrente = nuovaAzione;
+        alert(`${p.nome} inizia a cucinare per ${cucinaCost.ore} ore.`);
+    }
+    document.getElementById('modal-cucina').style.display = 'none';
+    aggiornaInterfaccia();
+}
+
+function scheduleConserva(idx) {
+    const p = party[idx];
+    if (!p) return;
+    if (!hasPerk(p, 'Conserva')) {
+        alert('Questo personaggio non ha il perk Conserva.');
+        return;
+    }
+    if (magazzino.materialiAlchemici < 4) {
+        alert('Non hai abbastanza materiali alchemici per creare una conserva. Servono 4 materiali.');
+        return;
+    }
+    magazzino.materialiAlchemici -= 4;
+    const nuovaAzione = {
+        tipo: 'conserva',
+        oreTotali: 5,
+        oreRimanenti: 5,
+        onComplete: () => completeConserva(p)
+    };
+    if (p.azioneCorrente) {
+        if (confirm(`${p.nome} sta già facendo un'altra azione. Vuoi mettere la creazione della conserva in coda?`)) {
+            p.codaAzioni.push(nuovaAzione);
+            alert(`${p.nome} creerà la conserva non appena avrà finito l'azione corrente.`);
+        }
+    } else {
+        p.azioneCorrente = nuovaAzione;
+        alert(`${p.nome} inizia a preparare una conserva per 5 ore.`);
+    }
+    document.getElementById('modal-cucina').style.display = 'none';
+    aggiornaInterfaccia();
+}
+
+function completeCucina(p) {
+    magazzino.piattiDeliziosi += 12;
+    alert(`${p.nome} ha completato la cucina: +12 piatti deliziosi.`);
+    aggiornaInterfaccia();
+}
+
+function completeConserva(p) {
+    magazzino.conserve = (magazzino.conserve || 0) + 1;
+    alert(`${p.nome} ha completato la conserva: +1 conserva disponibile.`);
+    aggiornaInterfaccia();
+}
+
 function avviaCreazione() {
     const nomeInput = document.getElementById('crea-nome');
     if (nomeInput) nomeInput.value = ""; 
 
-    // Inizializziamo il personaggio con i tuoi 30 punti
+    // Inizializziamo il personaggio con i tuoi 42 punti e attributi base 6
     tempP = new Personaggio("Nuovo", Math.floor(oreTotali / 24));
-    tempP.puntiCreazione = 30; 
+    tempP.puntiCreazione = 42;
+    tempP.staminaAttuale = tempP.staminaMax;
 
     // Visualizziamo il modal
     const modal = document.getElementById('modal-creazione');
@@ -993,6 +1686,7 @@ function confermaCreazione() {
 
     // Applichiamo effetti immediati di alcuni perk
     tempP.perkFlags = tempP.perkFlags || {};
+    tempP.staminaAttuale = tempP.staminaMax;
     if (tempP.perks.some(pp => pp.nome === 'Guerriero')) {
         tempP.puntiFortunaMax = (tempP.puntiFortunaMax || 0) + 5;
         tempP.perkFlags.guerriero = true;
@@ -1015,56 +1709,126 @@ function confermaCreazione() {
 }
 
 let categoriaCorrente = "competenze base";
+let perkSearchQuery = "";
+let perkFilterAffordableOnly = false;
+
+function setPerkSearchQuery(query) {
+    perkSearchQuery = query.toLowerCase().trim();
+    renderSetupPerks();
+}
+
+function togglePerkAffordableOnly() {
+    perkFilterAffordableOnly = !perkFilterAffordableOnly;
+    renderSetupPerks();
+}
 
 function renderSetupPerks() {
     const container = document.getElementById('perks-setup-container');
     if (!container) return;
 
-    // 1. Generiamo i tasti delle categorie (Uniformi allo stile Hero)
-    let html = `<div class="categoria-tabs" style="display:grid; grid-template-columns: 1fr 1fr; gap:5px; margin-bottom:10px;">`;
-    Object.keys(DATABASE_PERK).forEach(cat => {
-        const attiva = (cat === categoriaCorrente);
-        html += `<button onclick="cambiaCategoriaPerk('${cat}')" 
-                 style="background:${attiva ? '#e74c3c !important' : '#111 !important'}; 
-                        color:${attiva ? '#111 !important' : '#e74c3c !important'};">
-                 ${cat.toUpperCase()}</button>`;
-    });
-    html += `</div>`;
+    const categoryOrder = [
+        'background', 'competenze base', 'carisma e sociale', 'combattimento',
+        'fisico e salute', 'magici', 'razziali', 'sopravvivenza', 'studio', 'medicina'
+    ];
 
-    // 2. Generiamo la lista dei perk per la categoria selezionata
-    html += `<div class="perks-list" style="max-height:200px; overflow-y:auto; text-align:left;">`;
-    DATABASE_PERK[categoriaCorrente].forEach(p => {
-        // Controlliamo se il personaggio ha già questo perk nella lista temporanea
-        const giaPreso = tempP.perks.some(perk => perk.nome === p.nome);
-        
-        html += `
-            <div class="stat-row" style="font-size:0.8rem; padding:10px;">
-                <div style="flex-grow:1;">
-                    <b style="color:#f1c40f;">${p.nome}</b> <small>(${p.costo} PT)</small><br>
-                    <span style="color:#888; font-size:0.7rem;">${p.desc}</span>
-                </div>
-                <button onclick="togglePerk('${p.nome}')" 
-                        style="padding:5px 10px !important; min-width:80px; 
-                        background:${giaPreso ? '#c0392b !important' : '#27ae60 !important'};
-                        color:white !important; border:none !important;">
-                    ${giaPreso ? 'RIMUOVI' : 'PRENDI'}
-                </button>
-            </div>`;
-    });
-    html += `</div>`;
+    const labelMap = {
+        background: 'BACKGROUND',
+        'competenze base': 'COMPETENZE BASE',
+        'carisma e sociale': 'CARISMA E SOCIALE',
+        combattimento: 'COMBATTIMENTO',
+        'fisico e salute': 'FISICO E SALUTE',
+        'Personalità e Fobie': 'PERSONALITÀ E FOBIE',
+        magici: 'MAGICI',
+        razziali: 'RAZZIALI',
+        sopravvivenza: 'SOPRAVVIVENZA',
+        studio: 'STUDIO',
+        medicina: 'MEDICINA'
+    };
 
+    const searchQuery = perkSearchQuery;
+    const scrollPos = container.scrollTop;
+
+    const filterLabel = perkFilterAffordableOnly ? 'Mostra tutto' : 'Solo acquistabili';
+    const filterStyle = perkFilterAffordableOnly ? 'background:#27ae60; color:#111;' : 'background:#222; color:#fff;';
+
+    let html = `<div style="display:grid; gap:10px; max-height:70vh; overflow-y:auto; text-align:left; padding-right:6px;">
+        <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:8px;">
+            <input id="perk-search-input" type="text" placeholder="Cerca perk..." value="${perkSearchQuery.replace(/"/g,'&quot;')}" oninput="setPerkSearchQuery(this.value)"
+                style="flex:1; min-width:220px; padding:10px; background:#111; color:#fff; border:1px solid #333; border-radius:8px;">
+            <button class="btn-big" style="padding:10px 12px; ${filterStyle} border:1px solid #333;" onclick="togglePerkAffordableOnly()">${filterLabel}</button>
+        </div>
+        <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px;">`;
+
+    // Pulsanti di navigazione categoria
+    categoryOrder.forEach(cat => {
+        if (!DATABASE_PERK[cat] || DATABASE_PERK[cat].length === 0) return;
+        const active = cat === categoriaCorrente && !searchQuery ? 'background:#27ae60; color:#111;' : 'background:#222; color:#fff;';
+        html += `<button class="btn-big" style="padding:8px 10px; font-size:0.8rem; ${active} border:1px solid #333;" onclick="cambiaCategoriaPerk('${cat}')">${labelMap[cat]}</button>`;
+    });
+    
+    html += `</div>
+        <div style="display:flex; gap:10px; flex-wrap:wrap; color:#aaa; font-size:0.9rem; margin-bottom:10px;">
+            <div>Categoria: <strong>${labelMap[categoriaCorrente] || categoriaCorrente}</strong></div>
+            <div>Filtro: <strong>${perkFilterAffordableOnly ? 'Solo acquistabili' : 'Tutti'}</strong></div>
+            ${searchQuery ? `<div>Ricerca: <strong>${searchQuery}</strong></div>` : ''}
+        </div>`;
+
+    const categoriesToRender = categoryOrder.filter(cat => {
+        if (!DATABASE_PERK[cat] || DATABASE_PERK[cat].length === 0) return false;
+        if (!searchQuery) return cat === categoriaCorrente;
+        return DATABASE_PERK[cat].some(p => p.nome.toLowerCase().includes(searchQuery) || p.desc.toLowerCase().includes(searchQuery));
+    });
+
+    if (categoriesToRender.length === 0) {
+        html += `<div style="padding:14px; background:#111; border:1px solid #333; border-radius:8px; color:#ddd;">Nessun perk trovato per questa ricerca o categoria.</div>`;
+    }
+
+    categoriesToRender.forEach(cat => {
+        const categoryTitle = labelMap[cat] || cat.toUpperCase();
+        const perks = DATABASE_PERK[cat].filter(p => {
+            if (!searchQuery) return true;
+            return p.nome.toLowerCase().includes(searchQuery) || p.desc.toLowerCase().includes(searchQuery);
+        }).sort((a, b) => a.nome.localeCompare(b.nome));
+
+        const filteredPerks = perks.filter(p => {
+            if (!perkFilterAffordableOnly) return true;
+            const costo = p.costo || 0;
+            return costo <= tempP.puntiCreazione || costo <= 0;
+        });
+
+        if (!filteredPerks.length) return;
+
+        html += `<div style="background:#111; border:1px solid #333; border-radius:8px; padding:12px;">
+            <div style="font-size:0.95rem; margin-bottom:12px; color:#f1c40f; font-weight:bold;">${categoryTitle}</div>
+            <div style="display:grid; gap:10px;">`;
+
+        filteredPerks.forEach(p => {
+            const giaPreso = tempP.perks.some(perk => perk.nome === p.nome);
+            const costoHtml = `<span style="font-size:0.8rem; color:#aaa;">(${p.costo} PT)</span>`;
+            html += `<div class="stat-row" style="font-size:0.82rem; padding:12px; background:#161616; border:1px solid #222; border-radius:6px; display:flex; gap:12px; align-items:flex-start; justify-content:space-between;">
+                    <div style="flex:1; text-align:left;">
+                        <div style="font-weight:bold; color:#f1c40f; margin-bottom:6px;">${p.nome} ${costoHtml}</div>
+                        <div style="color:#bbb; font-size:0.85rem; line-height:1.4;">${p.desc}</div>
+                    </div>
+                    <button onclick="togglePerk('${p.nome}')" 
+                            style="padding:10px 14px !important; min-width:100px; ${giaPreso ? 'background:#c0392b;' : 'background:#27ae60;'} color:#fff !important; border:none !important; border-radius:6px;">
+                        ${giaPreso ? 'RIMUOVI' : 'PRENDI'}
+                    </button>
+                </div>`;
+        });
+
+        html += `</div></div>`;
+    });
+
+    html += `</div>`;
     container.innerHTML = html;
+    container.scrollTop = scrollPos;
 }
 
 function cambiaCategoriaPerk(nuovaCat) {
     categoriaCorrente = nuovaCat;
+    perkSearchQuery = "";  // Reset ricerca quando cambi categoria
     renderSetupPerks();
-}
-
-function toggleSezionePerk() {
-    const cont = document.getElementById('perks-setup-container');
-    cont.style.display = (cont.style.display === 'none') ? 'block' : 'none';
-    if(cont.style.display === 'block') renderSetupPerks();
 }
 
 function togglePerk(nomePerk) {

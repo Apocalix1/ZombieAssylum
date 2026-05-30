@@ -1,11 +1,11 @@
 class Personaggio {
-       constructor(nome, giornoPartenza = 0) {
+    constructor(nome, giornoPartenza = 0) {
         this.nome = nome;
-        this.forza = 8; this.destrezza = 8; this.costituzione = 8;
-        this.intelligenza = 8; this.saggezza = 8; this.carisma = 8;
-        
+        this.forza = 6; this.destrezza = 6; this.costituzione = 6;
+        this.intelligenza = 6; this.saggezza = 6; this.carisma = 6;
+
         this.fame = 14; this.sete = 4; this.sonno = 8;
-        this.faticaBase = 0; 
+        this.faticaBase = 0;
         this.follia = 0;
         this.staminaBase = 4;
         this.puntiFeritaRealiMaxBase = 5;
@@ -60,14 +60,15 @@ class Personaggio {
         this.inSpedizione = false;
 
         //competenze
-        this.staminaAttuale = 4; // Parte al massimo (staminaMax è calcolata)
-        this.staminaRegenTimer = 0; 
+        this.timers = { fameSoddisfatta: 0, seteSoddisfatta: 0, sonnoSoddisfatto: 0, buffFame: 0, buffSete: 0, buffSonno: 0 };
+        this.staminaAttuale = this.staminaMax; // Parte al massimo
+        this.staminaRegenTimer = 0;
         this.competenze = []; // Array di stringhe: ["Atletica", "Acrobazia"]
         this.perks = [];      // Array di oggetti perk scelti
-        this.puntiCreazione = 30;
+        this.puntiCreazione = 42;
         this.lingue = ['Verbum'];
-
-        this.timers = { fameSoddisfatta: 0, seteSoddisfatta: 0, sonnoSoddisfatto: 0, buffFame: 0, buffSete: 0, buffSonno: 0 };
+        this.piattiDeliziosi = 0;
+        this.autoRisorse = { fame: null, sete: null, sonno: null };
     }
 
     get stadioFame() {
@@ -98,31 +99,28 @@ class Personaggio {
         return 4;
     }
 
-    // --- RISORSE DINAMICHE ---
     get faticaTotale() {
         let f = this.faticaBase;
-        // Debuff da bisogni primari
         if (this.stadioFame >= 3) f += 1;
         if (this.stadioSete >= 2) f += 1;
         if (this.stadioSonno >= 2) f += 1;
-
-        // Debuff da Ferite (Cumulativi)
-        // Rischio Funzionalità (2PF) E Rischio Morte (1PF) danno entrambi +2 fatica
         if (this.puntiFeritaReali <= 2 && this.puntiFeritaReali > 0) {
-            f += 2; 
+            f += 2;
         }
-        return Math.min(f, 6); // Cap massimo a 6 (Morte)
+        return Math.min(6, Math.max(0, f));
     }
 
     get staminaMax() {
         let s = this.staminaBase;
         s += this.getStatDettagliata('Forza').mod;
-        // Debuff da bisogni
         if (this.stadioFame >= 2) s -= 1;
         if (this.stadioSete >= 3) s -= 2;
-        if (this.faticaTotale >= 2) s -= 1;
+        if (this.faticaTotale>= 2) s -= 1;
         if (this.puntiFeritaReali <= 3 && this.puntiFeritaReali > 0) {
             s -= 1;
+        }
+        if (this.faticaTotale>= 5) {
+            s = 1;
         }
         return Math.max(0, s);
     }
@@ -148,13 +146,13 @@ class Personaggio {
 
         // Applica Debuff (Basati sugli stadi)
         if (statNome === "Forza" && this.stadioFame >= 1) { modFinale -= 2; motivi.push("Fame -2"); }
-        if (statNome === "Costituzione" && this.stadioFame >= 4) { modFinale -= 1; motivi.push("Inedia -2 Valore"); }
-        
-        if ((statNome === "Intelligenza" || statNome === "Saggezza") && this.stadioSete >= 1) {
+        if (statNome === "Costituzione" && this.stadioFame >= 4) { modFinale -= 2; motivi.push("Fame estrema -2"); }
+
+        if ((statNome === "Intelligenza" || statNome === "Destrezza") && this.stadioSete >= 1) {
             modFinale -= 2; motivi.push("Sete -2");
         }
-        
-        if ((statNome === "Carisma" || statNome === "Destrezza") && this.stadioSonno >= 1) {
+
+        if ((statNome === "Carisma" || statNome === "Saggezza") && this.stadioSonno >= 1) {
             modFinale -= 2; motivi.push("Insonnia -2");
         }
 
@@ -257,10 +255,11 @@ class Personaggio {
         // overload produces a small disadvantage for mental stats
         const overloadDisadvantage = this.studyOverload && ['Intelligenza', 'Saggezza', 'Carisma'].includes(attr);
 
-        // combine disadvantages; advantage/disadvantage cancel each other when both present
+        const fatigueDisadvantage = this.faticaTotale>= 1;
+
         let disadvantage = false;
         if (!advantage) {
-            disadvantage = disadvantageFromFlags || disadvantageFromRating || overloadDisadvantage;
+            disadvantage = disadvantageFromFlags || disadvantageFromRating || overloadDisadvantage || fatigueDisadvantage;
         }
 
         return { modifier: modifier, advantage: advantage, disadvantage: disadvantage };
@@ -288,7 +287,7 @@ class Personaggio {
         const sagMod = this.getStatDettagliata('Saggezza').mod;
         let competenzaBonus = 0;
         const bonus = this.getBonusCompetenza();
-        
+
         if (this.masteries && this.masteries.map(m => m.toLowerCase()).includes('sopravvivenza')) {
             competenzaBonus = bonus * 2;
         } else if (this.competenze.some(c => c.toLowerCase() === 'sopravvivenza')) {
@@ -318,23 +317,20 @@ class Personaggio {
 
     get woundState() {
         const pf = this.puntiFeritaReali;
-        if (pf >= 5) return "Illeso";
-        if (pf === 4) return "Ferita lieve";
-        if (pf === 3) return "Ferita profonda";
-        if (pf === 2) return "Funzionalità a rischio";
-        if (pf === 1) return "Rischio di morte";
+        const max = this.puntiFeritaRealiMax;
+        if (pf >= max * 0.8) return "Illeso";
+        if (pf >= max * 0.6) return "Ferita lieve";
+        if (pf >= max * 0.4) return "Ferita profonda";
+        if (pf >= max * 0.2) return "Funzionalità a rischio";
+        if (pf >= 1) return "Rischio di morte";
         return "Morto";
-    }
-
-    get puntiFeritaRealiMax() {
-        return this.puntiFeritaRealiMaxBase + Math.floor(this.vittorieCombattimento / 2);
     }
 
     registraVittoriaCombattimento() {
         this.vittorieCombattimento += 1;
-        // Ogni 2 vittorie, aumenta punti fortuna
         if (this.vittorieCombattimento % 2 === 0) {
-            this.puntiFortuna = Math.min(this.puntiFortunaMax, this.puntiFortuna + 1);
+            const effMax = this.puntiFortunaMaxEffettivo;
+            this.puntiFortuna = Math.min(effMax, this.puntiFortuna + 1);
         }
     }
 
@@ -469,7 +465,7 @@ class Personaggio {
         if (risultato === 'critical') guadagno = 2;
         else if (risultato === 'success') guadagno = 1;
         else if (risultato === 'fail') guadagno = 0.2;
-        
+
         this.pca[categoria] = (this.pca[categoria] || 0) + guadagno;
     }
 
@@ -480,7 +476,7 @@ class Personaggio {
             this.oreAllenamento = 0;
             this.ultimoGiornoAllenamento = giornoAttuale;
         }
-        
+
         const forzaMod = this.getStatDettagliata('Forza').mod;
         const gratuite = Math.max(1, 1 + forzaMod);
         return gratuite;
@@ -492,20 +488,20 @@ class Personaggio {
         const gratuite = this.calcolaOreAllenamentoGratuite(giornoAttuale);
         const oreGratuite = Math.min(ore, gratuite - this.oreAllenamento);
         const oreAGagoPagato = ore - oreGratuite;
-        
+
         // Guadagno PCA
         this.pca[categoria] = (this.pca[categoria] || 0) + (ore * 2);
-        
+
         // Fame aumenta 15% per 2 ore
         this.fame = Math.max(0, this.fame - (14 * 0.15)); // riduce la barra di fame
-        
+
         // Se ore a carico pagato, consuma stamina (1 barra ogni 2 ore)
         const staminaDaConsumara = Math.ceil(oreAGagoPagato / 2);
         this.staminaAttuale = Math.max(0, this.staminaAttuale - staminaDaConsumara);
-        
+
         // Traccia ore di allenamento
         this.oreAllenamento += oreGratuite;
-        
+
         return { oreGratuite, oreAGagoPagato, staminaUsata: staminaDaConsumara, pcaGuadagnato: ore * 2 };
     }
 
@@ -515,7 +511,7 @@ class Personaggio {
     avanzaTempo(ore) {
         // Calcolo calo (1 tacca ogni 24 ore)
         let calo = ore / 24;
-        
+
         this.fame = Math.max(0, this.fame - calo);
         this.sete = Math.max(0, this.sete - calo);
         this.sonno = Math.max(0, this.sonno - calo);
@@ -530,7 +526,7 @@ class Personaggio {
         if (this.sete <= 0) return "Disidratazione (Sete)";
         if (this.sonno <= 0) return "Collasso Cerebrale";
         if (this.faticaTotale >= 6) return "Sfinimento Totale";
-        
+
         return null;
     }
 
@@ -539,18 +535,18 @@ class Personaggio {
         this.sonno = Math.min(8, this.sonno + ore);
         if (ore >= 8) {
             this.faticaBase = Math.max(0, this.faticaBase - 2);
-            this.timers.sonnoSoddisfatto = 8;
+            this.timers.sonnoSoddisfatto = 6;
             this.timers.buffSonno = 8;
             this.healByRest(ore);
         }
     }
 
     calcolaCostoStat(valoreAttuale) {
-        if (valoreAttuale >= 8 && valoreAttuale < 12) return 1;
-        if (valoreAttuale >= 12 && valoreAttuale < 16) return 2;
-        if (valoreAttuale >= 16 && valoreAttuale < 19) return 3;
-        if (valoreAttuale >= 19) return 4;
-        return 1;
+        if (valoreAttuale < 8) return 0;  // da 6 a 7: gratuito
+        if (valoreAttuale < 12) return 1; // da 8 a 11: 1 punto
+        if (valoreAttuale < 16) return 2; // da 12 a 15: 2 punti
+        if (valoreAttuale < 19) return 3; // da 16 a 18: 3 punti
+        return 4; // 19+: 4 punti
     }
 
     tickOra() {
@@ -607,40 +603,67 @@ class Personaggio {
         // 3. Update Timers
         for (let t in this.timers) if (this.timers[t] > 0) this.timers[t] -= 1;
 
+        // 3.5 Ensure fortune respects fatigue cap
+        this.normalizePuntiFortuna();
+
+        // 3.6 Auto sopravvivenza d'emergenza
+        if (!this.inSpedizione && typeof magazzino !== 'undefined') {
+            if (this.fame <= 0 && magazzino.cibo >= 0.5) {
+                magazzino.cibo -= 0.5;
+                this.fame = Math.min(16, this.fame + 0.5);
+                this.timers.fameSoddisfatta = 3;
+                if (typeof mostraNotificaInAlto === 'function') mostraNotificaInAlto(`${this.nome} usa cibo d'emergenza per sopravvivere.`, 'avviso');
+            }
+            if (this.sete <= 0 && magazzino.acqua >= 0.5) {
+                magazzino.acqua -= 0.5;
+                this.sete = Math.min(5, this.sete + 0.5);
+                this.timers.seteSoddisfatta = 2;
+                if (typeof mostraNotificaInAlto === 'function') mostraNotificaInAlto(`${this.nome} beve acqua d'emergenza per non disidratarsi.`, 'avviso');
+            }
+        }
+
+        // 3.7 Auto sonno se collassa
+        if (this.sonno <= 0 && !this.inSpedizione && (!this.azioneCorrente || this.azioneCorrente.tipo !== 'dormi')) {
+            const oreDormire = 15;
+            this.azioneCorrente = { tipo: 'dormi', oreTotali: oreDormire, oreRimanenti: oreDormire, onComplete: () => this.completaAzione() };
+            this.sonno = Math.min(8, this.sonno + 0.5);
+            if (typeof mostraNotificaInAlto === 'function') mostraNotificaInAlto(`${this.nome} si addormenta automaticamente per evitare il collasso.`, 'avviso');
+        }
+
         // 4. Controllo Morte
         if (this.puntiFeritaReali <= 0) return "per emmorargia";
         if (this.fame <= 0) return "Inedia";
         if (this.sete <= 0) return "Disidratazione";
         if (this.sonno <= 0) return "Privazione Sonno";
 
-        const staRiposando = !this.inSpedizione && (!this.azioneCorrente || this.azioneCorrente.tipo !== 'esplora');
+        const staRiposando = !this.inSpedizione && (!this.azioneCorrente || !['esplora', 'allenamento'].includes(this.azioneCorrente.tipo));
 
-    if (this.woundState !== "Illeso" && this.woundState !== "Morto" && staRiposando) {
-        
-        // 1. Calcolo del Bonus Rigenerazione (20% per ogni Buff)
-        let moltiplicatoreRigenerazione = 1; // 1 ora reale = 1 ora di recupero
-        if (this.timers.buffFame > 0) moltiplicatoreRigenerazione += 0.2;
-        if (this.timers.buffSete > 0) moltiplicatoreRigenerazione += 0.2;
-        if (this.timers.buffSonno > 0) moltiplicatoreRigenerazione += 0.2;
+        if (this.woundState !== "Illeso" && this.woundState !== "Morto" && staRiposando) {
 
-        // 2. Accumulo ore (es. se moltiplicatore è 1.6, aggiunge 1.6 ore ogni ora reale)
-        this.oreRiposoAccumulate += moltiplicatoreRigenerazione;
+            // 1. Calcolo del Bonus Rigenerazione (20% per ogni Buff)
+            let moltiplicatoreRigenerazione = 1; // 1 ora reale = 1 ora di recupero
+            if (this.timers.buffFame > 0) moltiplicatoreRigenerazione += 0.2;
+            if (this.timers.buffSete > 0) moltiplicatoreRigenerazione += 0.2;
+            if (this.timers.buffSonno > 0) moltiplicatoreRigenerazione += 0.2;
 
-        // 3. Controllo soglie di guarigione
-        const sogliaNecessaria = this.getOreNecessarieGuarigione();
-        
-        if (this.oreRiposoAccumulate >= sogliaNecessaria) {
-            this.puntiFeritaReali = Math.min(this.puntiFeritaRealiMax, this.puntiFeritaReali + 1);
-            this.oreRiposoAccumulate = 0; // Reset dopo il miglioramento
-            this.resetWoundTimer(); // Reset del timer di peggioramento
-            mostraNotificaInAlto(`${this.nome}: La ferita sta guarendo grazie al riposo!`, "successo");
+            // 2. Accumulo ore (es. se moltiplicatore è 1.6, aggiunge 1.6 ore ogni ora reale)
+            this.oreRiposoAccumulate += moltiplicatoreRigenerazione;
+
+            // 3. Controllo soglie di guarigione
+            const sogliaNecessaria = this.getOreNecessarieGuarigione();
+
+            if (this.oreRiposoAccumulate >= sogliaNecessaria) {
+                this.puntiFeritaReali = Math.min(this.puntiFeritaRealiMax, this.puntiFeritaReali + 1);
+                this.oreRiposoAccumulate = 0; // Reset dopo il miglioramento
+                this.resetWoundTimer(); // Reset del timer di peggioramento
+                mostraNotificaInAlto(`${this.nome}: La ferita sta guarendo grazie al riposo!`, "successo");
+            }
+        } else {
+            // Se si muove o non è in condizioni di riposo, il progresso si ferma (ma non si perde)
+            this.oreRiposoAccumulate = Math.max(0, this.oreRiposoAccumulate);
         }
-    } else {
-        // Se si muove o non è in condizioni di riposo, il progresso si ferma (ma non si perde)
-        this.oreRiposoAccumulate = Math.max(0, this.oreRiposoAccumulate);
-    }
 
-    
+
         return null;
     }
 
@@ -648,19 +671,26 @@ class Personaggio {
         // Avanza 'ore' ore chiamando tickOra() iterativamente.
         for (let i = 0; i < ore; i++) {
             const causa = this.tickOra();
+            if (typeof processAutomaticActions === 'function') {
+                processAutomaticActions(this);
+            }
             if (causa) return causa;
         }
         return null;
     }
 
     getOreNecessarieGuarigione() {
-    switch (this.woundState) {
-        case "Ferita lieve": return 8;
-        case "Ferita profonda": return 16;
-        case "Funzionalità a rischio": return 32;
-        case "Rischio di morte": return 64;
-        default: return Infinity;
-        }
+        const mod = this.constitutionModifier || 0;
+        // +1 CON: rigenerazione -5% (guarigione +5%), -1 CON: +5% (guarigione -5%)
+        const factor = 1 - (mod * 0.05);
+        const baseHours = {
+            "Ferita lieve": 8,
+            "Ferita profonda": 16,
+            "Funzionalità a rischio": 32,
+            "Rischio di morte": 64
+        };
+        const base = baseHours[this.woundState] || Infinity;
+        return Math.max(0.5, base * factor);
     }
 
     completaAzione() {
@@ -670,7 +700,7 @@ class Personaggio {
         if (tipo === 'dormi' && ore >= 8) {
             this.faticaBase = Math.max(0, this.faticaBase - 2);
             if (this.sonno >= 7.9) { this.sonno = 10; this.timers.buffSonno = 8; }
-            this.timers.sonnoSoddisfatto = 8;
+            this.timers.sonnoSoddisfatto = 6;
         }
 
         const onComplete = this.azioneCorrente?.onComplete;
@@ -683,15 +713,31 @@ class Personaggio {
             this.azioneCorrente = this.codaAzioni.shift();
         }
     }
+    get maxOreRiposo() {
+        let max = 24;
+        if (this.stadioSete >= 2) max = Math.min(max, 4);
+        if (this.stadioFame >= 3) max = Math.min(max, 8);
+        return max;
+    }
+
+    get puntiFortunaMaxEffettivo() {
+        return this.faticaTotale >= 4 ? Math.max(1, Math.ceil(this.puntiFortunaMax / 2)) : this.puntiFortunaMax;
+    }
+
+    normalizePuntiFortuna() {
+        const effMax = this.puntiFortunaMaxEffettivo;
+        if (this.puntiFortuna > effMax) this.puntiFortuna = effMax;
+    }
+
     get malusFaticaDettagliati() {
-    const lvl = this.faticaTotale;
-    let effetti = [];
-    if (lvl >= 1) effetti.push("Svantaggio prove abilità");
-    if (lvl >= 2) effetti.push("Velocità dimezzata, Stamina -1");
-    if (lvl >= 3) effetti.push("Svantaggio concentrazione, Rischio Follia");
-    if (lvl >= 4) effetti.push("PF Fortuna dimezzati");
-    if (lvl >= 5) effetti.push("Velocità 0, Stamina 0");
-    if (lvl >= 6) effetti.push("MORTE");
-    return effetti;
-}
+        const lvl = this.faticaTotale;
+        let effetti = [];
+        if (lvl >= 1) effetti.push("Svantaggio a tutti i tiri d20");
+        if (lvl >= 2) effetti.push("Velocità dimezzata, Stamina -1");
+        if (lvl >= 3) effetti.push("Riposo limitato, maggior rischio di fallimento");
+        if (lvl >= 4) effetti.push("PF Fortuna dimezzati");
+        if (lvl >= 5) effetti.push("Velocità 0, Stamina 1");
+        if (lvl >= 6) effetti.push("MORTE");
+        return effetti;
+    }
 }

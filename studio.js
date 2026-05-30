@@ -1,25 +1,25 @@
 const BOOK_SUBJECT_TITLES = {
     'Addestrare animali': [
-        'Come accarezzare 1250 animali',
-        'Comportamento delle creature magiche e non',
-        'Come addestrare il tuo cucciolo',
+        '1250 animali che puoi accarezzare',
+        '1250 animali che non puoi accarezzare',
+        '1200 animali che puoi accarezzare ma poi devi scappare',
         'Allevamento e ibridazione di animali'
     ],
     'Arcano': [
-        'La magia le basi',
+        'Palla di fuoco non è la soluzione a tutto (quasi)',
         'La magia cos\'è?',
         'Incantesimi utili per la vita quotidiana',
         'Incantesimi che non userai mai'
     ],
     'Cucina': [
         'Dolci e Dessert da Gramon Taurs',
-        'Vegano e Vegetariano 500 ricette',
+        'Il vegetariano è overated. 200 ricette su come sentirti un vero predatore',
         'Ricette da tutte le isole volanti',
         'Mestolo d\'oro'
     ],
     'Indagare': [
         'Come leggere la stanza',
-        'I serial killer pi\u00f9 temuti della storia',
+        'I serial  addestrare il tuo cucciolokiller pi\u00f9 temuti della storia',
         'Trucchi usati dai migliori investigatori',
         'Mio figlio \u00e8 gay o un artista?'
     ],
@@ -33,10 +33,10 @@ const BOOK_SUBJECT_TITLES = {
         'Come nascondere ai tuoi la tua sessualit\xe0',
         'Manipolazione, 10 trucchi da Sigma',
         'Psicologia Oscura, i trucchi da sapere fin da bambino',
-        'Come apparire pi\xf9 affascinante agli altri'
+        'Non serve pagare tutte le tasse'
     ],
     'Storia': [
-        'Guerra delle citt\xe0, come abbiamo fallito',
+        'Top 10 guerre (esclusa quelle delle città)',
         'Conflitto degli non umani, il triste esito',
         'Storia contemporanea, cosa sta succedendo nel mondo?',
         'Maghi contro Artefici, una introspersioni'
@@ -54,7 +54,7 @@ const BOOK_SUBJECT_TITLES = {
         'Cosa mangiare e non tra le varie nazioni'
     ],
     'Religione': [
-        'La guerra degli dei, gli dei sanguinano',
+        'Dei e demoni cui non conviene fare patti (Sopratutto Kawanata)',
         'Le religioni pi\xf9 importanti di Teverat',
         'Dei e Astrali, enciclopedia completa',
         'Raccolta di storie e leggende'
@@ -63,11 +63,11 @@ const BOOK_SUBJECT_TITLES = {
         'Come ottenere ci\xf2 che si vuole dagli altri',
         'Stai perdendo tantissimo non leggendo questo libro',
         'Come essere l\'Alpha della stanza',
-        'Venditi al tuo pubblico.'
+        'Venditi al tuo pubblico. Non letteralemente, ma quasi'
     ],
     'Natura': [
         '200 piante curative',
-        'Enciclopedia dei frutti commestibili',
+        'Cosa non dovresti mangiare',
         'Anatomia e funzione delle forme vegetali pi\xf9 comuni',
         'Fiori e frutti coltivabili in giardino'
     ],
@@ -91,11 +91,11 @@ const BOOK_SUBJECT_TITLES = {
     ],
     'Medicina': [
         'Anatomia',
-        'Neurologia',
+        'Non si dice ritardato',
         'Chirurgia',
         'Anatomopatologia',
-        'Cardiologia',
-        'Ginecologia',
+        'Come ti batte il cuore (non emotivamente)',
+        'Pene e vagina, come scegliere',
         'Primo Soccorso',
         'Infermieristica',
         'Ottica',
@@ -123,8 +123,8 @@ const STUDY_SUBJECT_ABILITY = {
     'Storia': 'Intelligenza',
     'Strumenti da scasso': 'Destrezza',
     'Sopravvivenza': 'Saggezza',
-    'Religione': 'Saggezza',
-    'Natura': 'Saggezza',
+    'Religione': 'Intelligenza',
+    'Natura': 'Intelligenza',
     'Manodopera': 'Destrezza',
     'Intrattenere': 'Carisma',
     'Intimidire': 'Carisma'
@@ -306,12 +306,15 @@ function completaStudioBookAction(p, action) {
         const stat = STUDY_SUBJECT_ABILITY[book.subject] || 'Intelligenza';
         const attrMod = p.getStatDettagliata(stat).mod;
         let summary = [];
+        const helper = (typeof assistenzaSelezionata !== 'undefined' && assistenzaSelezionata && assistenzaSelezionata.tipo === 'studio') ? party[assistenzaSelezionata.idx] : null;
+        const helperName = action.teacherName || (helper ? helper.nome : null);
+
         for (let i = 0; i < effectiveHours; i++) {
             const nextHourTotal = (p.oreStudioPerMateria[book.subject] || 0) + 1;
             p.oreStudioPerMateria[book.subject] = nextHourTotal;
             const die = getStudyDieByTotalHours(nextHourTotal);
             let roll = rollDiceNotation(die) + attrMod;
-            if (action.teacherName || hasTeacher(p)) {
+            if (helperName || hasTeacher(p)) {
                 const roll2 = rollDiceNotation(die) + attrMod;
                 roll = Math.max(roll, roll2);
             }
@@ -330,7 +333,10 @@ function completaStudioBookAction(p, action) {
         currentPoints = Math.min(210, currentPoints);
         p.apprendimento[book.subject] = currentPoints;
         p.ultimoStudioOre = oreTotali;
-        if (action.teacherName) {
+        if (helperName && !action.teacherName) {
+            mostraNotificaInAlto(`${p.nome} studia con l'aiuto di ${helperName}.`, 'successo');
+            assistenzaSelezionata = null;
+        } else if (action.teacherName) {
             mostraNotificaInAlto(`${p.nome} studia con l'aiuto di ${action.teacherName}.`, 'successo');
         }
         let message = `${p.nome} studia ${book.subject} per ${effectiveHours}h (${summary.join(', ')}) e arriva a ${currentPoints}/210 punti.`;
