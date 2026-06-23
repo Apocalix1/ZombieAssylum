@@ -149,11 +149,6 @@ async function renderCharacterList() {
     });
 }
 
-function showAuthMessage(msg) {
-    const el = document.getElementById('auth-message');
-    if (el) el.textContent = msg;
-}
-
 async function fetchCharacterDataFromServer(nome, userId) {
     if (!navigator.onLine || !userId) return null;
     try {
@@ -1858,16 +1853,68 @@ function renderParty() {
     `).join('');
 }
 
-// Espongo funzioni usate da onclick inline nei template
-window.showPlayerAuth = showPlayerAuth;
-window.showMasterAuth = showMasterAuth;
-window.showLobbyScreen = showLobbyScreen;
-window.showGameScreen = showGameScreen;
-window.modificaMagicLevel = typeof modificaMagicLevel === 'function' ? modificaMagicLevel : undefined;
-window.modificaIncantesimiConosciuti = typeof modificaIncantesimiConosciuti === 'function' ? modificaIncantesimiConosciuti : undefined;
-window.confermaCreazione = typeof confermaCreazione === 'function' ? confermaCreazione : undefined;
+async function renderProposteMaster() {
+    // Mostra questo pannello solo se l'utente è il Master
+    const currentUser = getCurrentUser();
+    if (!currentUser || currentUser.username !== 'Apocalix1') return;
 
-// Fallback delegation per pulsanti landing se gli event listener non si agganciano
+    // Creiamo un contenitore temporaneo nella dashboard se non esiste nell'HTML
+    let panel = document.getElementById('master-proposte-panel');
+    if (!panel) {
+        panel = document.createElement('div');
+        panel.id = 'master-proposte-panel';
+        panel.style = "background:#2c3e50; padding:15px; margin:15px 0; border-radius:8px; border:2px solid #f1c40f;";
+        // Lo inseriamo in cima al game-screen del Master
+        const gameScreen = document.getElementById('game-screen');
+        if (gameScreen) gameScreen.insertBefore(panel, gameScreen.firstChild);
+    }
+
+    try {
+        const response = await fetch(apiUrl('/api/proposte'));
+        const proposte = await response.json();
+
+        if (!proposte.length) {
+            panel.innerHTML = `<h3>👑 Pannello Master: Proposte</h3><p style="color:#eee;">Nessuna proposta di personaggio in attesa.</p>`;
+            return;
+        }
+
+        let html = `<h3>👑 Pannello Master: Nuovi Sopravvissuti in Attesa (${proposte.length})</h3>`;
+        proposte.forEach(prop => {
+            html += `
+                <div style="background:#1a252f; padding:10px; margin-top:8px; display:flex; justify-content:space-between; align-items:center; border-radius:4px;">
+                    <div>
+                        <strong>${prop.nomePersonaggio}</strong> proposto da <em>${prop.propostoDa}</em>
+                    </div>
+                    <div>
+                        <button class="btn-hero" style="background:#2ecc71;" onclick="approvaPersonaggio('${prop.nomePersonaggio}', '${prop.userId}')">APPROVA</button>
+                        <button class="btn-hero" style="background:#e74c3c;" onclick="rifiutaPersonaggio('${prop.id}')">RIFIUTA</button>
+                    </div>
+                </div>`;
+        });
+        panel.innerHTML = html;
+    } catch (e) {
+        panel.innerHTML = `<p style="color:#e74c3c;">Errore nel caricamento delle proposte dal server.</p>`;
+    }
+}
+
+// Funzione per approvare il personaggio ed inserirlo nel Party globale
+async function approvaPersonaggio(nome, userId) {
+    try {
+        const response = await fetch(apiUrl('/api/proposte/approva'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ nome, userId })
+        });
+        if (response.ok) {
+            alert(`${nome} è entrato ufficialmente nel gioco!`);
+            renderProposteMaster(); // Aggiorna il pannello
+            aggiornaInterfaccia();   // Aggiorna la griglia dei personaggi
+        }
+    } catch (e) {
+        alert("Errore durante l'approvazione.");
+    }
+}
+
 document.addEventListener('click', (ev) => {
     const btn = ev.target.closest ? ev.target.closest('button') : null;
     if (!btn) return;
@@ -1883,3 +1930,20 @@ window.onclick = function(event) {
         event.target.style.display = "none";
     }
 }
+
+window.renderProposteMaster = renderProposteMaster;
+window.approvaPersonaggio = approvaPersonaggio;
+
+// Espongo funzioni usate da onclick inline nei template
+window.showPlayerAuth = showPlayerAuth;
+window.showMasterAuth = showMasterAuth;
+window.showLobbyScreen = showLobbyScreen;
+window.showGameScreen = showGameScreen;
+window.modificaMagicLevel = typeof modificaMagicLevel === 'function' ? modificaMagicLevel : undefined;
+window.modificaIncantesimiConosciuti = typeof modificaIncantesimiConosciuti === 'function' ? modificaIncantesimiConosciuti : undefined;
+window.confermaCreazione = typeof confermaCreazione === 'function' ? confermaCreazione : undefined;
+window.initUI = initUI;
+window.showGameScreen = showGameScreen;
+window.showLandingScreen = showLandingScreen;
+window.apriBiblioteca = apriBiblioteca;
+

@@ -141,7 +141,7 @@ export class Personaggio {
         this.faticaBase = 0;
         this.follia = 0;
         this.contatoreCiboAvariato = 0;
-        this.contatoreCiboDelizioso =
+        this.contatoreCiboDelizioso = 0;
         this.staminaBase = 4;
         this.velcotiaBase=9;
         this.puntiFeritaRealiMaxBase = 5;
@@ -306,8 +306,6 @@ export class Personaggio {
         this.robotMicroRepairsUsed += 1;
         return true;
     }
-
-
     get stadioFame() {
         let f = this.fame + (this.timers.fameSoddisfatta > 0 ? 3.5 : 0);
         if (f >= 12) return 0;
@@ -357,6 +355,75 @@ export class Personaggio {
         return Math.min(6, Math.max(0, f));
     }
 
+     get woundDetail() {
+        return `${this.woundState}: ${this.woundEffectText}`;
+    }
+
+    get woundState() {
+        if (this.isRobot) {
+            const pf = this.robotPF;
+            const max = this.robotPFMax;
+            if (pf >= max * 0.8) return "Illeso (Robot)";
+            if (pf >= max * 0.6) return "Danno lieve (Robot)";
+            if (pf >= max * 0.4) return "Danno profondo (Robot)";
+            if (pf >= max * 0.2) return "Funzionalità a rischio (Robot)";
+            if (pf >= 1) return "Rischio di distruzione (Robot)";
+            return "Distrutto";
+        }
+        const pf = this.puntiFeritaReali;
+        const max = this.puntiFeritaRealiMax;
+        if (pf >= max * 0.8) return "Illeso";
+        if (pf >= max * 0.6) return "Ferita lieve";
+        if (pf >= max * 0.4) return "Ferita profonda";
+        if (pf >= max * 0.2) return "Funzionalità a rischio";
+        if (pf >= 1) return "Rischio di morte";
+        return "Morto";
+    }
+
+
+    get woundEffectText() {
+        switch (this.woundState) {
+            case "Ferita lieve": return "30% peggiora dopo 5h se non curata";
+            case "Ferita profonda": return "Dopo 3h diventa Funzionalità a rischio";
+            case "Funzionalità a rischio": return "Dopo 1h diventa Rischio di morte, +2 fatica";
+            case "Rischio di morte": return "Dopo 10 min: morte. Il personaggio è privo di sensi";
+            case "Morto": return "Personaggio deceduto";
+            default: return "Nessun danno reale";
+        }
+    }
+
+    get constitutionModifier() {
+        return this.getStatDettagliata("Costituzione").mod;
+    }
+
+    get woundTimeBase() {
+        switch (this.woundState) {
+            case "Ferita lieve": return 6;
+            case "Ferita profonda": return 3;
+            case "Funzionalità a rischio": return 1;
+            case "Rischio di morte": return 0.1667;
+            default: return 0;
+        }
+    }
+
+     get maxOreRiposo() {
+        let max = 24;
+        if (this.stadioSete >= 2) max = Math.min(max, 4);
+        if (this.stadioFame >= 3) max = Math.min(max, 8);
+        return max;
+    }
+
+    get puntiFortunaMaxEffettivo() {
+        return this.faticaTotale >= 4 ? Math.max(1, Math.ceil(this.puntiFortunaMax / 2)) : this.puntiFortunaMax;
+    }
+
+    get woundTimeToWorsen() {
+        const base = this.woundTimeBase;
+        // ogni +1 al modificatore di Costituzione riduce del 5% il tempo; ogni -1 lo aumenta del 5%
+        const factor = 1 - (this.constitutionModifier * 0.05);
+        return Math.max(0.5, base * factor);
+    }
+
     get staminaMax() {
     if (this.isRobot) return 99;
     let s = this.staminaBase;
@@ -395,7 +462,19 @@ export class Personaggio {
     }
 
     return Math.max(0, s);
+    }
 
+    get malusFaticaDettagliati() {
+        const lvl = this.faticaTotale;
+        let effetti = [];
+        if (lvl >= 1) effetti.push("Svantaggio a tutti i tiri d20");
+        if (lvl >= 2) effetti.push("Velocità dimezzata, Stamina -1");
+        if (lvl >= 3) effetti.push("Riposo limitato, maggior rischio di fallimento");
+        if (lvl >= 4) effetti.push("PF Fortuna dimezzati");
+        if (lvl >= 5) effetti.push("Velocità 0, Stamina 1");
+        if (lvl >= 6) effetti.push("MORTE");
+        return effetti;
+    }
 
     // --- IL "CERVELLO" DELLE STATISTICHE ---
 getStatDettagliata(statNome) {
@@ -644,6 +723,7 @@ getSkillRating(skill) {
     return Math.max(-2, Math.min(2, punteggioAbilita));
 }
 
+
 getSkillModifierForCheck(skill) {
     const rating = this.getSkillRating(skill);
     const skillKey = (skill || '').toLowerCase().trim();
@@ -757,28 +837,7 @@ hasCompetenza(skill) {
         return (counts[key] || 0) > 0;
     }
 
-    get woundState() {
-        if (this.isRobot) {
-            const pf = this.robotPF;
-            const max = this.robotPFMax;
-            if (pf >= max * 0.8) return "Illeso (Robot)";
-            if (pf >= max * 0.6) return "Danno lieve (Robot)";
-            if (pf >= max * 0.4) return "Danno profondo (Robot)";
-            if (pf >= max * 0.2) return "Funzionalità a rischio (Robot)";
-            if (pf >= 1) return "Rischio di distruzione (Robot)";
-            return "Distrutto";
-        }
-        const pf = this.puntiFeritaReali;
-        const max = this.puntiFeritaRealiMax;
-        if (pf >= max * 0.8) return "Illeso";
-        if (pf >= max * 0.6) return "Ferita lieve";
-        if (pf >= max * 0.4) return "Ferita profonda";
-        if (pf >= max * 0.2) return "Funzionalità a rischio";
-        if (pf >= 1) return "Rischio di morte";
-        return "Morto";
-    }
-
-    registraVittoriaCombattimento() {
+ registraVittoriaCombattimento() {
         this.vittorieCombattimento += 1;
         if (this.vittorieCombattimento % 2 === 0) {
             const effMax = this.puntiFortunaMaxEffettivo;
@@ -786,37 +845,6 @@ hasCompetenza(skill) {
         }
     }
 
-    get woundEffectText() {
-        switch (this.woundState) {
-            case "Ferita lieve": return "30% peggiora dopo 5h se non curata";
-            case "Ferita profonda": return "Dopo 3h diventa Funzionalità a rischio";
-            case "Funzionalità a rischio": return "Dopo 1h diventa Rischio di morte, +2 fatica";
-            case "Rischio di morte": return "Dopo 10 min: morte. Il personaggio è privo di sensi";
-            case "Morto": return "Personaggio deceduto";
-            default: return "Nessun danno reale";
-        }
-    }
-
-    get constitutionModifier() {
-        return this.getStatDettagliata("Costituzione").mod;
-    }
-
-    get woundTimeBase() {
-        switch (this.woundState) {
-            case "Ferita lieve": return 6;
-            case "Ferita profonda": return 3;
-            case "Funzionalità a rischio": return 1;
-            case "Rischio di morte": return 0.1667;
-            default: return 0;
-        }
-    }
-
-    get woundTimeToWorsen() {
-        const base = this.woundTimeBase;
-        // ogni +1 al modificatore di Costituzione riduce del 5% il tempo; ogni -1 lo aumenta del 5%
-        const factor = 1 - (this.constitutionModifier * 0.05);
-        return Math.max(0.5, base * factor);
-    }
     aggiungiFolliaPerEvento(causa) {
     if (this.follia >= 20) return;
 
@@ -897,6 +925,7 @@ hasCompetenza(skill) {
     if (this.follia >= 20) {
         mostraNotificaInAlto(`💀 DISASTRO: ${this.nome} è impazzito del tutto ed è irrecuperabile!`, "pericolo");
     }
+}
 
     resetWoundTimer() {
         if (this.woundState === "Illeso") {
@@ -986,10 +1015,6 @@ hasCompetenza(skill) {
         return true;
     }
 
-    get woundDetail() {
-        return `${this.woundState}: ${this.woundEffectText}`;
-    }
-
     // --- SISTEMA COMBATTIMENTO E ARMI ---
     registraColpoCombattimento(categoria, risultato) {
         // risultato: 'success' (+1), 'critical' (+2), 'fail' (+0.2)
@@ -1035,9 +1060,8 @@ hasCompetenza(skill) {
         this.oreAllenamento += oreGratuite;
 
         return { oreGratuite, oreAGagoPagato, staminaUsata: staminaDaConsumara, pcaGuadagnato: ore * 2 };
+    
     }
-
-
     // --- CALCOLO STATISTICHE (Visualizzazione richiesta: Valore (Mod)) ---
 
     avanzaTempo(ore) {
@@ -1250,37 +1274,15 @@ hasCompetenza(skill) {
             this.azioneCorrente = this.codaAzioni.shift();
         }
     }
-    get maxOreRiposo() {
-        let max = 24;
-        if (this.stadioSete >= 2) max = Math.min(max, 4);
-        if (this.stadioFame >= 3) max = Math.min(max, 8);
-        return max;
-    }
-
-    get puntiFortunaMaxEffettivo() {
-        return this.faticaTotale >= 4 ? Math.max(1, Math.ceil(this.puntiFortunaMax / 2)) : this.puntiFortunaMax;
-    }
+   
 
     normalizePuntiFortuna() {
         const effMax = this.puntiFortunaMaxEffettivo;
         if (this.puntiFortuna > effMax) this.puntiFortuna = effMax;
     }
 
-    get malusFaticaDettagliati() {
-        const lvl = this.faticaTotale;
-        let effetti = [];
-        if (lvl >= 1) effetti.push("Svantaggio a tutti i tiri d20");
-        if (lvl >= 2) effetti.push("Velocità dimezzata, Stamina -1");
-        if (lvl >= 3) effetti.push("Riposo limitato, maggior rischio di fallimento");
-        if (lvl >= 4) effetti.push("PF Fortuna dimezzati");
-        if (lvl >= 5) effetti.push("Velocità 0, Stamina 1");
-        if (lvl >= 6) effetti.push("MORTE");
-        return effetti;
+    
     }
-}
-    }
-}
-
 export function avviaAscoltoDatiCloud() {
     console.log("📡 Sincronizzazione Cloud attiva.");
 }
@@ -1291,3 +1293,8 @@ window.salvaPersonaggioCloud = salvaPersonaggioCloud;
 window.sincronizzaPersonaggio = sincronizzaPersonaggio;
 window.caricaDatiDaLocalStorage = caricaDatiDaLocalStorage;
 window.salvaPersonaggioLocalmente = salvaPersonaggioLocalmente;
+window.checkBackend = checkBackend;
+window.getCurrentUser = getCurrentUser;
+window.cimitero = cimitero || []; 
+window.party = party;
+window.inSpedizione = inSpedizione;

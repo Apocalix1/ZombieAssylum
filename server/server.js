@@ -14,6 +14,13 @@ app.use(express.static(join(__dirname, '../client')));
 
 const dbPromise = openDatabase();
 
+// 🟢 FIX: Funzione per rimuovere la password dall'oggetto utente prima di inviarlo al client
+function sanitizeUser(user) {
+  if (!user) return null;
+  const { password, ...sanitized } = user;
+  return sanitized;
+}
+
 app.get('/api/ping', async (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
@@ -116,6 +123,7 @@ app.post('/api/characters', async (req, res) => {
   }
 });
 
+// GET PROPOSTE IN ATTESA
 app.get('/api/proposals', async (req, res) => {
   try {
     const db = await dbPromise;
@@ -126,19 +134,23 @@ app.get('/api/proposals', async (req, res) => {
   }
 });
 
+// CREA NUOVA PROPOSTA DA PARTE DEL GIOCATORE
 app.post('/api/proposals', async (req, res) => {
   const { userId, nome, descrizione } = req.body;
-  if (!userId || !nome || !descrizione) {
-    return res.status(400).json({ error: 'userId, nome e descrizione richiesti' });
+  if (!userId || !nome) {
+    return res.status(400).json({ error: 'userId e nome del personaggio richiesti' });
   }
 
   try {
     const db = await dbPromise;
+    // Forniamo un fallback alla descrizione se vuota
+    const desc = descrizione || `Proposta personaggio: ${nome}`;
     const result = await db.run(
-      'INSERT INTO proposte (user_id, nome, descrizione) VALUES (?, ?, ?)',
+      'INSERT INTO proposte (user_id, nome, descrizione, stato) VALUES (?, ?, ?, ?)',
       userId,
       nome,
-      descrizione,
+      desc,
+      'in_attesa'
     );
     const proposal = await db.get('SELECT * FROM proposte WHERE id = ?', result.lastID);
     res.json({ proposal });
@@ -147,18 +159,56 @@ app.post('/api/proposals', async (req, res) => {
   }
 });
 
+// 👑 DECISIONE DEL MASTER (APPROVA/RIFIUTA) CON INIEZIONE AUTOMATICA NEL PARTY
 app.post('/api/proposals/:id/decision', async (req, res) => {
   const id = Number(req.params.id);
   const { decision } = req.body;
   if (!id || !decision || !['approved', 'rejected'].includes(decision)) {
-    return res.status(400).json({ error: 'id e decisione valida richiesti' });
+    return res.status(400).json({ error: 'id e decisione valida (approved/rejected) richiesti' });
   }
 
   try {
     const db = await dbPromise;
+    
+    // Recuperiamo la proposta originale per sapere di chi si tratta
+    const proposal = await db.get('SELECT * FROM proposte WHERE id = ?', id);
+    if (!proposal) {
+      return res.status(404).json({ error: 'Proposta non trovata' });
+    }
+
+    // Aggiorniamo lo stato della proposta
     await db.run('UPDATE proposte SET stato = ? WHERE id = ?', decision, id);
-    const updated = await db.get('SELECT * FROM proposte WHERE id = ?', id);
-    res.json({ proposal: updated });
+
+    // Se approvato, inseriamo direttamente il personaggio nella tabella ufficiale "personaggi"
+    if (decision === 'approved') {
+      const defaultData = JSON.stringify({
+        nome: proposal.nome,
+        giornoInizio: 0,
+        puntiFeritaReali: 20,
+        puntiFeritaRealiMax: 20,
+        puntiFortuna: 3,
+        puntiFortunaMax: 3,
+        stats: { Forza: 10, Destrezza: 10, Costituzione: 10, Intelligenza: 10, Saggezza: 10, Carisma: 10 },
+        perks: [],
+        pca: {}
+      });
+
+      // Controlliamo se esiste già, altrimenti inseriamo
+      const existingChar = await db.get('SELECT * FROM personaggi WHERE user_id = ? AND nome = ?', proposal.user_id, proposal.nome);
+      if (!existingChar) {
+        await db.run(
+          'INSERT INTO personaggi (user_id, nome, classe, data, updated_at) VALUES (?, ?, ?, ?, ?)',
+          proposal.user_id,
+          proposal.nome,
+          'Sopravvissuto',
+          defaultData,
+          new Date().toISOString()
+        );
+      }
+    }
+
+    const updatedProposal = await db.get('SELECT * FROM proposte WHERE id = ?', id);
+    res.json({ proposal: updatedProposal });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -216,7 +266,6 @@ app.get('/api/master/count-proposals', async (req, res) => {
   }
 });
 
-// Fallback per servire l'interfaccia client se il server è esposto su una singola porta
 app.get('*', (req, res) => {
   res.sendFile(join(__dirname, '../client/index.html'));
 });

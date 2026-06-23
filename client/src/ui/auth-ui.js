@@ -164,8 +164,16 @@ function continueAsGuest() {
     window.guestMode = true;
     showGameScreen('Ospite');
 }
+
+function showAuthMessage(msg) {
+    const el = document.getElementById('auth-message');
+    if (el) el.textContent = msg;
+}
+
 window.showPlayerAuth = showPlayerAuth;
 window.showMasterAuth = showMasterAuth;
 window.loginUser = loginUser;
 window.registerUser = registerUser;
 window.continueAsGuest = continueAsGuest;
+window.showAuthMessage = showAuthMessage;
+window.showLandingScreen = showLandingScreen;

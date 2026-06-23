@@ -132,10 +132,13 @@ function segnaVittoria(idx) {
     aggiornaInterfaccia();
 }
 
-function renderSpedizioneModal() {
+async function renderSpedizioneModal() {
     const container = document.getElementById('spedizione-content');
     if (!container) return;
+    
+    // Ora l'await è valido grazie alla dichiarazione async della funzione
     const names = await loadCharacterNamesForUser();
+    
     if (inSpedizione.length === 0) {
         container.innerHTML = `<p>Nessun personaggio in spedizione.</p>`;
         return;
@@ -146,15 +149,7 @@ function renderSpedizioneModal() {
         const perkList = p.perks.length > 0 ? p.perks.map(perk => typeof perk === 'string' ? perk : perk.nome).join(' • ') : 'Nessuno';
         return `
             <div class="combat-card">
-        div.innerHTML = '<div><strong>${nome}</strong><div style="font-size:0.85rem;color:#aaa">${inParty ? 'In gioco' : 'Non in gioco'}</div></div>';
-        div.style.cursor = 'pointer';
-        div.onclick = () => {
-            // toggle selection
-            const prev = container.querySelector('.selected');
-            if (prev) prev.classList.remove('selected');
-            div.classList.add('selected');
-            selectedLobbyCharacter = nome;
-        };
+                <div class="combat-card-header" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
                     <strong>${p.nome}</strong>
                     <button class="combat-retreat" onclick="ritiraPersonaggio(${idx})">RITIRA</button>
                 </div>
@@ -166,7 +161,7 @@ function renderSpedizioneModal() {
                     <div style="margin-top:8px; font-size:0.85rem; color:#aaa;">Vittorie comb.: ${p.vittorieCombattimento}</div>
                     <div style="margin-top:8px; font-size:0.85rem; color:#ddd;">
                         <strong>PCA:</strong> 
-                        ${Object.entries(p.pca).filter(([, v]) => v > 0).map(([cat, val]) => `${cat.split(' ')[0]} ${val.toFixed(1)}`).join(' • ') || 'Nessuno'}
+                        ${Object.entries(p.pca || {}).filter(([, v]) => v > 0).map(([cat, val]) => `${cat.split(' ')[0]} ${val.toFixed(1)}`).join(' • ') || 'Nessuno'}
                     </div>
                 </div>
                 <div class="combat-buttons" style="display:grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap:8px; margin-bottom:12px;">
@@ -177,13 +172,13 @@ function renderSpedizioneModal() {
                     <button onclick="segnaVittoria(${idx})">Segna vittoria</button>
                     ${(() => {
                         let extras = '';
-                        if (hasPerk(p, 'Nato per combattere')) {
+                        if (typeof hasPerk === 'function' && hasPerk(p, 'Nato per combattere')) {
                             extras += `<button onclick="useInizioCombattimento(${idx})">Rigenera inizio</button>`;
                         }
-                        if (hasPerk(p, 'Guerriero')) {
+                        if (typeof hasPerk === 'function' && hasPerk(p, 'Guerriero')) {
                             extras += `<button onclick="useGuerrieroRigenera(${idx})">Rigenera Guerriero</button>`;
                         }
-                        if (p.perks.some(pp => pp.nome === "Fino all'ultimo")) {
+                        if (p.perks && p.perks.some(pp => pp.nome === "Fino all'ultimo")) {
                             extras += `<button onclick="toggleFinoAllUltimo(${idx})">${p.finoAllUltimoActive ? 'Disattiva FinoAll' : 'Usa Fino all\'ultimo'}</button>`;
                         }
                         return extras;
@@ -206,3 +201,4 @@ function renderSpedizioneModal() {
 }
 window.mandaTuttiInSpedizione = mandaTuttiInSpedizione;
 window.chiudiSpedizione = chiudiSpedizione;
+window.ritiraTutti = ritiraTutti;
