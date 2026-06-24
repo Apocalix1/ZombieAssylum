@@ -224,8 +224,13 @@ function scheduleConserva(idx) {
 }
 
 function completeCucina(p) {
-    magazzino.piattiDeliziosi += 12;
-    alert(`${p.nome} ha completato la cucina: +12 piatti deliziosi.`);
+    let piattiFinali = 12;
+    if (p.hasPerk && p.hasPerk('Ottimo cuoco')) {
+        piattiFinali = Math.floor(12 * 1.2);
+    }
+    
+    magazzino.piattiDeliziosi += piattiFinali;
+    alert(`${p.nome} ha completato la cucina: +${piattiFinali} piatti deliziosi.`);
     aggiornaInterfaccia();
 }
 
@@ -246,9 +251,11 @@ function bevi(idx, qty = null) {
 
     magazzino.acqua -= qty;
     recordResourceConsumption(p, qty, 'acqua');
+    window.consumiGlobali += qty; checkRazionamento();
+
     if (p.sete >= 4) p.timers.buffSete = 6;
     p.sete = Math.min(5, p.sete + qty * getWaterEfficiency(p));
-    p.timers.seteSoddisfatta = 2;
+    p.timers.seteSoddisfatta = 2; // Non menziona Adattamento qui, di solito è solo cibo, se serve cambia in 4
     aggiornaInterfaccia();
 }
 
@@ -275,6 +282,13 @@ function nutri(idx, tipo = 'normale', qty = null) {
     const p = party[idx];
     if (!p) return;
 
+    // Perk Angelo di Casa: Controllo chi ha cucinato (Assumiamo che se il magazzino ha piatti, qualcuno li ha cucinati, 
+    // ma qui controlliamo se QUALCUNO nel party ha Angelo di casa per semplificare, oppure se P ha il buff).
+    // Per precisione, applichiamo il buff Ben Nutrito se è un pasto delizioso.
+    
+    // Perk Adattamento alimentare: durata estesa di "Appena Nutrito"
+    const durataFameSoddisfatta = p.hasPerk && p.hasPerk('Adattamento alimentare') ? 5 : 3;
+
     // --- OPZIONE 1: PASTO DELIZIOSO ---
     if (tipo === 'delizioso') {
         if (magazzino.piattiDeliziosi <= 0) {
@@ -283,10 +297,19 @@ function nutri(idx, tipo = 'normale', qty = null) {
         }
         magazzino.piattiDeliziosi -= 1;
         recordResourceConsumption(p, 1);
+        window.consumiGlobali++; checkRazionamento();
+
         const deliziosoGain = 0.3 * getFoodEfficiency(p);
         p.fame = Math.min(16, p.fame + deliziosoGain);
-        if (p.fame >= 14) p.timers.buffFame = 6;
-        p.timers.fameSoddisfatta = 3;
+        
+        // Perk Angelo di Casa (Se presente nel party, diamo il buff anche se la barra non è a 14)
+        const hasAngeloDiCasaParty = party.some(pg => pg.hasPerk && pg.hasPerk('Angelo di Casa'));
+        if (p.fame >= 14 || hasAngeloDiCasaParty) {
+            p.timers.buffFame = 6; 
+            if (p.nutriSpeciale) p.nutriSpeciale('delizioso');
+        }
+        
+        p.timers.fameSoddisfatta = durataFameSoddisfatta;
         p.follia = Math.max(0, p.follia - 1);
         if (p.masteries && p.masteries.map(m => m.toLowerCase()).includes('cucina')) {
             p.puntiFortuna = Math.min(p.puntiFortunaMax, p.puntiFortuna + 1);
@@ -308,32 +331,44 @@ function nutri(idx, tipo = 'normale', qty = null) {
 
         magazzino.ciboaviarto -= qty;
         recordResourceConsumption(p, qty);
+        window.consumiGlobali += qty; checkRazionamento();
         
-        // Ogni unità dà un valore nutrizionale fisso di 0.15 tacche (moltiplicato per l'efficienza del PG)
-        const avariatoGain = qty * 0.15 * getFoodEfficiency(p);
+        // Perk Stomaco di ferro / sensibile
+        let moltiplicatoreAvariato = 1;
+        if (p.hasPerk && p.hasPerk('Stomaco di ferro')) moltiplicatoreAvariato = 2;
+        if (p.hasPerk && p.hasPerk('Stomaco sensibile')) moltiplicatoreAvariato = 0.5;
+
+        const avariatoGain = qty * 0.15 * getFoodEfficiency(p) * moltiplicatoreAvariato;
         p.fame = Math.min(16, p.fame + avariatoGain);
-        p.timers.fameSoddisfatta = 3;
+        p.timers.fameSoddisfatta = durataFameSoddisfatta;
         if (p.fame >= 14) p.timers.buffFame = 6;
 
-        // Mangiare cibo avariato aumenta la follia (1 punto fisso per sessione di pasto avariato)
-        p.follia += 1;
+        // Perk Schizzinoso: raddoppia la follia
+        let dannoFollia = 1;
+        if (p.hasPerk && p.hasPerk('Schizzinoso')) dannoFollia = 2;
+        p.follia += dannoFollia;
 
-        alert(`${p.nome} ha mangiato del cibo avariato. Fame +${avariatoGain.toFixed(2)}, la follia aumenta!`);
+        if (p.nutriSpeciale) p.nutriSpeciale('avariato');
 
-        // TIRO SALVEZZA SU COSTITUZIONE (CD 14) per non ammalarsi
-        // Usiamo il metodo del personaggio per calcolare i dettagli passandogli 'Costituzione'
-        const costMod = p.getStatDettagliata ? p.getStatDettagliata('Costituzione').mod : 0;
-        const dado = rollDice(1, 20);
+        alert(`${p.nome} ha mangiato cibo avariato. Fame +${avariatoGain.toFixed(2)}, follia +${dannoFollia}!`);
+
+        // TIRO SALVEZZA SU COSTITUZIONE
+        let costMod = p.getStatDettagliata ? p.getStatDettagliata('Costituzione').mod : 0;
+        
+        // Bonus/Malus Stomaco
+        if (p.hasPerk && p.hasPerk('Stomaco di ferro')) costMod += 2;
+        if (p.hasPerk && p.hasPerk('Stomaco sensibile')) costMod -= 2;
+
+        const dado = typeof rollDice === 'function' ? rollDice(1, 20) : Math.floor(Math.random() * 20) + 1;
         const totaleTS = dado + costMod;
 
-        alert(`Tiro Salvezza su Costituzione per ${p.nome}: ${dado} + (${costMod}) = ${totaleTS} (CD 14)`);
+        alert(`TS Costituzione per ${p.nome}: ${dado} + (${costMod}) = ${totaleTS} (CD 14)`);
 
         if (totaleTS < 14) {
-            alert(`Malus! ${p.nome} ha fallito il tiro salvezza ed è rimasto intossicato/ammalato dal cibo marcio.`);
-            // Qui puoi inserire il flag della malattia del tuo sistema, ad esempio:
-            // p.ammalato = true; o p.aggiungiStato('Ammalato');
+            alert(`Malus! ${p.nome} ha fallito il tiro ed è rimasto intossicato/ammalato.`);
+            // Inserisci qui l'effetto malattia
         } else {
-            alert(`${p.nome} ha uno stomaco d'acciaio! Ha resistito all'infezione.`);
+            alert(`${p.nome} ha resistito all'infezione.`);
         }
 
         aggiornaInterfaccia();
@@ -351,8 +386,27 @@ function nutri(idx, tipo = 'normale', qty = null) {
 
     magazzino.cibo -= qty;
     recordResourceConsumption(p, qty);
+    window.consumiGlobali += qty; checkRazionamento();
+
     if (p.fame >= 14) p.timers.buffFame = 6;
     p.fame = Math.min(16, p.fame + qty * getFoodEfficiency(p)); 
-    p.timers.fameSoddisfatta = 3;
+    p.timers.fameSoddisfatta = durataFameSoddisfatta;
     aggiornaInterfaccia();
 }
+
+function checkRazionamento() {
+    if (window.consumiGlobali >= 15) {
+        window.consumiGlobali -= 15;
+        party.forEach(p => {
+            if (p.hasPerk && p.hasPerk('Razionamento')) {
+                p.fame = Math.min(16, p.fame + 0.25);
+                p.sete = Math.min(5, p.sete + 0.25);
+            }
+        });
+        if (typeof mostraNotificaInAlto === 'function') {
+            mostraNotificaInAlto(`📦 Razionamento attivato! I personaggi con il perk hanno recuperato 0.25 di fame e sete.`, "successo");
+        }
+    }
+}
+
+window.consumiGlobali = window.consumiGlobali || 0;

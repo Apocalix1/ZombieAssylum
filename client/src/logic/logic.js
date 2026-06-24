@@ -143,7 +143,7 @@ export class Personaggio {
         this.contatoreCiboAvariato = 0;
         this.contatoreCiboDelizioso = 0;
         this.staminaBase = 4;
-        this.velcotiaBase=9;
+        this.velcotiaBase = 9;
         this.puntiFeritaRealiMaxBase = 5;
         this.puntiFeritaReali = 5;
         this.puntiFortunaMax = 15;
@@ -335,12 +335,12 @@ export class Personaggio {
     }
 
     get descrizioneFollia() {
-    const f = this.follia;
-    if (f <= 8) return "Stabile (Nessun sintomo)";
-    if (f <= 15) return "Ossessioni, tic nervosi e comportamenti impulsivi";
-    if (f <= 17) return "Tratti peggiori amplificati notevolmente";
-    if (f <= 19) return "Allucinazioni visive e uditive persistenti";
-    return "Totalmente Impazzito (Irrecuperabile - Sostituire personaggio)";
+        const f = this.follia;
+        if (f <= 8) return "Stabile (Nessun sintomo)";
+        if (f <= 15) return "Ossessioni, tic nervosi e comportamenti impulsivi";
+        if (f <= 17) return "Tratti peggiori amplificati notevolmente";
+        if (f <= 19) return "Allucinazioni visive e uditive persistenti";
+        return "Totalmente Impazzito (Irrecuperabile - Sostituire personaggio)";
     }
 
     get faticaTotale() {
@@ -352,10 +352,21 @@ export class Personaggio {
         if (this.puntiFeritaReali <= 2 && this.puntiFeritaReali > 0) {
             f += 2;
         }
-        return Math.min(6, Math.max(0, f));
+
+        let minFatica = 0;
+        let maxFatica = 6;
+
+        // Perk Carroarmato: Aggiunge uno stadio intermedio 0.5 e un cap più alto
+        if (this.hasPerk && this.hasPerk('Carroarmato')) {
+            maxFatica = 7;
+            // Se c'è almeno un po' di fatica base, ma non abbastanza per 1
+            if (f > 0 && f < 1) f = 0.5; 
+        }
+
+        return Math.min(maxFatica, Math.max(minFatica, f));
     }
 
-     get woundDetail() {
+    get woundDetail() {
         return `${this.woundState}: ${this.woundEffectText}`;
     }
 
@@ -379,7 +390,6 @@ export class Personaggio {
         if (pf >= 1) return "Rischio di morte";
         return "Morto";
     }
-
 
     get woundEffectText() {
         switch (this.woundState) {
@@ -406,7 +416,7 @@ export class Personaggio {
         }
     }
 
-     get maxOreRiposo() {
+    get maxOreRiposo() {
         let max = 24;
         if (this.stadioSete >= 2) max = Math.min(max, 4);
         if (this.stadioFame >= 3) max = Math.min(max, 8);
@@ -425,43 +435,43 @@ export class Personaggio {
     }
 
     get staminaMax() {
-    if (this.isRobot) return 99;
-    let s = this.staminaBase;
+        if (this.isRobot) return 99;
+        let s = this.staminaBase;
 
-    // --- 1. MODIFICATORI DEI PERK (Permanenti) ---
-    if (this.perks && this.perks.length > 0) {
-        // Controlliamo la presenza dei perk usando l'oggetto
-        if (this.perks.some(p => p.nome === "Atleta")) {
-            s += 1;
+        // --- 1. MODIFICATORI DEI PERK (Permanenti) ---
+        if (this.perks && this.perks.length > 0) {
+            // Controlliamo la presenza dei perk usando l'oggetto
+            if (this.perks.some(p => p.nome === "Atleta")) {
+                s += 1;
+            }
+            if (this.perks.some(p => p.nome === "Obeso")) {
+                s -= 2;
+            }
+            if (this.perks.some(p => p.nome === "Sottopeso" || p.nome === "Sovrappeso")) {
+                // Gestisce sia il 'Sottopeso' del listino che il 'Sovrapeso' della tua richiesta
+                s -= 1;
+            }
+            if (this.perks.some(p => p.nome && p.nome.startsWith("Anziana"))) {
+                s -= 1;
+            }
         }
-        if (this.perks.some(p => p.nome === "Obeso")) {
-            s -= 2;
-        }
-        if (this.perks.some(p => p.nome === "Sottopeso" || p.nome === "Sovrappeso")) { 
-            // Gestisce sia il 'Sottopeso' del listino che il 'Sovrapeso' della tua richiesta
+
+        // --- 2. MODIFICATORE DI FORZA (Dinamico) ---
+        s += this.getStatDettagliata('Forza').mod;
+        if (this.stadioFame >= 2) s -= 1;
+        if (this.stadioSete >= 3) s -= 2;
+        if (this.faticaTotale >= 2) s -= 1;
+
+        if (this.puntiFeritaReali <= 3 && this.puntiFeritaReali > 0) {
             s -= 1;
         }
-        if (this.perks.some(p => p.nome && p.nome.startsWith("Anziana"))) {
-            s -= 1;
+
+        // Crollo totale da fatica estrema
+        if (this.faticaTotale >= 5) {
+            s = 1;
         }
-    }
 
-    // --- 2. MODIFICATORE DI FORZA (Dinamico) ---
-    s += this.getStatDettagliata('Forza').mod;
-    if (this.stadioFame >= 2) s -= 1;
-    if (this.stadioSete >= 3) s -= 2;
-    if (this.faticaTotale >= 2) s -= 1;
-    
-    if (this.puntiFeritaReali <= 3 && this.puntiFeritaReali > 0) {
-        s -= 1;
-    }
-    
-    // Crollo totale da fatica estrema
-    if (this.faticaTotale >= 5) {
-        s = 1;
-    }
-
-    return Math.max(0, s);
+        return Math.max(0, s);
     }
 
     get malusFaticaDettagliati() {
@@ -477,199 +487,199 @@ export class Personaggio {
     }
 
     // --- IL "CERVELLO" DELLE STATISTICHE ---
-getStatDettagliata(statNome) {
-    const nomeLower = statNome.toLowerCase();
-    let valoreBase = this[nomeLower];
-    let motivi = [];
+    getStatDettagliata(statNome) {
+        const nomeLower = statNome.toLowerCase();
+        let valoreBase = this[nomeLower];
+        let motivi = [];
 
-    // --- 1. APPLICAZIONE DEI PERK ---
-    if (this.perks && this.perks.length > 0) {
-        const haPerk = (nome) => this.perks.some(p => p.nome === nome);
-        const haAnzianaVariante = (variante) => this.perks.some(p => p.nome === variante);
-        const eAnziana = this.perks.some(p => p.nome && p.nome.startsWith("Anziana"));
+        // --- 1. APPLICAZIONE DEI PERK ---
+        if (this.perks && this.perks.length > 0) {
+            const haPerk = (nome) => this.perks.some(p => p.nome === nome);
+            const haAnzianaVariante = (variante) => this.perks.some(p => p.nome === variante);
+            const eAnziana = this.perks.some(p => p.nome && p.nome.startsWith("Anziana"));
 
-        if (statNome === "Forza") {
-            if (haPerk("Palestrato")) { valoreBase += 1; motivi.push("Palestrato (+1)"); }
-            if (haPerk("Grande taglia")) { valoreBase += 2; motivi.push("Grande taglia (+2)"); }
-            if (haPerk("Piccola taglia")) { valoreBase -= 2; motivi.push("Piccola taglia (-2)"); }
-            if (haPerk("Anoressico")) { valoreBase -= 2; motivi.push("Anoressico (-2)"); }
-            if (haPerk("Sottopeso")) { valoreBase -= 1; motivi.push("Sottopeso (-1)"); }
-            if (eAnziana) { valoreBase -= 1; motivi.push("Anziana (-1)"); }
+            if (statNome === "Forza") {
+                if (haPerk("Palestrato")) { valoreBase += 1; motivi.push("Palestrato (+1)"); }
+                if (haPerk("Grande taglia")) { valoreBase += 2; motivi.push("Grande taglia (+2)"); }
+                if (haPerk("Piccola taglia")) { valoreBase -= 2; motivi.push("Piccola taglia (-2)"); }
+                if (haPerk("Anoressico")) { valoreBase -= 2; motivi.push("Anoressico (-2)"); }
+                if (haPerk("Sottopeso")) { valoreBase -= 1; motivi.push("Sottopeso (-1)"); }
+                if (eAnziana) { valoreBase -= 1; motivi.push("Anziana (-1)"); }
+            }
+            if (statNome === "Costituzione") {
+                if (haPerk("Palestrato")) { valoreBase += 1; motivi.push("Palestrato (+1)"); }
+                if (haPerk("Grande taglia")) { valoreBase += 1; motivi.push("Grande taglia (+1)"); }
+                if (haPerk("Anoressico")) { valoreBase -= 1; motivi.push("Anoressico (-1)"); }
+                if (haPerk("Obeso")) { valoreBase += 2; motivi.push("Obeso (+2)"); }
+                if (eAnziana) { valoreBase -= 1; motivi.push("Anziana (-1)"); }
+            }
+            if (statNome === "Destrezza") {
+                if (haPerk("Piccola taglia")) { valoreBase += 2; motivi.push("Piccola taglia (+2)"); }
+            }
+            if (statNome === "Carisma") {
+                if (haPerk("Bel Viso")) { valoreBase += 1; motivi.push("Bel Viso (+1)"); }
+                if (haAnzianaVariante("Anziana_Bilanciata")) { valoreBase += 1; motivi.push("Anziana Saggia (+1)"); }
+                if (haAnzianaVariante("Anziana_Carisma")) { valoreBase += 2; motivi.push("Anziana Carismatica (+2)"); }
+            }
+            if (statNome === "Saggezza") {
+                if (haAnzianaVariante("Anziana_Bilanciata")) { valoreBase += 1; motivi.push("Anziana Saggia (+1)"); }
+                if (haAnzianaVariante("Anziana_Saggezza")) { valoreBase += 2; motivi.push("Anziana Venerabile (+2)"); }
+            }
         }
-        if (statNome === "Costituzione") {
-            if (haPerk("Palestrato")) { valoreBase += 1; motivi.push("Palestrato (+1)"); }
-            if (haPerk("Grande taglia")) { valoreBase += 1; motivi.push("Grande taglia (+1)"); }
-            if (haPerk("Anoressico")) { valoreBase -= 1; motivi.push("Anoressico (-1)"); }
-            if (haPerk("Obeso")) { valoreBase += 2; motivi.push("Obeso (+2)"); }
-            if (eAnziana) { valoreBase -= 1; motivi.push("Anziana (-1)"); }
+
+        // Calcoliamo l'eccedenza prima di tagliare al cap di 20
+        let eccedenza = 0;
+        if (valoreBase > 20) {
+            eccedenza = valoreBase - 20;
+            valoreBase = 20;
+            motivi.push(`Cap Massimo Raggiunto (Eccedenza: +${eccedenza})`);
         }
-        if (statNome === "Destrezza") {
-            if (haPerk("Piccola taglia")) { valoreBase += 2; motivi.push("Piccola taglia (+2)"); }
+
+        // --- 2. CALCOLO DEI MODIFICATORI FONDAMENTALI ---
+        let modBase = Math.floor((valoreBase - 10) / 2);
+        let modFinale = modBase;
+
+        // --- 3. BUFF TEMPORANEI ---
+        if (this.timers.buffFame > 0 && (statNome === "Forza" || statNome === "Costituzione")) modFinale += 1;
+        if (this.timers.buffSete > 0 && (statNome === "Destrezza" || statNome === "Intelligenza")) modFinale += 1;
+        if (this.timers.buffSonno > 0 && (statNome === "Saggezza" || statNome === "Carisma")) modFinale += 1;
+
+        // --- 4. DEBUFF TEMPORANEI ---
+        if (statNome === "Forza" && this.stadioFame >= 1) modFinale -= 2;
+        if (statNome === "Costituzione" && this.stadioFame >= 4) modFinale -= 2;
+        if ((statNome === "Intelligenza" || statNome === "Destrezza") && this.stadioSete >= 1) modFinale -= 2;
+        if ((statNome === "Carisma" || statNome === "Saggezza") && this.stadioSonno >= 1) modFinale -= 2;
+
+        return {
+            nome: statNome.toUpperCase(),
+            valore: valoreBase,
+            eccedenza: eccedenza, // <--- IMPORTANTISSIMO PER IL TASTO MENO
+            mod: modFinale,
+            modBase: modBase,
+            info: motivi
+        };
+    }
+
+    getCastingAttribute() {
+        // Scegli la caratteristica da incantatore in base al modificatore FISSO base (modBase),
+        // ignorando buff/debuff temporanei che influenzano il valore corrente.
+        const candidates = ['Intelligenza', 'Saggezza', 'Carisma'];
+        let best = candidates[0];
+        let bestMod = -Infinity;
+        for (const attr of candidates) {
+            const det = this.getStatDettagliata ? this.getStatDettagliata(attr) : null;
+            const modBase = det ? (typeof det.modBase === 'number' ? det.modBase : det.mod) : (this[attr.toLowerCase()] || 0);
+            if (modBase > bestMod) {
+                bestMod = modBase;
+                best = attr;
+            }
         }
-        if (statNome === "Carisma") {
-            if (haPerk("Bel Viso")) { valoreBase += 1; motivi.push("Bel Viso (+1)"); }
-            if (haAnzianaVariante("Anziana_Bilanciata")) { valoreBase += 1; motivi.push("Anziana Saggia (+1)"); }
-            if (haAnzianaVariante("Anziana_Carisma")) { valoreBase += 2; motivi.push("Anziana Carismatica (+2)"); }
-        }
-        if (statNome === "Saggezza") {
-            if (haAnzianaVariante("Anziana_Bilanciata")) { valoreBase += 1; motivi.push("Anziana Saggia (+1)"); }
-            if (haAnzianaVariante("Anziana_Saggezza")) { valoreBase += 2; motivi.push("Anziana Venerabile (+2)"); }
-        }
+        return best;
     }
 
-    // Calcoliamo l'eccedenza prima di tagliare al cap di 20
-    let eccedenza = 0;
-    if (valoreBase > 20) {
-        eccedenza = valoreBase - 20;
-        valoreBase = 20;
-        motivi.push(`Cap Massimo Raggiunto (Eccedenza: +${eccedenza})`);
+    getCastingModifier() {
+        return this.getStatDettagliata(this.getCastingAttribute()).mod;
     }
 
-    // --- 2. CALCOLO DEI MODIFICATORI FONDAMENTALI ---
-    let modBase = Math.floor((valoreBase - 10) / 2);
-    let modFinale = modBase;
+    hasArcanoMastery() {
+        const normalized = (this.masteries || []).map(m => String(m || '').toLowerCase());
+        return this.livelloMagia >= 5 || normalized.includes('arcano');
+    }
 
-    // --- 3. BUFF TEMPORANEI ---
-    if (this.timers.buffFame > 0 && (statNome === "Forza" || statNome === "Costituzione")) modFinale += 1;
-    if (this.timers.buffSete > 0 && (statNome === "Destrezza" || statNome === "Intelligenza")) modFinale += 1;
-    if (this.timers.buffSonno > 0 && (statNome === "Saggezza" || statNome === "Carisma")) modFinale += 1;
+    getManaMaxFromLevel(livello) {
+        const manaPerLivello = [0, 4, 6, 9, 12, 16, 20, 24, 28, 32];
+        const base = manaPerLivello[Math.min(Math.max(0, livello), manaPerLivello.length - 1)] || 0;
+        const bonusPerk = this.perks && this.perks.some(p => p.nome === 'Apprendista mago') ? 4 : 0;
+        return base + bonusPerk + (this.hasArcanoMastery() ? 2 : 0);
+    }
 
-    // --- 4. DEBUFF TEMPORANEI ---
-    if (statNome === "Forza" && this.stadioFame >= 1) modFinale -= 2;
-    if (statNome === "Costituzione" && this.stadioFame >= 4) modFinale -= 2;
-    if ((statNome === "Intelligenza" || statNome === "Destrezza") && this.stadioSete >= 1) modFinale -= 2;
-    if ((statNome === "Carisma" || statNome === "Saggezza") && this.stadioSonno >= 1) modFinale -= 2;
+    getManaSpellCost(livelloIncantesimo) {
+        const costi = { 0: 1, 1: 2, 2: 4, 3: 7, 4: 11 };
+        return costi[Math.min(Math.max(0, livelloIncantesimo), 4)] || 0;
+    }
 
-    return {
-        nome: statNome.toUpperCase(),
-        valore: valoreBase, 
-        eccedenza: eccedenza, // <--- IMPORTANTISSIMO PER IL TASTO MENO
-        mod: modFinale,
-        modBase: modBase,
-        info: motivi 
-    };
-}
+    getMaxKnownSpells(livelloIncantesimo) {
+        if (this.livelloMagia < livelloIncantesimo) return 0;
+        const maxSpells = { 0: 2, 1: 3, 2: 2, 3: 2, 4: 1 };
+        return maxSpells[livelloIncantesimo] || 0;
+    }
 
-getCastingAttribute() {
-    // Scegli la caratteristica da incantatore in base al modificatore FISSO base (modBase),
-    // ignorando buff/debuff temporanei che influenzano il valore corrente.
-    const candidates = ['Intelligenza', 'Saggezza', 'Carisma'];
-    let best = candidates[0];
-    let bestMod = -Infinity;
-    for (const attr of candidates) {
-        const det = this.getStatDettagliata ? this.getStatDettagliata(attr) : null;
-        const modBase = det ? (typeof det.modBase === 'number' ? det.modBase : det.mod) : (this[attr.toLowerCase()] || 0);
-        if (modBase > bestMod) {
-            bestMod = modBase;
-            best = attr;
+    getManaOverloadPenalty() {
+        return Math.max(0, -Math.min(0, this.manaAttuale));
+    }
+
+    updateManaFromMagiaLevel() {
+        const nuovaMax = this.getManaMaxFromLevel(this.livelloMagia);
+        this.manaMax = nuovaMax;
+        if (this.manaAttuale == null || this.manaAttuale <= 0) {
+            this.manaAttuale = nuovaMax;
+        } else {
+            this.manaAttuale = Math.min(this.manaAttuale, nuovaMax);
         }
     }
-    return best;
-}
 
-getCastingModifier() {
-    return this.getStatDettagliata(this.getCastingAttribute()).mod;
-}
-
-hasArcanoMastery() {
-    const normalized = (this.masteries || []).map(m => String(m || '').toLowerCase());
-    return this.livelloMagia >= 5 || normalized.includes('arcano');
-}
-
-getManaMaxFromLevel(livello) {
-    const manaPerLivello = [0, 4, 6, 9, 12, 16, 20, 24, 28, 32];
-    const base = manaPerLivello[Math.min(Math.max(0, livello), manaPerLivello.length - 1)] || 0;
-    const bonusPerk = this.perks && this.perks.some(p => p.nome === 'Apprendista mago') ? 4 : 0;
-    return base + bonusPerk + (this.hasArcanoMastery() ? 2 : 0);
-}
-
-getManaSpellCost(livelloIncantesimo) {
-    const costi = { 0: 1, 1: 2, 2: 4, 3: 7, 4: 11 };
-    return costi[Math.min(Math.max(0, livelloIncantesimo), 4)] || 0;
-}
-
-getMaxKnownSpells(livelloIncantesimo) {
-    if (this.livelloMagia < livelloIncantesimo) return 0;
-    const maxSpells = { 0: 2, 1: 3, 2: 2, 3: 2, 4: 1 };
-    return maxSpells[livelloIncantesimo] || 0;
-}
-
-getManaOverloadPenalty() {
-    return Math.max(0, -Math.min(0, this.manaAttuale));
-}
-
-updateManaFromMagiaLevel() {
-    const nuovaMax = this.getManaMaxFromLevel(this.livelloMagia);
-    this.manaMax = nuovaMax;
-    if (this.manaAttuale == null || this.manaAttuale <= 0) {
-        this.manaAttuale = nuovaMax;
-    } else {
-        this.manaAttuale = Math.min(this.manaAttuale, nuovaMax);
+    getManaRecoveryPerShortRest() {
+        const base = Math.max(0, this.livelloMagia);
+        if (!base) return 0;
+        let recovery = base;
+        if (this.hasArcanoMastery()) {
+            recovery += rollDice(1, 4);
+        }
+        return recovery;
     }
-}
 
-getManaRecoveryPerShortRest() {
-    const base = Math.max(0, this.livelloMagia);
-    if (!base) return 0;
-    let recovery = base;
-    if (this.hasArcanoMastery()) {
-        recovery += rollDice(1, 4);
+    getManaRecoveryOnLongRest() {
+        return this.livelloMagia;
     }
-    return recovery;
-}
 
-getManaRecoveryOnLongRest() {
-    return this.livelloMagia;
-}
-
-isRestAction() {
-    if (this.isRobot) return false;
-    if (this.inSpedizione) return false;
-    const nonRestTypes = ['esplora', 'allenamento', 'medicina', 'spedizione'];
-    return !this.azioneCorrente || !nonRestTypes.includes(this.azioneCorrente.tipo);
-}
-
-getRestMultiplier() {
-    if (!this.isRestAction()) return 0;
-
-    let multiplier = 1;
-    const halfRestActions = ['cucina', 'conserva', 'studio', 'studio-libro', 'alchimia', 'alchimia-assistenza', 'artificeria'];
-    if (this.azioneCorrente && halfRestActions.includes(this.azioneCorrente.tipo)) {
-        multiplier *= 0.5;
+    isRestAction() {
+        if (this.isRobot) return false;
+        if (this.inSpedizione) return false;
+        const nonRestTypes = ['esplora', 'allenamento', 'medicina', 'spedizione'];
+        return !this.azioneCorrente || !nonRestTypes.includes(this.azioneCorrente.tipo);
     }
-    if (this.azioneCorrente && this.azioneCorrente.tipo === 'dormi') {
-        multiplier *= 1.5;
+
+    getRestMultiplier() {
+        if (!this.isRestAction()) return 0;
+
+        let multiplier = 1;
+        const halfRestActions = ['cucina', 'conserva', 'studio', 'studio-libro', 'alchimia', 'alchimia-assistenza', 'artificeria'];
+        if (this.azioneCorrente && halfRestActions.includes(this.azioneCorrente.tipo)) {
+            multiplier *= 0.5;
+        }
+        if (this.azioneCorrente && this.azioneCorrente.tipo === 'dormi') {
+            multiplier *= 1.5;
+        }
+        if (this.timers.buffFame > 0) multiplier += 0.2;
+        if (this.timers.buffSete > 0) multiplier += 0.2;
+        if (this.timers.buffSonno > 0) multiplier += 0.2;
+        multiplier -= 0.2 * this.faticaTotale;
+        return Math.max(0, multiplier);
     }
-    if (this.timers.buffFame > 0) multiplier += 0.2;
-    if (this.timers.buffSete > 0) multiplier += 0.2;
-    if (this.timers.buffSonno > 0) multiplier += 0.2;
-    multiplier -= 0.2 * this.faticaTotale;
-    return Math.max(0, multiplier);
-}
 
-canSpendMana(costo) {
-    if (typeof costo !== 'number' || costo <= 0) return true;
-    const sogliaNegativa = Math.max(1, this.livelloMagia);
-    return this.manaAttuale - costo >= -sogliaNegativa;
-}
+    canSpendMana(costo) {
+        if (typeof costo !== 'number' || costo <= 0) return true;
+        const sogliaNegativa = Math.max(1, this.livelloMagia);
+        return this.manaAttuale - costo >= -sogliaNegativa;
+    }
 
-spendMana(costo) {
-    if (!this.canSpendMana(costo)) return false;
-    this.manaAttuale -= costo;
-    return true;
-}
+    spendMana(costo) {
+        if (!this.canSpendMana(costo)) return false;
+        this.manaAttuale -= costo;
+        return true;
+    }
 
-getBonusCompetenza() {
-    const giorniAttivi = Math.floor(oreTotali / 24) - this.giornoInizio;
-    if (giorniAttivi < 10) return 2;
-    if (giorniAttivi < 20
-        
-    ) return 3;
-    if (giorniAttivi < 40) return 4;
-    return 5;
-}
+    getBonusCompetenza() {
+        const giorniAttivi = Math.floor(oreTotali / 24) - this.giornoInizio;
+        if (giorniAttivi < 10) return 2;
+        if (giorniAttivi < 20
+
+        ) return 3;
+        if (giorniAttivi < 40) return 4;
+        return 5;
+    }
     // --- SISTEMA COMPETENZE (calcolo rating per abilità basato su perk e malus) ---
-getPerkSkillCounts() {
+    getPerkSkillCounts() {
         const counts = {};
         this.perks.forEach(perk => {
             if (!perk) return;
@@ -691,101 +701,101 @@ getPerkSkillCounts() {
         return counts;
     }
 
-getSkillRating(skill) {
-    if (!skill) return 0;
-    const skillKey = skill.toLowerCase().trim();
-    let punteggioAbilita = 0;
+    getSkillRating(skill) {
+        if (!skill) return 0;
+        const skillKey = skill.toLowerCase().trim();
+        let punteggioAbilita = 0;
 
-    if (this.perks && Array.isArray(this.perks)) {
-        this.perks.forEach(perk => {
-            if (!perk) return;
+        if (this.perks && Array.isArray(this.perks)) {
+            this.perks.forEach(perk => {
+                if (!perk) return;
 
-            // 1. Controlla le competenze (+1)
-            if (perk.skills && Array.isArray(perk.skills)) {
-                if (perk.skills.map(s => s.toLowerCase().trim()).includes(skillKey)) {
-                    punteggioAbilita += 1;
+                // 1. Controlla le competenze (+1)
+                if (perk.skills && Array.isArray(perk.skills)) {
+                    if (perk.skills.map(s => s.toLowerCase().trim()).includes(skillKey)) {
+                        punteggioAbilita += 1;
+                    }
                 }
-            }
 
-            // 2. Controlla gli svantaggi dal nuovo array JSON (-1)
-            if (perk.disadvantages && Array.isArray(perk.disadvantages)) {
-                if (perk.disadvantages.map(s => s.toLowerCase().trim()).includes(skillKey)) {
-                    punteggioAbilita -= 1;
+                // 2. Controlla gli svantaggi dal nuovo array JSON (-1)
+                if (perk.disadvantages && Array.isArray(perk.disadvantages)) {
+                    if (perk.disadvantages.map(s => s.toLowerCase().trim()).includes(skillKey)) {
+                        punteggioAbilita -= 1;
+                    }
                 }
-            }
-        });
-    }
-    if (this.competenze && Array.isArray(this.competenze)) {
-        if (this.competenze.map(c => c.toLowerCase().trim()).includes(skillKey)) {
-            punteggioAbilita += 1;
+            });
         }
-    }
-    return Math.max(-2, Math.min(2, punteggioAbilita));
-}
-
-
-getSkillModifierForCheck(skill) {
-    const rating = this.getSkillRating(skill);
-    const skillKey = (skill || '').toLowerCase().trim();
-    
-    // Mappatura Abilità -> Statistica Madre
-    const map = {
-        'atletica': 'Forza', 'acrobazia': 'Destrezza', 'acrobazie': 'Destrezza', 'sopravvivenza': 'Saggezza',
-        'inganno': 'Carisma', 'indagare': 'Intelligenza', 'giochi di carte': 'Carisma', 'rapidità di mano': 'Destrezza',
-        'percezione': 'Saggezza', 'persuasione': 'Carisma', 'furtività': 'Destrezza', 'manodopera': 'Destrezza'
-    };
-    const attr = map[skillKey] || map[skill.charAt(0).toUpperCase() + skill.slice(1)] || 'Intelligenza';
-    
-    const attrMod = this.getStatDettagliata(attr).mod;
-    const prof = this.getBonusCompetenza();
-
-    let modifier = attrMod;
-    let sbloccaNuovaAbilita = false;
-    let svantaggioMeccanico = false;
-
-    // --- REGOLE DA 1 A 10 APPLICATE QUI ---
-    if (rating === 2) {
-        // "Se è a 2 aggiunge il bonus competenza 2 volte (e sblocca una nuova abilità)"
-        modifier = attrMod + (prof * 2);
-        sbloccaNuovaAbilita = true; 
-    } 
-    else if (rating === 1) {
-        // "Se è a 1 aggiunge il bonus competenza"
-        modifier = attrMod + prof;
-    } 
-    else if (rating === -1) {
-        // "Se è a meno 1 il simulatore prende il risultato peggiore (Svantaggio)"
-        modifier = attrMod; // Nessun bonus numerico
-        svantaggioMeccanico = true; // Attiva il doppio lancio protetto
-    } 
-    else if (rating === -2) {
-        // "Se è a meno 2 al lancio con svantaggio si sottrae -3"
-        modifier = attrMod - 3; // Sottrae -3 fisso al modificatore
-        svantaggioMeccanico = true; // Mantiene lo svantaggio di lancio
+        if (this.competenze && Array.isArray(this.competenze)) {
+            if (this.competenze.map(c => c.toLowerCase().trim()).includes(skillKey)) {
+                punteggioAbilita += 1;
+            }
+        }
+        return Math.max(-2, Math.min(2, punteggioAbilita));
     }
 
-    // --- GESTIONE DEL VANTAGGIO / SVANTAGGIO DA FLAGG ESTERNI ---
-    const advantage = !!(this.vantaggi && (this.vantaggi[attr] || this.vantaggi[skillKey]));
-    const disadvantageFromFlags = !!(this.svantaggi && (this.svantaggi[attr] || this.svantaggi[skillKey]));
-    
-    // Studio Overload: colpisce solo le statistiche mentali (Intelligenza, Saggezza, Carisma)
-    const overloadDisadvantage = this.studyOverload && ['Intelligenza', 'Saggezza', 'Carisma'].includes(attr);
-    // Fatica epica
-    const fatigueDisadvantage = this.faticaTotale >= 1;
 
-    // Uniamo i pezzi: hai svantaggio se lo dice il rating (-1 o -2) o gli effetti ambientali
-    let disadvantage = false;
-    if (!advantage) {
-        disadvantage = svantaggioMeccanico || disadvantageFromFlags || overloadDisadvantage || fatigueDisadvantage;
+    getSkillModifierForCheck(skill) {
+        const rating = this.getSkillRating(skill);
+        const skillKey = (skill || '').toLowerCase().trim();
+
+        // Mappatura Abilità -> Statistica Madre
+        const map = {
+            'atletica': 'Forza', 'acrobazia': 'Destrezza', 'acrobazie': 'Destrezza', 'sopravvivenza': 'Saggezza',
+            'inganno': 'Carisma', 'indagare': 'Intelligenza', 'giochi di carte': 'Carisma', 'rapidità di mano': 'Destrezza',
+            'percezione': 'Saggezza', 'persuasione': 'Carisma', 'furtività': 'Destrezza', 'manodopera': 'Destrezza'
+        };
+        const attr = map[skillKey] || map[skill.charAt(0).toUpperCase() + skill.slice(1)] || 'Intelligenza';
+
+        const attrMod = this.getStatDettagliata(attr).mod;
+        const prof = this.getBonusCompetenza();
+
+        let modifier = attrMod;
+        let sbloccaNuovaAbilita = false;
+        let svantaggioMeccanico = false;
+
+        // --- REGOLE DA 1 A 10 APPLICATE QUI ---
+        if (rating === 2) {
+            // "Se è a 2 aggiunge il bonus competenza 2 volte (e sblocca una nuova abilità)"
+            modifier = attrMod + (prof * 2);
+            sbloccaNuovaAbilita = true;
+        }
+        else if (rating === 1) {
+            // "Se è a 1 aggiunge il bonus competenza"
+            modifier = attrMod + prof;
+        }
+        else if (rating === -1) {
+            // "Se è a meno 1 il simulatore prende il risultato peggiore (Svantaggio)"
+            modifier = attrMod; // Nessun bonus numerico
+            svantaggioMeccanico = true; // Attiva il doppio lancio protetto
+        }
+        else if (rating === -2) {
+            // "Se è a meno 2 al lancio con svantaggio si sottrae -3"
+            modifier = attrMod - 3; // Sottrae -3 fisso al modificatore
+            svantaggioMeccanico = true; // Mantiene lo svantaggio di lancio
+        }
+
+        // --- GESTIONE DEL VANTAGGIO / SVANTAGGIO DA FLAGG ESTERNI ---
+        const advantage = !!(this.vantaggi && (this.vantaggi[attr] || this.vantaggi[skillKey]));
+        const disadvantageFromFlags = !!(this.svantaggi && (this.svantaggi[attr] || this.svantaggi[skillKey]));
+
+        // Studio Overload: colpisce solo le statistiche mentali (Intelligenza, Saggezza, Carisma)
+        const overloadDisadvantage = this.studyOverload && ['Intelligenza', 'Saggezza', 'Carisma'].includes(attr);
+        // Fatica epica
+        const fatigueDisadvantage = this.faticaTotale >= 1;
+
+        // Uniamo i pezzi: hai svantaggio se lo dice il rating (-1 o -2) o gli effetti ambientali
+        let disadvantage = false;
+        if (!advantage) {
+            disadvantage = svantaggioMeccanico || disadvantageFromFlags || overloadDisadvantage || fatigueDisadvantage;
+        }
+
+        return {
+            modifier: modifier,
+            advantage: advantage,
+            disadvantage: disadvantage,
+            sbloccaMaestria: sbloccaNuovaAbilita // Passiamo l'informazione alla UI del gioco
+        };
     }
-
-    return { 
-        modifier: modifier, 
-        advantage: advantage, 
-        disadvantage: disadvantage,
-        sbloccaMaestria: sbloccaNuovaAbilita // Passiamo l'informazione alla UI del gioco
-    };
-}
 
     resetDailyStudy(currentHour) {
         if (this.ultimoStudioOre && currentHour - this.ultimoStudioOre >= 8) {
@@ -812,13 +822,22 @@ getSkillModifierForCheck(skill) {
 
         if (this.masteries && this.masteries.map(m => m.toLowerCase()).includes('sopravvivenza')) {
             competenzaBonus = bonus * 2;
-        } else if (this.competenze.some(c => c.toLowerCase() === 'sopravvivenza')) {
+        } else if (this.competenze && this.competenze.some(c => c.toLowerCase() === 'sopravvivenza')) {
             competenzaBonus = bonus;
         }
 
         const d20 = Math.floor(Math.random() * 20) + 1;
-        const total = d20 + sagMod + competenzaBonus;
-        return { d20, sagMod, competenzaBonus, total };
+        
+        // Raccattatore: aggiunge +2 al totale per la ricerca del loot
+        let raccattatoreBonus = 0;
+        if (this.hasPerk('Raccattatore')) {
+            raccattatoreBonus = 2;
+        }
+
+        const total = d20 + sagMod + competenzaBonus + raccattatoreBonus;
+        
+        // Ho inserito raccattatoreBonus nel return così l'interfaccia può eventualmente scriverlo nei log
+        return { d20, sagMod, competenzaBonus, raccattatoreBonus, total };
     }
 
     getStudyPoints(skill) {
@@ -829,7 +848,7 @@ getSkillModifierForCheck(skill) {
         return points;
     }
 
-hasCompetenza(skill) {
+    hasCompetenza(skill) {
         const key = (skill || '').toLowerCase().trim();
         if (this.competenze.some(s => (s || '').toLowerCase().trim() === key)) return true;
         if (this.masteries && this.masteries.map(m => m.toLowerCase()).includes(key)) return true;
@@ -837,7 +856,7 @@ hasCompetenza(skill) {
         return (counts[key] || 0) > 0;
     }
 
- registraVittoriaCombattimento() {
+    registraVittoriaCombattimento() {
         this.vittorieCombattimento += 1;
         if (this.vittorieCombattimento % 2 === 0) {
             const effMax = this.puntiFortunaMaxEffettivo;
@@ -846,86 +865,88 @@ hasCompetenza(skill) {
     }
 
     aggiungiFolliaPerEvento(causa) {
-    if (this.follia >= 20) return;
+        if (this.follia >= 20) return;
 
-    let tiro = 0;
-    let logCausa = "";
+        let tiro = 0;
+        let logCausa = "";
 
-    switch (causa) {
-        case 'avariato':
-            tiro = Math.floor(Math.random() * 4) + 1; // 1d4
-            logCausa = "Ingestione di 3 cibi avariati";
-            break;
-        case 'fobia':
-            tiro = Math.floor(Math.random() * 6) + 1; // 1d6
-            logCausa = "Innesco da Perk Fobia";
-            break;
-        case 'trauma':
-            tiro = Math.floor(Math.random() * 8) + 1; // 1d8
-            logCausa = "Morte di un compagno / Pericolo estremo";
-            break;
-        case 'rianimazione':
-            tiro = Math.floor(Math.random() * 10) + 1; // 1d10
-            logCausa = "Rischio di Morte / Rianimazione / Mutilazione";
-            break;
-        default:
-            return;
+        switch (causa) {
+            case 'avariato':
+                tiro = Math.floor(Math.random() * 4) + 1; // 1d4
+                logCausa = "Ingestione di 3 cibi avariati";
+                break;
+            case 'fobia':
+                tiro = Math.floor(Math.random() * 6) + 1; // 1d6
+                logCausa = "Innesco da Perk Fobia";
+                break;
+            case 'trauma':
+                tiro = Math.floor(Math.random() * 8) + 1; // 1d8
+                logCausa = "Morte di un compagno / Pericolo estremo";
+                break;
+            case 'rianimazione':
+                tiro = Math.floor(Math.random() * 10) + 1; // 1d10
+                logCausa = "Rischio di Morte / Rianimazione / Mutilazione";
+                break;
+            default:
+                return;
+        }
+
+        // --- LOGICA PERK ANSIOSO ---
+        let bonusAnsioso = 0;
+        if (this.perks && this.perks.some(p => p.nome === "Ansioso")) {
+            bonusAnsioso = 1;
+            logCausa += " (+1 da Ansioso)";
+        }
+        // ---------------------------
+
+        const totaleAumento = tiro + bonusAnsioso;
+        this.follia = Math.min(20, this.follia + totaleAumento);
+
+        mostraNotificaInAlto(`⚠️ La mente di ${this.nome} vacilla! Follia aumentata per: ${logCausa}. (Totale: ${this.follia})`, "pericolo");
+
+        if (this.follia >= 20) {
+            mostraNotificaInAlto(`💀 DISASTRO: ${this.nome} è impazzito del tutto ed è irrecuperabile!`, "pericolo");
+        }
     }
-
-    // --- LOGICA PERK ANSIOSO ---
-    let bonusAnsioso = 0;
-    if (this.perks && this.perks.some(p => p.nome === "Ansioso")) {
-        bonusAnsioso = 1;
-        logCausa += " (+1 da Ansioso)";
-    }
-    // ---------------------------
-
-    const totaleAumento = tiro + bonusAnsioso;
-    this.follia = Math.min(20, this.follia + totaleAumento);
-    
-    mostraNotificaInAlto(`⚠️ La mente di ${this.nome} vacilla! Follia aumentata per: ${logCausa}. (Totale: ${this.follia})`, "pericolo");
-
-    if (this.follia >= 20) {
-        mostraNotificaInAlto(`💀 DISASTRO: ${this.nome} è impazzito del tutto ed è irrecuperabile!`, "pericolo");
-    }
-}
 
     nutriSpeciale(tipoCibo) {
-    if (tipoCibo === 'avariato') {
-        this.contatoreCiboAvariato++;
-        if (this.contatoreCiboAvariato >= 3) {
-            this.contatoreCiboAvariato = 0;
-            this.aggiungiFolliaPerEvento('avariato');
-        }
-    } else if (tipoCibo === 'delizioso') {
-        this.contatoreCiboDelizioso++;
-        if (this.contatoreCiboDelizioso >= 3) {
-            this.contatoreCiboDelizioso = 0;
-            const cura = Math.floor(Math.random() * 4) + 1; // 1d4
-            this.follia = Math.max(0, this.follia - cura);
-            mostraNotificaInAlto(`✨ Il morale di ${this.nome} migliora grazie ai piatti prelibati! Follia ridotta di -${cura}.`, "successo");
+        if (tipoCibo === 'avariato') {
+            this.contatoreCiboAvariato++;
+            if (this.contatoreCiboAvariato >= 3) {
+                this.contatoreCiboAvariato = 0;
+                this.aggiungiFolliaPerEvento('avariato');
+            }
+        } else if (tipoCibo === 'delizioso') {
+            this.contatoreCiboDelizioso++;
+            if (this.contatoreCiboDelizioso >= 3) {
+                this.contatoreCiboDelizioso = 0;
+                const cura = Math.floor(Math.random() * 4) + 1; // 1d4
+                this.follia = Math.max(0, this.follia - cura);
+                if (typeof mostraNotificaInAlto === 'function') {
+                    mostraNotificaInAlto(`✨ Il morale di ${this.nome} migliora grazie ai piatti prelibati! Follia ridotta di -${cura}.`, "successo");
+                }
+            }
         }
     }
-}
 
     fallisciProvaPanico() {
-    if (this.follia >= 20) return;
+        if (this.follia >= 20) return;
 
-    let incrementoFollia = Math.floor(Math.random() * 6) + 1; // Tiro di 1d6
-    let logAnsioso = "";
-    if (this.perks && this.perks.some(p => p.nome === "Ansioso")) {
-        incrementoFollia += 1;
-        logAnsioso = " (+1 da Ansioso)";
+        let incrementoFollia = Math.floor(Math.random() * 6) + 1; // Tiro di 1d6
+        let logAnsioso = "";
+        if (this.perks && this.perks.some(p => p.nome === "Ansioso")) {
+            incrementoFollia += 1;
+            logAnsioso = " (+1 da Ansioso)";
+        }
+
+        this.follia = Math.min(20, this.follia + incrementoFollia);
+
+        mostraNotificaInAlto(`🚨 PANICO: ${this.nome} ha fallito la CD di Carisma! Guadagnati dei punti Follia${logAnsioso}.`, "pericolo");
+
+        if (this.follia >= 20) {
+            mostraNotificaInAlto(`💀 DISASTRO: ${this.nome} è impazzito del tutto ed è irrecuperabile!`, "pericolo");
+        }
     }
-
-    this.follia = Math.min(20, this.follia + incrementoFollia);
-
-    mostraNotificaInAlto(`🚨 PANICO: ${this.nome} ha fallito la CD di Carisma! Guadagnati dei punti Follia${logAnsioso}.`, "pericolo");
-
-    if (this.follia >= 20) {
-        mostraNotificaInAlto(`💀 DISASTRO: ${this.nome} è impazzito del tutto ed è irrecuperabile!`, "pericolo");
-    }
-}
 
     resetWoundTimer() {
         if (this.woundState === "Illeso") {
@@ -994,13 +1015,27 @@ hasCompetenza(skill) {
         if (ore < 8) return false;
         if (this.woundState !== "Ferita lieve") return false;
         let bonus = 0;
-        if (this.timers.buffFame > 0) bonus += 0.15;
+        
+        // Perk Angelo di Casa: accelera la cura del 10% se era Ben Nutrito (buffFame)
+        let angeloDiCasaBonus = 0;
+        const hasAngeloDiCasaParty = party.some(pg => pg.hasPerk && pg.hasPerk('Angelo di Casa'));
+        if (this.timers.buffFame > 0 && hasAngeloDiCasaParty) {
+            angeloDiCasaBonus = 0.10;
+        }
+
+        if (this.timers.buffFame > 0) bonus += (0.15 + angeloDiCasaBonus);
         if (this.timers.buffSete > 0) bonus += 0.15;
         if (this.timers.buffSonno > 0) bonus += 0.15;
         bonus += this.faticaTotale * 0.2;
 
         let healing = 1;
+        
+        if (this.hasPerk && this.hasPerk('Rigenerazione molto veloce')) {
+            healing += 1;
+        }
+
         if (Math.random() < bonus) healing += 1;
+        
         this.puntiFeritaReali = Math.min(this.puntiFeritaRealiMax, this.puntiFeritaReali + healing);
         this.resetWoundTimer();
         return true;
@@ -1060,17 +1095,33 @@ hasCompetenza(skill) {
         this.oreAllenamento += oreGratuite;
 
         return { oreGratuite, oreAGagoPagato, staminaUsata: staminaDaConsumara, pcaGuadagnato: ore * 2 };
-    
+
     }
     // --- CALCOLO STATISTICHE (Visualizzazione richiesta: Valore (Mod)) ---
 
     avanzaTempo(ore) {
-        // Calcolo calo (1 tacca ogni 24 ore)
-        let calo = ore / 24;
+        // Calcolo base (1 tacca ogni 24 ore)
+        let caloBase = ore / 24;
 
-        this.fame = Math.max(0, this.fame - calo);
-        this.sete = Math.max(0, this.sete - calo);
-        this.sonno = Math.max(0, this.sonno - calo);
+        // --- MODIFICATORI CIBO ---
+        let caloCibo = caloBase;
+        if (this.hasPerk('Digiuno')) caloCibo *= 0.8;       // -20% consumo
+        if (this.hasPerk('Insaziabile')) caloCibo *= 1.2;   // +20% consumo
+
+        // Adattamento Alimentare: se il timer 'appenaNutrito' è attivo, la fame non scende
+        if (this.hasPerk('Adattamento alimentare') && this.timers && this.timers.appenaNutrito > 0) {
+            caloCibo = 0; 
+        }
+
+        // --- MODIFICATORI ACQUA ---
+        let caloAcqua = caloBase;
+        if (this.hasPerk('Dromedario')) caloAcqua *= 0.8;   // -20% consumo
+        if (this.hasPerk('Bocca secca')) caloAcqua *= 1.2;  // +20% consumo
+
+        // Applicazione dei cali
+        this.fame = Math.max(0, this.fame - caloCibo);
+        this.sete = Math.max(0, this.sete - caloAcqua);
+        this.sonno = Math.max(0, this.sonno - caloBase);
 
         // Update Timer
         for (let t in this.timers) {
@@ -1087,17 +1138,25 @@ hasCompetenza(skill) {
     }
 
     riposa(ore) {
-        // Regola: dormire recupera sonno e può guarire ferite lievi
-        this.sonno = Math.min(8, this.sonno + ore);
+        // Insonne: il riposo effettivo vale il 30% in meno
+        let oreRiposo = this.hasPerk('Insonne') ? ore * 0.7 : ore;
+
+        // Regola: dormire recupera sonno e può guarire ferite lievi (usando le ore effettive)
+        this.sonno = Math.min(8, this.sonno + oreRiposo);
+        
         if (ore >= 4) {
-            const recuperoMana = Math.floor(ore / 4) * this.getManaRecoveryPerShortRest();
+            const recuperoMana = Math.floor(oreRiposo / 4) * this.getManaRecoveryPerShortRest();
             this.manaAttuale = Math.min(this.manaMax, this.manaAttuale + recuperoMana);
         }
+        
         if (ore >= 8) {
-            this.faticaBase = Math.max(0, this.faticaBase - 2);
+            // Se insonne, recupera proporzionalmente meno fatica (1.4 invece di 2)
+            let recFatica = this.hasPerk('Insonne') ? 1.4 : 2;
+            this.faticaBase = Math.max(0, this.faticaBase - recFatica);
+            
             this.timers.sonnoSoddisfatto = 6;
             this.timers.buffSonno = 8;
-            this.healByRest(ore);
+            this.healByRest(oreRiposo); // Anche la guarigione scala col riposo effettivo
             this.manaAttuale = Math.min(this.manaMax, this.manaAttuale + this.getManaRecoveryOnLongRest());
         }
     }
@@ -1274,15 +1333,15 @@ hasCompetenza(skill) {
             this.azioneCorrente = this.codaAzioni.shift();
         }
     }
-   
+
 
     normalizePuntiFortuna() {
         const effMax = this.puntiFortunaMaxEffettivo;
         if (this.puntiFortuna > effMax) this.puntiFortuna = effMax;
     }
 
-    
-    }
+
+}
 export function avviaAscoltoDatiCloud() {
     console.log("📡 Sincronizzazione Cloud attiva.");
 }
@@ -1295,6 +1354,6 @@ window.caricaDatiDaLocalStorage = caricaDatiDaLocalStorage;
 window.salvaPersonaggioLocalmente = salvaPersonaggioLocalmente;
 window.checkBackend = checkBackend;
 window.getCurrentUser = getCurrentUser;
-window.cimitero = cimitero || []; 
+window.cimitero = cimitero || [];
 window.party = party;
 window.inSpedizione = inSpedizione;

@@ -197,7 +197,7 @@ const DATABASE_PERK = {
     { nome: "Zampe agili", desc: "Ottieni +3 di Arrampicata, ottieni competenza in Furtivita’ e Acrobaziacata, ottieni competenza in Furtivita’ e Acrobazia", costo: 7, skills: ["Furtività","Acrobazia"] },
     ],
     "sopravvivenza": [
-    { nome: "Angelo della cucina", desc: "I tuoi piatti deliziosi danno lo stato Ben Nutrito anche se la barra del bersaglio non è piena. Se il bersaglio era già Ben Nutrito i tempi di cura accellerano di un ulteriore 10%.", costo: 4, skills: [] },
+    { nome: "Angelo della casa", desc: "I tuoi piatti deliziosi danno lo stato Ben Nutrito anche se la barra del bersaglio non è piena. Se il bersaglio era già Ben Nutrito i tempi di cura accellerano di un ulteriore 10%.", costo: 4, skills: [] },
     {nome:"Alchimista disperato",desc:"Puoi spendere 3 ore per trasformare 10 unità di cibo avariato in 1d4+mod saggezza unità alchemiche.",costo:4,skills:[]},
     { nome: "Arrampicatore", desc: "Ottieni +3 metri alla velocità di arrampicata. Ottieni vantaggio nelle prove di Atletica per arrampicarti.Ottieni competenza in Atletica.", costo: 3, skills: ["Atletica"] },
     { nome: "Addamento alimentare", desc: "L’effetto Appena Nutrito dura 2 ore in più e durante l’effetto la tua barra alimentare non scende", costo: 5, skills: [] },

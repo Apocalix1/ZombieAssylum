@@ -135,18 +135,21 @@ function segnaVittoria(idx) {
 async function renderSpedizioneModal() {
     const container = document.getElementById('spedizione-content');
     if (!container) return;
-    
-    // Ora l'await è valido grazie alla dichiarazione async della funzione
+
     const names = await loadCharacterNamesForUser();
+    const personaggiInSpedizione = party.filter(p => p.inSpedizione === true);
     
-    if (inSpedizione.length === 0) {
-        container.innerHTML = `<p>Nessun personaggio in spedizione.</p>`;
+    if (personaggiInSpedizione.length === 0) {
+        container.innerHTML = `<p style="color:#aaa; text-align:center;">Nessun personaggio in spedizione.</p>`;
         return;
     }
 
-    container.innerHTML = inSpedizione.map(p => {
+    container.innerHTML = personaggiInSpedizione.map(p => {
         const idx = party.indexOf(p);
-        const perkList = p.perks.length > 0 ? p.perks.map(perk => typeof perk === 'string' ? perk : perk.nome).join(' • ') : 'Nessuno';
+        const perkList = p.perks && p.perks.length > 0 
+            ? p.perks.map(perk => typeof perk === 'string' ? perk : perk.nome).join(' • ') 
+            : 'Nessuno';
+
         return `
             <div class="combat-card">
                 <div class="combat-card-header" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
@@ -155,10 +158,10 @@ async function renderSpedizioneModal() {
                 </div>
                 <div style="margin:10px 0; font-size:0.9rem;">
                     <div>❤️ PF Reali: ${p.puntiFeritaReali} / ${p.puntiFeritaRealiMax}</div>
-                    ${getBarra(p.puntiFeritaReali, p.puntiFeritaRealiMax, '#c0392b')}
+                    ${typeof getBarra === 'function' ? getBarra(p.puntiFeritaReali, p.puntiFeritaRealiMax, '#c0392b') : ''}
                     <div>✨ PF Fortuna: ${p.puntiFortuna} / ${p.puntiFortunaMax}</div>
-                    ${getBarra(p.puntiFortuna, p.puntiFortunaMax, '#f1c40f')}
-                    <div style="margin-top:8px; font-size:0.85rem; color:#aaa;">Vittorie comb.: ${p.vittorieCombattimento}</div>
+                    ${typeof getBarra === 'function' ? getBarra(p.puntiFortuna, p.puntiFortunaMax, '#f1c40f') : ''}
+                    <div style="margin-top:8px; font-size:0.85rem; color:#aaa;">Vittorie comb.: ${p.vittorieCombattimento || 0}</div>
                     <div style="margin-top:8px; font-size:0.85rem; color:#ddd;">
                         <strong>PCA:</strong> 
                         ${Object.entries(p.pca || {}).filter(([, v]) => v > 0).map(([cat, val]) => `${cat.split(' ')[0]} ${val.toFixed(1)}`).join(' • ') || 'Nessuno'}
@@ -172,6 +175,9 @@ async function renderSpedizioneModal() {
                     <button onclick="segnaVittoria(${idx})">Segna vittoria</button>
                     ${(() => {
                         let extras = '';
+                        if (p.hasPerk && p.hasPerk('Stress fisico') && p.faticaTotale > 0) {
+                         extras += `<button style="background:#8e44ad;" onclick="useStressFisico(${idx})">⚡ Stress Fisico (-1 PF / -2 Fatica)</button>`;
+                            }
                         if (typeof hasPerk === 'function' && hasPerk(p, 'Nato per combattere')) {
                             extras += `<button onclick="useInizioCombattimento(${idx})">Rigenera inizio</button>`;
                         }
@@ -199,6 +205,7 @@ async function renderSpedizioneModal() {
             </div>`;
     }).join('');
 }
+
 window.mandaTuttiInSpedizione = mandaTuttiInSpedizione;
 window.chiudiSpedizione = chiudiSpedizione;
 window.ritiraTutti = ritiraTutti;

@@ -213,7 +213,7 @@ function apriStudio() {
         return;
     }
     if (!magazzino.libri.length) {
-        alert('La biblioteca è vuota. Trova o acquista dei libri prima di studiare.');
+        alert('La biblioteca è vuota. Trova dei libri prima di studiare.');
         return;
     }
     renderStudioModal();

@@ -645,13 +645,6 @@ function toggleSpedizione(idx) {
     aggiornaInterfaccia();
 }
 
-function alchimiaPersonaggio(idx) {
-    alchimiaPersonaggioSelezionata = idx;
-    renderAlchemyModal();
-    const modal = document.getElementById('modal-alchimia');
-    if (modal) modal.style.display = 'block';
-}
-
 function apriAiutoModal() {
     renderAiutoModal();
     const modal = document.getElementById('modal-aiuto');
