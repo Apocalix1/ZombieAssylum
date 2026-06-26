@@ -471,13 +471,70 @@ const SKILL_SYSTEM = {
 
 console.log("Database Abilità caricato correttamente.");
 
-SKILL_SYSTEM.languages = [
-    "Lingua di Diefrost",
-    "Lingua di Engenia",
-    "Lingua di Chrimata",
-    "Lingua di Rodulphia",
-    "Lingua di Talassio",
-    "Lingua di Britannia/Greenhill",
-    "Lingua della Terra dei cieli",
-    "Lingua del Grande Blu"
-];
+/**
+ * Legge un documento dall'inventario.
+ * Il gioco controlla le lingue del personaggio.
+ */
+function visualizzaDocumento(idxPersonaggio, idxDocumento) {
+    const p = party[idxPersonaggio];
+    const doc = p.inventario.documenti[idxDocumento];
+    
+    // Controlla se il pg conosce la lingua in cui è scritto
+    const conosceLingua = p.lingue && p.lingue.includes(doc.lingua_richiesta);
+    
+    const testoDaMostrare = conosceLingua ? doc.testo_originale : doc.testo_criptato;
+    const notaLingua = conosceLingua 
+        ? `[Tradotto dal: ${doc.lingua_richiesta}]` 
+        : `[Lingua incomprensibile - Ipotetica: ${doc.lingua_richiesta}]`;
+
+    // Nella UI vera sostituirai questo alert con un bel modale
+    alert(`📜 ${doc.titolo}\n${notaLingua}\n\n${testoDaMostrare}`);
+}
+
+/**
+ * Passa un documento a un alleato. 
+ * Controlla che siano nello stesso luogo (Base o Spedizione).
+ */
+function passaDocumento(idxMittente, idxDocumento, idxDestinatario) {
+    const mittente = party[idxMittente];
+    const destinatario = party[idxDestinatario];
+    const doc = mittente.inventario.documenti[idxDocumento];
+
+    // Controllo posizione
+    if (mittente.inSpedizione !== destinatario.inSpedizione) {
+        alert("Non puoi passare il documento! I due personaggi non si trovano nello stesso luogo.");
+        return;
+    }
+
+    // Scambio
+    mittente.inventario.documenti.splice(idxDocumento, 1);
+    destinatario.inventario.documenti.push(doc);
+    
+    alert(`Hai passato "${doc.titolo}" a ${destinatario.nome}.`);
+    aggiornaInterfaccia();
+}
+
+/**
+ * Deposita il documento nella Biblioteca del Rifugio.
+ */
+function archiviaInBiblioteca(idxPersonaggio, idxDocumento) {
+    const p = party[idxPersonaggio];
+    
+    if (p.inSpedizione) {
+        alert("Non puoi archiviare in biblioteca mentre sei fuori in spedizione!");
+        return;
+    }
+
+    const doc = p.inventario.documenti[idxDocumento];
+    
+    // Rimuove dall'inventario
+    p.inventario.documenti.splice(idxDocumento, 1);
+    
+    // Inserisce nella biblioteca globale
+    window.bibliotecaBase.documenti.push(doc);
+    
+    alert(`Il documento "${doc.titolo}" è stato archiviato al sicuro nella Biblioteca della Base. Tutti i sopravvissuti presenti al rifugio ora possono provare a leggerlo.`);
+    aggiornaInterfaccia();
+}
+
+window.bibliotecaBase = window.bibliotecaBase || { documenti: [] };

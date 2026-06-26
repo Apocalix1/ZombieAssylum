@@ -208,7 +208,6 @@ export class Personaggio {
         this.manaAttuale = 0;
         this.spellsKnown = { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0 };
         this.manaRiposoTimer = 0;
-        this.lingue = ['Verbum'];
         this.piattiDeliziosi = 0;
         this.autoRisorse = { fame: null, sete: null, sonno: null };
         // Robot-specific defaults
@@ -223,6 +222,30 @@ export class Personaggio {
         this.batteryHoursMax = 7 * 24; // full battery = 7 days = 168 hours
         // Three Laws enforcement (behavioral rules)
         this.robotThreeLaws = true;
+    }
+
+    initInventarioBase() {
+        if (!this.inventario) {
+            this.inventario = {
+                armi: [],
+                zaini: [],
+                consumabili: [], // bende, medikit, ecc.
+                cibo: 0,
+                acqua: 0,
+                ingranaggi: 0,
+                medBase: 0,
+                medAvanzati: 0,
+                medCritici: 0,
+                alchemici: 0,
+                munizioni: 0
+            };
+        }
+        if (!this.inventario.documenti) {
+         this.inventario.documenti = [];
+            }
+        if (this.zainoEquipaggiato === undefined) {
+            this.zainoEquipaggiato = null;
+        }
     }
 
     // ---- Robot-specific methods ----
@@ -251,6 +274,50 @@ export class Personaggio {
         const add = map[rarity] || 0;
         this.batteryHours = Math.min(this.batteryHoursMax, (this.batteryHours || 0) + add);
         return add;
+    }
+
+    get capacitaMax() {
+        // 5 + Modificatore di Forza
+        const modForza = this.getStatDettagliata ? this.getStatDettagliata('Forza').mod : 0;
+        let cap = 5 + modForza;
+        
+        // Aggiunta Bonus Zaino
+        if (this.zainoEquipaggiato) {
+            cap += this.zainoEquipaggiato.bonus;
+        }
+        return Math.max(0, cap); // La capienza non può scendere sotto zero
+    }
+
+    get pesoAttuale() {
+        this.initInventarioBase();
+        let peso = 0;
+        
+        // Armi (1 di spazio ciascuna)
+        peso += this.inventario.armi.length * 1;
+        
+        // Cibo e Acqua (1:1 anche frazionato)
+        peso += this.inventario.cibo;
+        peso += this.inventario.acqua;
+        
+        // Materiali e Ingranaggi
+        peso += this.inventario.ingranaggi / 10;
+        peso += this.inventario.alchemici / 6;
+        
+        // Materiali medici (Base 1, Avanzato 2, Critico 3) / 10
+        peso += (this.inventario.medBase * 1 + this.inventario.medAvanzati * 2 + this.inventario.medCritici * 3) / 10;
+        
+        // Consumabili (0.2 ciascuno)
+        peso += this.inventario.consumabili.length * 0.2;
+        
+        // Munizioni (0.05 ciascuna)
+        peso += this.inventario.munizioni * 0.05;
+        
+        // Zaini NON equipaggiati
+        this.inventario.zaini.forEach(z => {
+            peso += z.pesoUnEquipped;
+        });
+
+        return parseFloat(peso.toFixed(2));
     }
 
     consumeBattery(hours) {
@@ -1138,25 +1205,45 @@ export class Personaggio {
     }
 
     riposa(ore) {
-        // Insonne: il riposo effettivo vale il 30% in meno
-        let oreRiposo = this.hasPerk('Insonne') ? ore * 0.7 : ore;
+              let oreRiposoEffettive = this.hasPerk('Insonne') ? ore * 0.7 : ore;
+        let fattoreSonno = 1;
+        let fattoreStamina = 1;
 
-        // Regola: dormire recupera sonno e può guarire ferite lievi (usando le ore effettive)
-        this.sonno = Math.min(8, this.sonno + oreRiposo);
+        if (this.hasPerk && this.hasPerk('Trance')) {
+            // Se impiega 4 ore invece di 8 per il sonno, l'efficacia è x2
+            fattoreSonno = 2;
+            // Se impiega 2 ore per rigenerare la stamina/riposo breve invece di 4, l'efficacia è x2
+            fattoreStamina = 2;
+        }
+
+        // Recupero Sonno applicando il modificatore Trance
+        this.sonno = Math.min(8, this.sonno + (oreRiposoEffettive * fattoreSonno));
         
-        if (ore >= 4) {
-            const recuperoMana = Math.floor(oreRiposo / 4) * this.getManaRecoveryPerShortRest();
+        // Riposo Breve (Stamina / Mana)
+        // Se ha Trance, bastano 2 ore reali per simulare il trigger delle 4 ore
+        let oreSogliaRiposoBreve = this.hasPerk && this.hasPerk('Trance') ? 2 : 4;
+        
+        if (ore >= oreSogliaRiposoBreve) {
+            // Calcoliamo i blocchi di recupero incrementati dal fattoreStamina
+            const recuperoMana = Math.floor(oreRiposoEffettive / oreSogliaRiposoBreve) * this.getManaRecoveryPerShortRest() * fattoreStamina;
             this.manaAttuale = Math.min(this.manaMax, this.manaAttuale + recuperoMana);
         }
         
-        if (ore >= 8) {
-            // Se insonne, recupera proporzionalmente meno fatica (1.4 invece di 2)
+        // Riposo Lungo (Fatica e Cure)
+        // Gli elfi in Trance completano il riposo lungo in 4 ore invece di 8
+        let oreSogliaRiposoLungo = this.hasPerk && this.hasPerk('Trance') ? 4 : 8;
+
+        if (ore >= oreSogliaRiposoLungo) {
+            // Recupero fatica
             let recFatica = this.hasPerk('Insonne') ? 1.4 : 2;
+            // Se è in Trance, l'effetto sul riposo lungo è pienamente computato anche in meno ore
             this.faticaBase = Math.max(0, this.faticaBase - recFatica);
             
             this.timers.sonnoSoddisfatto = 6;
             this.timers.buffSonno = 8;
-            this.healByRest(oreRiposo); // Anche la guarigione scala col riposo effettivo
+            
+            // Passiamo le ore riproporzionate alla guarigione per non depotenziare la cura
+            this.healByRest(oreRiposoEffettive * fattoreSonno); 
             this.manaAttuale = Math.min(this.manaMax, this.manaAttuale + this.getManaRecoveryOnLongRest());
         }
     }

@@ -83,4 +83,90 @@ function takeFromMagazzino(key) {
     renderMagazzinoModal();
     aggiornaInterfaccia();
 }
+
+function depositaInMagazzino(idxPersonaggio, tipo, quantita) {
+    const p = party[idxPersonaggio];
+    if (!p.inventario[tipo] || p.inventario[tipo] < quantita) {
+        alert("Non hai abbastanza risorse nell'inventario!");
+        return;
+    }
+
+    // Rimuove dal personaggio
+    p.inventario[tipo] -= quantita;
+    
+    // Aggiunge al magazzino
+    magazzino[tipo] += quantita;
+    aggiornaInterfaccia();
+}
+
+// Ritira dal magazzino
+function ritiraDaMagazzino(idxPersonaggio, tipo, quantita) {
+    const p = party[idxPersonaggio];
+    if (magazzino[tipo] < quantita) {
+        alert("Non c'è abbastanza nel magazzino!");
+        return;
+    }
+
+    // Calcolo preventivo del peso per vedere se riesce a trasportarlo
+    // (Dobbiamo simulare il peso extra)
+    let pesoOggetto = calcolaPesoSpeciale(tipo, quantita);
+    if ((p.pesoAttuale + pesoOggetto) > p.capacitaMax) {
+        alert(`${p.nome} è troppo carico per prendere questo oggetto!`);
+        return;
+    }
+
+    magazzino[tipo] -= quantita;
+    p.inventario[tipo] += quantita;
+    aggiornaInterfaccia();
+}
+
+// Helper per i pesi dinamici del ritiro/deposito
+function calcolaPesoSpeciale(tipo, qty) {
+    if (tipo === 'cibo' || tipo === 'acqua') return qty * 1;
+    if (tipo === 'ingranaggi') return qty / 10;
+    if (tipo === 'alchemici') return qty / 6;
+    if (tipo === 'medBase') return (qty * 1) / 10;
+    if (tipo === 'medAvanzati') return (qty * 2) / 10;
+    if (tipo === 'medCritici') return (qty * 3) / 10;
+    if (tipo === 'munizioni') return qty * 0.05;
+    return 0;
+}
+
+function applicaPerkArmato(p) {
+    if (p.hasPerk && p.hasPerk('Armato')) {
+        if (typeof p.initInventarioBase === 'function') p.initInventarioBase();
+        
+        const armiDisponibili = [
+            "Ascia", "Spada", "Pistola", "Arco", 
+            "Balestra", "Frusta", "Alabarda", "Lancia", "Picca"
+        ];
+        
+        // Tramite un prompt chiediamo al giocatore cosa scegliere
+        let scelta = prompt(
+            `Hai il perk 'Armato'! Scegli un'arma con cui iniziare l'avventura:\n${armiDisponibili.join(", ")}`, 
+            "Ascia"
+        );
+        
+        // Se annulla o scrive a caso, diamo un'ascia di default
+        if (!scelta || !armiDisponibili.some(a => a.toLowerCase() === scelta.toLowerCase())) {
+            scelta = "Ascia";
+        }
+        const nomeArma = scelta.charAt(0).toUpperCase() + scelta.slice(1).toLowerCase();
+
+        let tipoArma = "mischia";
+        if (['Pistola', 'Arco', 'Balestra'].includes(nomeArma)) {
+            tipoArma = "distanza";
+        }
+        p.inventario.armi.push({ nome: nomeArma, tipo: tipoArma, spazioOccupato: 1 });
+        if (nomeArma === 'Arco' || nomeArma === 'Balestra') {
+            p.inventario.munizioni += 10;
+        } else if (nomeArma === 'Pistola') {
+            p.inventario.munizioni += 3;
+        }
+
+        if (typeof mostraNotificaInAlto === 'function') {
+            mostraNotificaInAlto(`⚔️ ${p.nome} ha equipaggiato la sua arma iniziale: ${nomeArma}`, "successo");
+        }
+    }
+}
 window.takeFromMagazzino = takeFromMagazzino;

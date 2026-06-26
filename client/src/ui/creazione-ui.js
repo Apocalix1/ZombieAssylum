@@ -74,6 +74,7 @@ function modificaIncantesimiConosciuti(livello, delta) {
 function annullaCreazione() { document.getElementById('modal-creazione').style.display = 'none'; }
 
 function confermaCreazione() {
+    tempP.lingue = ['Vedum'];
     const nomeInput = document.getElementById('crea-nome');
     const nome = nomeInput ? nomeInput.value.trim() : "";
 
@@ -85,8 +86,6 @@ function confermaCreazione() {
         alert("Hai usato troppi punti!");
         return;
     }
-
-    // Trasferisce le competenze dai perk scelti all'array definitivo
     tempP.competenze = [];
     tempP.perks.forEach(p => {
         if (p.skills) {
@@ -95,25 +94,36 @@ function confermaCreazione() {
             });
         }
     });
-
-    // Inizializzazione parametri vitali (Risolve il bug degli undefined)
-    // Se la classe ha metodi interni usa quelli, altrimenti calcoliamo sulla Costituzione aggiornata
     const costDettagliata = tempP.getStatDettagliata ? tempP.getStatDettagliata('Costituzione') : { valore: tempP.costituzione };
-    
-    // Formula standard di esempio per i PF Reali basati sulla Costituzione
     tempP.pfMax = Math.floor(costDettagliata.valore / 2) + 5; 
     tempP.pfAttuali = tempP.pfMax;
-
-    // Configurazione Punti Fortuna
     tempP.puntiFortunaMax = 15;
     if (hasPerk(tempP, 'Guerriero')) {
         tempP.puntiFortunaMax = 20;
+    }
+
+    if (hasPerk(tempP, 'Fuori dal mondo')) {
+        const lingueDisponibili = ['Antali', 'Yakzi', 'Engenity', 'Chrimil', 'Ridulphi', 'Puleun', 'Meer', 'Eklesti'];
+        
+        let sceltaLingua = prompt(
+            `Perk "Fuori dal mondo": NON conosci il Vedum. Scegli la tua lingua madre:\n${lingueDisponibili.join(", ")}`, 
+            "Antali"
+        );
+        if (!sceltaLingua || !lingueDisponibili.some(l => l.toLowerCase() === sceltaLingua.toLowerCase())) {
+            alert("Scelta non valida o annullata. Assegnata lingua di default: Antali");
+            sceltaLingua = "Antali";
+        }
+        
+        const linguaFormattata = sceltaLingua.charAt(0).toUpperCase() + sceltaLingua.slice(1).toLowerCase();
+        
+        // Riscrive l'array cancellando il Vedum e inserendo la nuova lingua
+        tempP.lingue = [linguaFormattata];
     }
     tempP.puntiFortuna = tempP.puntiFortunaMax;
 
     // Applichiamo effetti immediati di alcuni perk
     tempP.perkFlags = tempP.perkFlags || {};
-    tempP.updateManaFromMagiaLevel && tempP.updateManaFromMagiaLevel();
+    if (typeof tempP.updateManaFromMagiaLevel === 'function') tempP.updateManaFromMagiaLevel();
     tempP.staminaAttuale = tempP.staminaMax;
     
     if (hasPerk(tempP, 'Guerriero')) {
@@ -125,6 +135,20 @@ function confermaCreazione() {
     }
 
     tempP.nome = nome;
+    if (typeof tempP.initInventarioBase === 'function') {
+        tempP.initInventarioBase();
+        if (typeof applicaPerkArmato === 'function') {
+            applicaPerkArmato(tempP);
+        }
+
+        if (hasPerk(tempP, 'Avventuriero')) {
+            tempP.zainoEquipaggiato = { nome: 'Zaino da Esploratore', bonus: 12, pesoUnEquipped: 0.6, grado: 6 };
+            tempP.inventario.cibo += 1;
+            tempP.inventario.acqua += 1;
+            tempP.inventario.consumabili.push({ nome: 'Sacco a pelo', peso: 0.6 });
+        }
+    }
+
     party.push(tempP);
     
     document.getElementById('modal-creazione').style.display = 'none';

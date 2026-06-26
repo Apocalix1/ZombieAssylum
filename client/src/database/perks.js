@@ -80,7 +80,7 @@ const DATABASE_PERK = {
         { nome: "Leader nato", desc: "Ottieni +1 al modificatore Carisma per due membri del party che ti accompagnano (fino a +3).", costo: 3, skills: [] },
         { nome: "Mente ferrea", desc: "Quando vai nel panico puoi usare subito una reazione per usare Pulizia Mentale e rimuoverlo ottenendo +2. Attiva una volta per sessione.", costo: 4, skills: [] },
         { nome: "Seduttore", desc: "Ottieni vantaggio nelle prove Carisma contro un sesso a tua scelta.", costo: 4, skills: [] },
-        { nome: "Solitario", desc: "Se sei da solo ottieni +2 a tutte le prove abilità/competenze e migliori risultati nelle esplorazioni.", costo: 2, skills: [] },
+        { nome: "Solitario", desc: "Se sei da solo ottieni +2 a tutte le prove abilità/competenze e migliori risultati nelle esplorazioni.", costo: 3, skills: [] },
         { nome: "Vendicativo", desc: "Quando un tuo alleato subisce un danno reale, ottieni vantaggio negli attacchi verso chi l'ha ferito finché non lo colpisci due volte.", costo: 4, skills: [] },
         { nome: "Vicinanza", desc: "Quando un alleato sta venendo curato o deve fare un TS, puoi usare una reazione per ridurre la CD della prova in base al tuo modificatore di Carisma. Usi a riposo lungo pari al modificatore di Carisma.", costo: 5, skills: [] },
         { nome: "Voce calma", desc: "Ottieni competenza in Persuasione. Quando un alleato è spaventato/affascinato/panico puoi usare reazione/azione bonus per un tiro di Persuasione per rimuovere l'effetto se superi la CD.", costo: 3, skills: ["Persuasione"] }
