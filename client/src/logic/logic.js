@@ -1142,14 +1142,21 @@ export class Personaggio {
     }
 
     addestraArma(categoria, ore, giornoAttuale) {
-        // Allenamento: +2 PCA per ora
-        // Fame aumenta del 15% per le prossime 2 ore
+        // Allenamento: +2 PCA per ora base
         const gratuite = this.calcolaOreAllenamentoGratuite(giornoAttuale);
         const oreGratuite = Math.min(ore, gratuite - this.oreAllenamento);
         const oreAGagoPagato = ore - oreGratuite;
 
-        // Guadagno PCA
-        this.pca[categoria] = (this.pca[categoria] || 0) + (ore * 2);
+        // Guadagno PCA base
+        let pcaGuadagnato = ore * 2;
+
+        // Integrazione Composto Proteico: x2 exp per armi da mischia
+        const armiDaMischia = ['Armi in asta', 'Lame leggere', 'Mazze', 'Frusta'];
+        if (this.timers && this.timers.buffProteico > 0 && armiDaMischia.includes(categoria)) {
+            pcaGuadagnato *= 2; 
+        }
+
+        this.pca[categoria] = (this.pca[categoria] || 0) + pcaGuadagnato;
 
         // Fame aumenta 15% per 2 ore
         this.fame = Math.max(0, this.fame - (14 * 0.15)); // riduce la barra di fame
@@ -1158,11 +1165,15 @@ export class Personaggio {
         const staminaDaConsumara = Math.ceil(oreAGagoPagato / 2);
         this.staminaAttuale = Math.max(0, this.staminaAttuale - staminaDaConsumara);
 
-        // Traccia ore di allenamento
+        // Traccia ore di allenamento gratuite
         this.oreAllenamento += oreGratuite;
 
-        return { oreGratuite, oreAGagoPagato, staminaUsata: staminaDaConsumara, pcaGuadagnato: ore * 2 };
-
+        return { 
+            oreGratuite, 
+            oreAGagoPagato, 
+            staminaUsata: staminaDaConsumara, 
+            pcaGuadagnato // Restituiamo il valore effettivo, eventualmente buffato
+        };
     }
     // --- CALCOLO STATISTICHE (Visualizzazione richiesta: Valore (Mod)) ---
 

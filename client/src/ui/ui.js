@@ -294,29 +294,28 @@ window.continueAsGuest = window.continueAsGuest || (typeof continueAsGuest === '
 
 let oreTotali = 0;
 let cimitero = [];
-let magazzino = {
-    cibo: 20,
-    acqua: 20,
-    materialiAlchemici: 5,
-    ingranaggi: 10,
-    conserve: 0,
-    piattiDeliziosi: 0,
-    ciboaviarto:0,
-    materialiMedici: {
-        base: 2,
-        avanzati: 1,
-        critici: 0
-    },
-    oggettiMagici: {  
-        comuni: 0,
-        nonComuni: 0,
-        rari: 0,
-        superRari: 0
-    },
-    postazioneAlchemica: false,
-    compounds: [],
-    libri: []
-};
+
+
+function mostraCongegniBase() {
+    let testo = "=== STRUTTURE FISSE ===\n";
+    
+    if (magazzino.congegniFissi.length === 0) {
+        testo += "Nessun congegno installato nella base.\n";
+    } else {
+        magazzino.congegniFissi.forEach(c => {
+            testo += `• ${c.nome} ${c.dettagli}\n`;
+        });
+    }
+
+    testo += "\n=== DISPOSITIVI A CONTEGGIO ===\n";
+    for (let [nomeItem, quantita] of Object.entries(magazzino.congegniConteggio)) {
+        if (quantita > 0) {
+            testo += `• ${nomeItem}: x${quantita}\n`;
+        }
+    }
+
+    alert(testo);
+}
 
 let selectedLobbyCharacter = null;
 

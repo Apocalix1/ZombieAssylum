@@ -188,6 +188,11 @@ function getStudyDieByTotalHours(hours) {
     const total = Math.max(1, hours);
     const level = STUDY_DICE_BY_TOTAL_HOURS.find(entry => total <= entry.max);
     return level ? level.die : '2d10';
+
+    if (p && p.timers && p.timers.buffIntegratori > 0) {
+        die += '+3'; // Il tiro risultante diventerà ad es. '1d8+3'
+    }
+    return die;
 }
 
 function teacherCanTeach(teacher, subject, needsMastery) {

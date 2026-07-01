@@ -379,6 +379,50 @@ function completeAlchemyAction(p, action) {
     aggiornaInterfaccia();
     renderAlchemyModal();
 }
+
+function usaCompostoAlchemico(personaggioIdx, nomeComposto) {
+    const p = party[personaggioIdx];
+    if (!p) return;
+
+    // Controllo che lo possieda nell'inventario (da adattare al tuo sistema di stoccaggio)
+    // Es: if (!p.inventario.includes(nomeComposto)) return alert("Non hai questo composto!");
+
+    switch(nomeComposto) {
+        case 'Sali Reidratanti':
+            if (p.stadioSete > 0) p.stadioSete -= 1;
+            mostraNotificaInAlto(`${p.nome} ha ridotto la disidratazione!`, 'successo');
+            break;
+            
+        case 'Pillole della calma':
+            const curaFollia = Math.floor(Math.random() * 4) + 1;
+            p.follia = Math.max(0, (p.follia || 0) - curaFollia);
+            mostraNotificaInAlto(`Follia ridotta di ${curaFollia} per ${p.nome}.`, 'successo');
+            break;
+            
+        case 'Integratori':
+            if (!p.timers) p.timers = {};
+            p.timers.buffIntegratori = 1; // Unità in Ore, da scalare nel loop del tempo
+            mostraNotificaInAlto(`${p.nome} si sente più intelligente e concentrato.`, 'successo');
+            break;
+            
+        case 'Composto Proteico':
+            if (!p.timers) p.timers = {};
+            p.timers.buffProteico = 1; // Unità in Ore
+            mostraNotificaInAlto(`Memoria muscolare di ${p.nome} accelerata!`, 'successo');
+            break;
+            
+        case 'Bende Coagulanti':
+            p.buffBendeCoagulanti = true; // Consumato al prossimo tick di rigenerazione PF
+            mostraNotificaInAlto(`Le bende ridurranno il tempo della prossima rigenerazione PF.`, 'successo');
+            break;
+            
+        default:
+            alert("Oggetto non utilizzabile direttamente o non trovato.");
+            return; // Esci senza consumare l'oggetto
+    }
+    aggiornaInterfaccia();
+}
+
 function lootAlchemici(tiro) {
     if (tiro <= 4) return 0;
     if (tiro <= 8) return rollDice(1, 4);

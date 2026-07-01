@@ -1,3 +1,33 @@
+let magazzino = {
+    cibo: 20,
+    acqua: 20,
+    materialiAlchemici: 5,
+    ingranaggi: 10,
+    conserve: 0,
+    piattiDeliziosi: 0,
+    ciboaviarto:0,
+    materialiMedici: {
+        base: 2,
+        avanzati: 1,
+        critici: 0
+    },
+    oggettiMagici: {  
+        comuni: 0,
+        nonComuni: 0,
+        rari: 0,
+        superRari: 0
+    },
+    postazioneAlchemica: false,
+    compounds: [],
+    libri: [],
+    congengnifissi: [],
+    congegniConteggio : {
+    'Orologio / Timer': 0,
+    'Cassa Amplificata': 0,
+    'Innesco': 0
+}
+};
+
 function normalizeMagazzinoItems() {
     const items = [];
     items.push({ key: 'cibo', label: 'Cibo', count: magazzino.cibo, consumable: true });
