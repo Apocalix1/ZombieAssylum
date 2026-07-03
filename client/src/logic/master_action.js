@@ -4,6 +4,8 @@
 
 */
 
+import { apiUrl, buildAuthHeaders } from './logic.js';
+
 export async function masterInviaDocumento(titolo, lingua, testoOriginale, personaggioIdDestinatario) {
 
 // Generatore rapido di testo criptato "illegibile" basato sul testo originale
@@ -34,14 +36,10 @@ personaggio_id: personaggioIdDestinatario // Passato direttamente all'inventario
 
 
 
-const res = await fetch('/api/master/crea-documento', {
-
-method: 'POST',
-
-headers: { 'Content-Type': 'application/json' },
-
-body: JSON.stringify(payload)
-
+const res = await fetch(apiUrl('/api/master/documents'), {
+	method: 'POST',
+	headers: buildAuthHeaders({ 'Content-Type': 'application/json' }),
+	body: JSON.stringify(payload)
 });
 
 
@@ -64,14 +62,10 @@ const payload = { personaggio_id: personaggioId, nome: nomeStato, tipo, descrizi
 
 
 
-const res = await fetch('/api/master/applica-stato', {
-
-method: 'POST',
-
-headers: { 'Content-Type': 'application/json' },
-
-body: JSON.stringify(payload)
-
+const res = await fetch(apiUrl('/api/master/apply-state'), {
+	method: 'POST',
+	headers: buildAuthHeaders({ 'Content-Type': 'application/json' }),
+	body: JSON.stringify(payload)
 });
 
 

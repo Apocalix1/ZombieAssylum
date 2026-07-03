@@ -270,6 +270,28 @@
     </div>
     <script>
         (function(){
+            const defaultMagazzino = {
+                cibo: 0,
+                acqua: 0,
+                conserve: 0,
+                ciboaviarto: 0,
+                piattiDeliziosi: 0,
+                materialiAlchemici: 0,
+                ingranaggi: 0,
+                materialiMedici: { base: 0, avanzati: 0, critici: 0 },
+                postazioneAlchemica: false,
+                compounds: [],
+                composti: [],
+                congegniFissi: [],
+                congegniConteggio: {},
+                oggettiMagici: { comuni: 0, nonComuni: 0, rari: 0, superRari: 0 },
+                munizioni: { gomma: 0, reale: 0 },
+                libri: [],
+                armiTrovate: [],
+            };
+            window.magazzino = window.magazzino || defaultMagazzino;
+        })();
+        (function(){
             const path = location.pathname || '';
             const base = path.includes('/client/') || path === '/client' ? '/client' : '';
             const scripts = [

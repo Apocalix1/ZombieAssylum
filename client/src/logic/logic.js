@@ -42,10 +42,21 @@ function getCurrentUser() {
     }
 }
 
+export function buildAuthHeaders(additional = {}) {
+    const headers = {};
+    const user = getCurrentUser();
+    if (user?.token) {
+        headers.Authorization = `Bearer ${user.token}`;
+    }
+    return { ...headers, ...additional };
+}
+
 export async function fetchUserCharacters(userId) {
     if (!userId) return [];
     try {
-        const response = await fetch(apiUrl(`/api/characters?userId=${encodeURIComponent(userId)}`));
+        const response = await fetch(apiUrl('/api/characters'), {
+            headers: buildAuthHeaders()
+        });
         if (!response.ok) return [];
         const data = await response.json();
         return Array.isArray(data.characters) ? data.characters : [];
@@ -58,7 +69,6 @@ export async function fetchUserCharacters(userId) {
 async function inviaDatiAlServer(personaggio) {
     const user = getCurrentUser();
     const payload = {
-        userId: user?.id || 1,
         nome: personaggio.nome,
         classe: personaggio.classe || 'Sopravvissuto',
         data: JSON.stringify(personaggio),
@@ -67,7 +77,7 @@ async function inviaDatiAlServer(personaggio) {
 
     const response = await fetch(apiUrl('/api/characters'), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: buildAuthHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify(payload)
     });
 
@@ -89,8 +99,9 @@ async function sincronizzaPersonaggio(personaggioLocale) {
 
     try {
         const user = getCurrentUser();
-        const query = user?.id ? `?userId=${encodeURIComponent(user.id)}` : '';
-        const response = await fetch(apiUrl(`/api/personaggi/${encodeURIComponent(localCopy.nome)}${query}`));
+        const response = await fetch(apiUrl(`/api/personaggi/${encodeURIComponent(localCopy.nome)}`), {
+            headers: buildAuthHeaders()
+        });
         if (!response.ok) {
             if (response.status === 404) {
                 await inviaDatiAlServer(localCopy);

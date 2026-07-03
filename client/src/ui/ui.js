@@ -78,14 +78,15 @@ async function renderCharacterList() {
             if (!user) return alert('Devi essere loggato per inviare una proposta!');
             
             try {
-                // Mandiamo la proposta all'API del server
+                const localCharacter = window.caricaDatiDaLocalStorage ? window.caricaDatiDaLocalStorage(nome) : null;
+                const characterData = localCharacter || { nome };
                 const response = await fetch(apiUrl('/api/proposte'), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        userId: user.id,
                         nome,
                         descrizione: `Proposta personaggio: ${nome}`
+                        characterData,
                     })
                 });
                 
@@ -152,7 +153,9 @@ async function renderCharacterList() {
 async function fetchCharacterDataFromServer(nome, userId) {
     if (!navigator.onLine || !userId) return null;
     try {
-        const response = await fetch(apiUrl(`/api/personaggi/${encodeURIComponent(nome)}?userId=${encodeURIComponent(userId)}`));
+        const response = await fetch(apiUrl(`/api/personaggi/${encodeURIComponent(nome)}`), {
+            headers: window.buildAuthHeaders ? window.buildAuthHeaders() : {}
+        });
         if (!response.ok) return null;
         const data = await response.json();
         return data.personaggio || null;

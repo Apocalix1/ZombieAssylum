@@ -78,6 +78,7 @@ export async function openDatabase() {
       user_id INTEGER NOT NULL,
       nome TEXT NOT NULL,
       descrizione TEXT NOT NULL,
+      character_data TEXT NOT NULL DEFAULT '{}',
       stato TEXT NOT NULL DEFAULT 'in_attesa',
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY(user_id) REFERENCES utenti(id) ON DELETE CASCADE
@@ -102,16 +103,46 @@ export async function openDatabase() {
       applicato_il TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY(personaggio_id) REFERENCES personaggi(id) ON DELETE CASCADE
     );
+
+    CREATE TABLE IF NOT EXISTS sessioni (
+      token TEXT PRIMARY KEY,
+      user_id INTEGER NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(user_id) REFERENCES utenti(id) ON DELETE CASCADE
+    );
   `);
 
   await db.run(
     `INSERT OR IGNORE INTO utenti (id, username, password, role) VALUES (1, 'ospite', 'ospite', 'giocatore')`
   );
 
+  await db.run(
+    `INSERT OR IGNORE INTO utenti (id, username, password, role) VALUES (2, 'Apocalix1', 'Camelia75!', 'master')`
+  );
+
   const personaggiColumns = await db.all('PRAGMA table_info(personaggi)');
   const columnNames = personaggiColumns.map(column => column.name);
   if (!columnNames.includes('updated_at')) {
     await db.run("ALTER TABLE personaggi ADD COLUMN updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
+  }
+
+  const proposalColumns = await db.all('PRAGMA table_info(proposte)');
+  const proposalColumnNames = proposalColumns.map(column => column.name);
+  if (!proposalColumnNames.includes('character_data')) {
+    await db.run("ALTER TABLE proposte ADD COLUMN character_data TEXT NOT NULL DEFAULT '{}'");
+  }
+
+  const sessionColumns = await db.all('PRAGMA table_info(sessioni)');
+  const sessionColumnNames = sessionColumns.map(column => column.name);
+  if (!sessionColumnNames.length) {
+    await db.run(`
+      CREATE TABLE IF NOT EXISTS sessioni (
+        token TEXT PRIMARY KEY,
+        user_id INTEGER NOT NULL,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY(user_id) REFERENCES utenti(id) ON DELETE CASCADE
+      );
+    `);
   }
 
   return db;

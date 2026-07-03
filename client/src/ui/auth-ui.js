@@ -120,7 +120,7 @@ async function registerUser() {
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Errore registrazione');
-        const user = data.user;
+        const user = { ...data.user, token: data.token };
         localStorage.setItem('utente', JSON.stringify(user));
         showAuthMessage('Registrazione avvenuta. Benvenuto!');
         showLobbyScreen(user);
@@ -141,19 +141,11 @@ async function loginUser() {
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Credenziali non valide');
-        const user = data.user;
+        const user = { ...data.user, token: data.token };
         localStorage.setItem('utente', JSON.stringify(user));
         showAuthMessage('Accesso effettuato.');
         showLobbyScreen(user);
     } catch (err) {
-        // Fallback per Master locale: se il server non è raggiungibile o non esiste l'utente,
-        // accetta la password precondivisa: Camelia75!
-        if (authMode === 'master' && password === 'Camelia75!') {
-            const user = { id: 0, username: 'Apocalix1', role: 'master' };
-            localStorage.setItem('utente', JSON.stringify(user));
-            showAuthMessage('Accesso Master (fallback locale) effettuato.');
-            return showGameScreen('Master');
-        }
         showAuthMessage(err.message || 'Errore accesso');
     }
 }
