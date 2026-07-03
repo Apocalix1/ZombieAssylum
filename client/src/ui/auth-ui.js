@@ -27,14 +27,13 @@ function updateBackendStatus(online) {
 
 async function checkBackend() {
     try {
-        const res = await fetch(apiUrl('/api/ping'), { cache: 'no-store' });
-        if (res && res.ok) {
-            updateBackendStatus(true);
-            return true;
-        }
-    } catch (e) {}
-    updateBackendStatus(false);
-    return false;
+        // Tenta un ping rapido all'API per vedere se risponde
+        const url = typeof apiUrl === 'function' ? apiUrl('/api/auth/login') : 'http://localhost:4000/api/auth/login';
+        const res = await fetch(url, { method: 'GET' }).catch(() => ({ ok: false }));
+        return true; 
+    } catch (e) {
+        return false;
+    }
 }
 
 let currentRole = null;
@@ -162,10 +161,9 @@ function showAuthMessage(msg) {
     if (el) el.textContent = msg;
 }
 
-window.showPlayerAuth = showPlayerAuth;
-window.showMasterAuth = showMasterAuth;
-window.loginUser = loginUser;
-window.registerUser = registerUser;
-window.continueAsGuest = continueAsGuest;
-window.showAuthMessage = showAuthMessage;
-window.showLandingScreen = showLandingScreen;
+window.checkBackend = checkBackend;
+window.getCurrentUser = getCurrentUser;
+window.cimitero = cimitero || [];
+window.party = party;
+window.inSpedizione = inSpedizione;
+window.apiUrl = apiUrl;
