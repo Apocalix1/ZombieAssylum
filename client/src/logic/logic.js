@@ -9,7 +9,7 @@ const apiBaseUrl = (() => {
     return '';
 })();
 
-function apiUrl(path) {
+export function apiUrl(path) {
     return apiBaseUrl ? `${apiBaseUrl}${path}` : path;
 }
 
@@ -1142,7 +1142,44 @@ export class Personaggio {
     }
 
     addestraArma(categoria, ore, giornoAttuale) {
-        // Allenamento: +2 PCA per ora base
+        // --- GESTIONE MUNIZIONI ARMI A DISTANZA ---
+        const mappaMunizioni = MAPPA_MUNIZIONI[categoria];
+        if (mappaMunizioni) {
+            let oreCoperte = 0;
+            let oreDaCoprire = ore;
+
+            // 1. Usa i proiettili di gomma (degrado in ore)
+            let oreGommaUsate = Math.min(oreDaCoprire, magazzino.munizioni[mappaMunizioni.gomma] || 0);
+            if (oreGommaUsate > 0) {
+                magazzino.munizioni[mappaMunizioni.gomma] -= oreGommaUsate;
+                oreCoperte += oreGommaUsate;
+                oreDaCoprire -= oreGommaUsate;
+            }
+
+            // 2. Usa munizioni vere (1 proiettile/freccia/quadrello = 1 ora)
+            if (oreDaCoprire > 0) {
+                let munizioniVereUsate = Math.min(oreDaCoprire, magazzino.munizioni[mappaMunizioni.reale] || 0);
+                if (munizioniVereUsate > 0) {
+                    magazzino.munizioni[mappaMunizioni.reale] -= munizioniVereUsate;
+                    oreCoperte += munizioniVereUsate;
+                    oreDaCoprire -= munizioniVereUsate;
+                }
+            }
+
+            // Se non c'è nulla per allenarsi
+            if (oreCoperte === 0) {
+                alert(`Impossibile allenarsi con ${categoria}: nessuna munizione (vera o di gomma) disponibile nel magazzino.`);
+                return null; // Interrompe l'azione
+            }
+
+            // Tronca l'allenamento se le munizioni non bastano per il tempo scelto
+            if (oreCoperte < ore) {
+                alert(`Munizioni insufficienti per ${ore} ore. L'allenamento di ${this.nome} con ${categoria} durerà solo ${oreCoperte} ore.`);
+                ore = oreCoperte;
+            }
+        }
+
+        // --- CALCOLO ORE E STAMINA (Logica Base) ---
         const gratuite = this.calcolaOreAllenamentoGratuite(giornoAttuale);
         const oreGratuite = Math.min(ore, gratuite - this.oreAllenamento);
         const oreAGagoPagato = ore - oreGratuite;
@@ -1159,20 +1196,19 @@ export class Personaggio {
         this.pca[categoria] = (this.pca[categoria] || 0) + pcaGuadagnato;
 
         // Fame aumenta 15% per 2 ore
-        this.fame = Math.max(0, this.fame - (14 * 0.15)); // riduce la barra di fame
+        this.fame = Math.max(0, this.fame - (14 * 0.15)); 
 
-        // Se ore a carico pagato, consuma stamina (1 barra ogni 2 ore)
+        // Consuma stamina per le ore a pagamento (1 barra ogni 2 ore)
         const staminaDaConsumara = Math.ceil(oreAGagoPagato / 2);
         this.staminaAttuale = Math.max(0, this.staminaAttuale - staminaDaConsumara);
 
-        // Traccia ore di allenamento gratuite
         this.oreAllenamento += oreGratuite;
 
         return { 
             oreGratuite, 
             oreAGagoPagato, 
             staminaUsata: staminaDaConsumara, 
-            pcaGuadagnato // Restituiamo il valore effettivo, eventualmente buffato
+            pcaGuadagnato 
         };
     }
     // --- CALCOLO STATISTICHE (Visualizzazione richiesta: Valore (Mod)) ---
@@ -1438,6 +1474,17 @@ export class Personaggio {
         if (this.puntiFortuna > effMax) this.puntiFortuna = effMax;
     }
 
+    hasPerk(perkName) {
+        if (!perkName) return false;
+        if (Array.isArray(this.perks)) {
+            return this.perks.some(perk => {
+                if (typeof perk === 'string') return perk === perkName;
+                if (perk && typeof perk === 'object') return perk.nome === perkName || perk.name === perkName;
+                return false;
+            });
+        }
+        return false;
+    }
 
 }
 export function avviaAscoltoDatiCloud() {
@@ -1455,3 +1502,4 @@ window.getCurrentUser = getCurrentUser;
 window.cimitero = cimitero || [];
 window.party = party;
 window.inSpedizione = inSpedizione;
+window.apiUrl = apiUrl;

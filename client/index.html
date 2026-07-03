@@ -16,8 +16,8 @@
                 <p>Entra nella modalità Giocatore o Master.</p>
             </div>
             <div class="landing-choices">
-                <button id="btn-player" class="btn-hero btn-landing">GIOCATORE</button>
-                <button id="btn-master" class="btn-hero btn-landing">MASTER</button>
+                <button id="btn-player" class="btn-hero btn-landing" onclick="showPlayerAuth()">GIOCATORE</button>
+                <button id="btn-master" class="btn-hero btn-landing" onclick="showMasterAuth()">MASTER</button>
             </div>
             <div class="landing-auth hidden">
                 <div class="auth-row">
@@ -25,13 +25,13 @@
                     <input id="login-password" placeholder="Password" type="password" />
                 </div>
                 <div class="auth-actions">
-                    <button id="btn-login" class="btn-hero">Accedi</button>
-                    <button id="btn-register" class="btn-hero">Crea account</button>
+                    <button id="btn-login" class="btn-hero" onclick="loginUser()">Accedi</button>
+                    <button id="btn-register" class="btn-hero" onclick="registerUser()">Crea account</button>
                 </div>
                 <div id="auth-message" style="color:#f1c40f; margin-top:8px; font-size:0.95rem;"></div>
             </div>
             <div style="text-align:center; margin-top:8px;">
-                <button id="btn-guest" class="btn-hero">Continua come Ospite</button>
+                <button id="btn-guest" class="btn-hero" onclick="continueAsGuest()">Continua come Ospite</button>
             </div>
             <div class="landing-info-cards">
                 <div class="landing-card">

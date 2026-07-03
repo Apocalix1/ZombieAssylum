@@ -134,6 +134,16 @@ app.get('/api/proposals', async (req, res) => {
   }
 });
 
+app.get('/api/proposte', async (req, res) => {
+  try {
+    const db = await dbPromise;
+    const proposals = await db.all('SELECT * FROM proposte WHERE stato = ? ORDER BY created_at DESC', 'in_attesa');
+    res.json({ proposals });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // CREA NUOVA PROPOSTA DA PARTE DEL GIOCATORE
 app.post('/api/proposals', async (req, res) => {
   const { userId, nome, descrizione } = req.body;
@@ -154,6 +164,48 @@ app.post('/api/proposals', async (req, res) => {
     );
     const proposal = await db.get('SELECT * FROM proposte WHERE id = ?', result.lastID);
     res.json({ proposal });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/proposte', async (req, res) => {
+  const { userId, nome, descrizione } = req.body;
+  if (!userId || !nome) {
+    return res.status(400).json({ error: 'userId e nome del personaggio richiesti' });
+  }
+
+  try {
+    const db = await dbPromise;
+    const desc = descrizione || `Proposta personaggio: ${nome}`;
+    const result = await db.run(
+      'INSERT INTO proposte (user_id, nome, descrizione, stato) VALUES (?, ?, ?, ?)',
+      userId,
+      nome,
+      desc,
+      'in_attesa'
+    );
+    const proposal = await db.get('SELECT * FROM proposte WHERE id = ?', result.lastID);
+    res.json({ proposal });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/proposte/approva', async (req, res) => {
+  const { nome, userId } = req.body;
+  if (!nome || !userId) {
+    return res.status(400).json({ error: 'nome e userId richiesti' });
+  }
+
+  try {
+    const db = await dbPromise;
+    const proposal = await db.get('SELECT * FROM proposte WHERE nome = ? AND user_id = ? AND stato = ?', nome, userId, 'in_attesa');
+    if (!proposal) {
+      return res.status(404).json({ error: 'Proposta non trovata' });
+    }
+    await db.run('UPDATE proposte SET stato = ? WHERE id = ?', 'approved', proposal.id);
+    res.json({ ok: true, proposal });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

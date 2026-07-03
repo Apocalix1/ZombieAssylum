@@ -206,9 +206,32 @@ async function renderSpedizioneModal() {
     }).join('');
 }
 
-function rollZainoTrovato() {
-    // Es: 15% di probabilità di trovare uno zaino esplorando
-    if (Math.random() > 0.15) return null; 
+function rollArmiTrovate(diffLevel = 0) {
+    const armi = [];
+    const bonus = diffLevel * 5; // Bonus lineare alle probabilità base
+    
+    const check = (baseProb) => (Math.floor(Math.random() * 100) + 1) <= (baseProb + bonus);
+    const d4 = () => Math.floor(Math.random() * 4) + 1;
+
+    if (check(1))  armi.push({ nome: 'Pistola', qta: 1, tipo: 'arma' });
+    if (check(4))  armi.push({ nome: 'Proiettili', qta: d4(), tipo: 'munizioni' });
+    if (check(10)) armi.push({ nome: 'Arma con Asta', qta: 1, tipo: 'arma' });
+    if (check(8))  armi.push({ nome: 'Lama leggera', qta: 1, tipo: 'arma' });
+    if (check(6))  armi.push({ nome: 'Balestra', qta: 1, tipo: 'arma' });
+    if (check(9))  armi.push({ nome: 'Quadrelli', qta: d4(), tipo: 'munizioni' });
+    if (check(6))  armi.push({ nome: 'Arco', qta: 1, tipo: 'arma' });
+    if (check(10)) armi.push({ nome: 'Frecce', qta: d4(), tipo: 'munizioni' });
+    if (check(10)) armi.push({ nome: 'Mazza', qta: 1, tipo: 'arma' });
+
+    return armi;
+}
+
+function rollZainoTrovato(diffLevel = 0) {
+    const baseChance = 15;
+    const finalChance = baseChance + (diffLevel * 5); // +0%, +5%, +10%, +15%
+
+    // Tiro percentuale: se supera la probabilità finale, non trova niente
+    if ((Math.floor(Math.random() * 100) + 1) > finalChance) return null; 
 
     const roll = Math.floor(Math.random() * 100) + 1;
     if (roll <= 30) return { nome: 'Borsetta', bonus: 1, pesoUnEquipped: 0.1, grado: 1 };
@@ -219,16 +242,14 @@ function rollZainoTrovato() {
     return { nome: 'Zaino da Esploratore', bonus: 12, pesoUnEquipped: 0.6, grado: 6 };
 }
 
-function assegnaLootSpedizione(p, lootGenerato) {
+function assegnaLootSpedizione(p, lootGenerato, diffLevel = 0) {
     p.initInventarioBase();
     
-    // Controlla se trova zaini
-    let nuovoZaino = rollZainoTrovato();
+    // Controlla se trova zaini passando il livello di difficoltà
+    let nuovoZaino = rollZainoTrovato(diffLevel);
     if (nuovoZaino) {
-        // Auto-equipaggia se è migliore
         if (!p.zainoEquipaggiato || nuovoZaino.bonus > p.zainoEquipaggiato.bonus) {
             if (p.zainoEquipaggiato) {
-                // Il vecchio zaino finisce nell'inventario
                 p.inventario.zaini.push(p.zainoEquipaggiato);
             }
             p.zainoEquipaggiato = nuovoZaino;
@@ -236,16 +257,14 @@ function assegnaLootSpedizione(p, lootGenerato) {
                 mostraNotificaInAlto(`${p.nome} ha trovato e indossato: ${nuovoZaino.nome}!`);
             }
         } else {
-            // Se ha uno zaino migliore, lo tiene in inventario
             p.inventario.zaini.push(nuovoZaino);
         }
     }
+    
     const spazioDisponibile = p.capacitaMax - p.pesoAttuale;
     
     if (spazioDisponibile < lootGenerato.pesoStimato) {
-        // Qui la UI dovrà fermarsi e chiedere al giocatore cosa scartare
         alert(`${p.nome} è troppo carico! Non può trasportare tutto alla base (Max: ${p.capacitaMax}).`);
-        // Aprire la tendina dell'inventario per fargli scartare oggetti
     } else {
         // Aggiungi gli oggetti all'inventario di p
     }
@@ -261,7 +280,7 @@ function esplora(idx) {
         if (!confirm(`⚠️ Attenzione! ${leader.nome} ha lo zaino già pieno. Non potrà riportare alcun oggetto. Partire lo stesso?`)) return;
     }
 
-    // 1. SCELTA MODALITÀ (Solo o Gruppo)
+    // 1. SCELTA MODALITÀ
     let gruppoSpedizione = [leader];
     const modRisposta = prompt(`Vuoi che ${leader.nome} esplori da solo o insieme ad altri?\nScrivi "SOLO" o "INSIEME"`, "SOLO");
     
@@ -275,12 +294,11 @@ function esplora(idx) {
             
             if (scelti) {
                 let indiciScelti = scelti.split(',').map(n => parseInt(n.trim())).filter(n => !isNaN(n) && n >= 0 && n < disponibili.length);
-                indiciScelti = indiciScelti.slice(0, 2); // Massimo 2 compagni
+                indiciScelti = indiciScelti.slice(0, 2); 
                 
                 indiciScelti.forEach(i => {
                     const compagno = disponibili[i];
-                    // Simulazione dell'invito (Se fosse multiplayer, qui andrebbe una chiamata al server)
-                    if (confirm(`MESSAGGIO PER ${compagno.nome}:\n${leader.nome} ti invita in esplorazione. Accetti? (Hai 2 minuti, premere OK = Accetta, Annulla = Rifiuta)`)) {
+                    if (confirm(`MESSAGGIO PER ${compagno.nome}:\n${leader.nome} ti invita in esplorazione. Accetti? (Premere OK = Accetta, Annulla = Rifiuta)`)) {
                         if (typeof compagno.initInventarioBase === 'function') compagno.initInventarioBase();
                         gruppoSpedizione.push(compagno);
                     }
@@ -297,23 +315,21 @@ function esplora(idx) {
         { nome: 'Estremamente Rischiosa', bonus: 3, oreBase: 9, mult: 4 }
     ];
     
-    let sceltaPericoloStr = prompt(`Scegli il livello di pericolosità (scrivi il numero):\n0: Sicura (+0 tiri, 3H)\n1: Impegnativa (+1 tiri, 5H)\n2: Pericolosa (+2 tiri, 7H)\n3: Estremamente Rischiosa (+3 tiri, 9H)`, "0");
+    let sceltaPericoloStr = prompt(`Scegli il livello di pericolosità:\n0: Sicura (3H, +0% Drop)\n1: Impegnativa (5H, +5% Drop)\n2: Pericolosa (7H, +10% Drop)\n3: Estremamente Rischiosa (9H, +15% Drop)`, "0");
     let pericoloIdx = parseInt(sceltaPericoloStr);
     if (isNaN(pericoloIdx) || pericoloIdx < 0 || pericoloIdx > 3) pericoloIdx = 0;
     
     const pericolo = livelliPericolo[pericoloIdx];
     const numCompagni = gruppoSpedizione.length - 1;
 
-    // 3. CALCOLO MALUS TEMPO PER OGNI MEMBRO E MEDIA GLOBALE
+    // 3. CALCOLO MALUS TEMPO
     let totaleAumentoTempo = 0;
 
     gruppoSpedizione.forEach(p => {
         let { timePenalty } = calcolaEventiPericolo(p, pericolo.mult, numCompagni);
-        
-        // Aggiunta Pessimo Orientamento
         if (p.hasPerk && p.hasPerk('Pessimo orientamento')) {
             if (Math.floor(Math.random() * 100) + 1 <= 70) {
-                timePenalty += 100; // Raddoppia il suo contributo al tempo (100% in più)
+                timePenalty += 100;
                 alert(`🧭 ${p.nome} ha Pessimo Orientamento e ha perso l'orientamento!`);
             }
         }
@@ -325,8 +341,8 @@ function esplora(idx) {
 
     alert(`Il gruppo parte per un'esplorazione ${pericolo.nome}.\nDurata prevista: ${oreSpedizione} ore (Modifica media tempo: +${mediaAumentoTempo.toFixed(1)}%)`);
 
-    // 4. ASSEGNAZIONE AZIONE AL GRUPPO
-    const idSpedizioneGlobale = Date.now(); // ID univoco per unire il gruppo
+    // 4. ASSEGNAZIONE AZIONE
+    const idSpedizioneGlobale = Date.now(); 
     
     gruppoSpedizione.forEach(p => {
         const nuovaAzione = {
@@ -334,11 +350,12 @@ function esplora(idx) {
             idSpedizione: idSpedizioneGlobale,
             pericoloMultiplo: pericolo.mult,
             pericoloBonus: pericolo.bonus,
+            livelloPericolo: pericoloIdx, // Aggiunto per tracciare il boost dei drop (+5, +10, ecc)
             numCompagni: numCompagni,
             oreTotali: oreSpedizione,
             oreRimanenti: oreSpedizione,
             isLeader: p === leader,
-            membri: gruppoSpedizione.map(m => m.nome), // Nomi per il log
+            membri: gruppoSpedizione.map(m => m.nome), 
             onComplete: () => terminaEsplorazione(p)
         };
         p.azioneCorrente = nuovaAzione;
@@ -402,27 +419,26 @@ function calcolaEventiPericolo(p, mult, numCompagni) {
 function terminaEsplorazione(p) {
     if (!p) return;
     
-    // Recupera i dati dell'azione appena conclusa
     const act = p.azioneCorrente || {};
     const bonus = act.pericoloBonus !== undefined ? act.pericoloBonus : getExplorationBonus(p);
     const mult = act.pericoloMultiplo || 1;
+    const diffLevel = act.livelloPericolo || 0; // Recupera l'indice di difficoltà (0-3)
     const numCompagni = act.numCompagni || 0;
 
     if (numCompagni === 0 && p.hasPerk && p.hasPerk('Solitario')) {
         bonus += 1;
     }
 
-    // Ricalcola i danni specifici per questo giocatore a fine spedizione
     const pericoli = calcolaEventiPericolo(p, mult, numCompagni);
-
     const skill = p.getSkillModifierForCheck ? p.getSkillModifierForCheck('Sopravvivenza') : { modifier: 0, advantage: false, disadvantage: false };
 
-    // Tiri Loot
+    // Tiri standard base
     const mediciTiro = Math.min(20, rollD20WithAdv(skill.advantage, skill.disadvantage) + bonus);
     const ingranaggiTiro = Math.min(20, rollD20WithAdv(skill.advantage, skill.disadvantage) + bonus);
     const alchemiciTiro = Math.min(20, rollD20WithAdv(skill.advantage, skill.disadvantage) + bonus);
     const ciboTiro = Math.min(20, rollD20WithAdv(skill.advantage, skill.disadvantage) + bonus);
     const acquaTiro = Math.min(20, rollD20WithAdv(skill.advantage, skill.disadvantage) + bonus) * 1.25;
+    const booksTiro = Math.min(20, (typeof rollD20 === 'function' ? rollD20() : Math.floor(Math.random()*20)+1) + bonus);
 
     // Generazione base
     let medici = lootMedici(mediciTiro);
@@ -431,10 +447,12 @@ function terminaEsplorazione(p) {
     let cibo = lootCiboAcqua(ciboTiro);
     let acqua = lootCiboAcqua(acquaTiro);
     let deliziosi = lootPiattiDeliziosi(ciboTiro);
-    let oggMagiciTrovati = lootOggettiMagici();
-    
-    const booksTiro = Math.min(20, (typeof rollD20 === 'function' ? rollD20() : Math.floor(Math.random()*20)+1) + bonus);
     let booksFound = lootBooks(booksTiro);
+    
+    // Generazione oggetti speciali (Influenzati dalla difficoltà: diffLevel * 5%)
+    // Si presume che la funzione lootOggettiMagici venga aggiornata o accetti il parametro diffLevel
+    let oggMagiciTrovati = (typeof lootOggettiMagici === 'function') ? lootOggettiMagici(diffLevel) : { comuni: 0, nonComuni: 0, rari: 0, superRari: 0 };
+    let armiTrovate = rollArmiTrovate(diffLevel);
 
     // --- APPLICAZIONE MALUS LOOT PERSO ---
     if (pericoli.lootLost > 0) {
@@ -448,17 +466,25 @@ function terminaEsplorazione(p) {
         acqua = Math.floor(acqua * ritieni);
         deliziosi = Math.floor(deliziosi * ritieni);
         booksFound = Math.floor(booksFound * ritieni);
+        
+        // Perdita armi/munizioni
+        armiTrovate = armiTrovate.filter(arma => {
+            if (arma.tipo === 'arma') {
+                // Tiro salvezza individuale per non perdere l'arma intera
+                return Math.random() > (pericoli.lootLost / 100);
+            } else {
+                // Per le munizioni, si perde in percentuale
+                arma.qta = Math.floor(arma.qta * ritieni);
+                return arma.qta > 0;
+            }
+        });
     }
 
     // --- APPLICAZIONE DANNI FISICI ---
-    if (pericoli.hpDamage > 0) {
-        p.puntiFeritaReali -= pericoli.hpDamage;
-    }
-    if (pericoli.fatigueStagies > 0 && typeof p.faticaBase !== 'undefined') {
-        p.faticaBase += pericoli.fatigueStagies;
-    }
+    if (pericoli.hpDamage > 0) p.puntiFeritaReali -= pericoli.hpDamage;
+    if (pericoli.fatigueStagies > 0 && typeof p.faticaBase !== 'undefined') p.faticaBase += pericoli.fatigueStagies;
 
-    // Assegnazione risorse al magazzino (O all'inventario di P se vuoi usare il nuovo sistema zaini)
+    // --- ASSEGNAZIONE MAGazzino ---
     magazzino.materialiAlchemici += alchemici;
     magazzino.ingranaggi += ingranaggi;
     magazzino.materialiMedici.base += medici.base;
@@ -473,13 +499,22 @@ function terminaEsplorazione(p) {
     magazzino.oggettiMagici.rari += oggMagiciTrovati.rari;
     magazzino.oggettiMagici.superRari += oggMagiciTrovati.superRari;
 
+    // Assegnazione armi al magazzino (Inizializza l'array se non esiste)
+    if (!magazzino.armiTrovate) magazzino.armiTrovate = [];
+    let infoArmiStr = "";
+    if (armiTrovate.length > 0) {
+        armiTrovate.forEach(arma => {
+            magazzino.armiTrovate.push(arma);
+            infoArmiStr += `  - ${arma.nome} (x${arma.qta})\n`;
+        });
+    }
+
     let infoMagica = "";
     if (oggMagiciTrovati.comuni > 0)     infoMagica += `• Oggetti Magici Comuni: +${oggMagiciTrovati.comuni}\n`;
     if (oggMagiciTrovati.nonComuni > 0)  infoMagica += `• Oggetti Magici Non Comuni: +${oggMagiciTrovati.nonComuni}\n`;
     if (oggMagiciTrovati.rari > 0)       infoMagica += `• Oggetti Magici Rari: +${oggMagiciTrovati.rari}\n`;
     if (oggMagiciTrovati.superRari > 0)  infoMagica += `• 🌟 Oggetti Magici SUPER RARI: +${oggMagiciTrovati.superRari}\n`;
 
-    // Stringa Malus
     let infoMalus = "";
     if (pericoli.lootLost > 0) infoMalus += `⚠️ Bottino perso durante la via: -${pericoli.lootLost}%\n`;
     if (pericoli.hpDamage > 0) infoMalus += `🩸 Ferite subite: -${pericoli.hpDamage} PF\n`;
@@ -493,11 +528,12 @@ function terminaEsplorazione(p) {
         `• Acqua: +${acqua}\n` +
         `${deliziosi > 0 ? `• Piatti deliziosi: +${deliziosi}\n` : ''}` +
         `• Libri: +${booksFound}\n` +
+        `${infoArmiStr ? `• ⚔️ Armi/Munizioni Trovate:\n${infoArmiStr}` : ''}` +
         infoMagica + "\n" +
         (infoMalus ? `\n--- EVENTI AVVERSI ---\n${infoMalus}` : "Nessun evento avverso!")
     );
         
-    p.azioneCorrente = null; // Libera il personaggio
+    p.azioneCorrente = null; 
     aggiornaInterfaccia();
 }
 

@@ -295,6 +295,17 @@ export const ARTIFICER_RECIPES = [
         cost: { ingranaggi: 10 },
         time: { hours: 1 },
         specialization: { AG: 1 } // Artificeria Generale
+    },
+    {
+        id: 'proiettili_gomma',
+        name: 'Proiettili di Gomma (Allenamento)',
+        category: 'Sopravvivenza & Conservazione',
+        difficulty: 'Facile',
+        outputType: 'munizioni',
+        description: 'Munizioni non letali per allenamento a distanza. Si degradano dopo 3 ore di pratica.',
+        cost: { ingranaggi: 10 },
+        time: { hours: 1 },
+        specialization: { Balistica: 2 }
     }
 ];
 

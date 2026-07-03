@@ -7,6 +7,17 @@ const ALCHIMIA_GRADI = {
     difficile:{ cd: 22, tempo: 8, costo: 24, reqNatura: 'maestria',   label: 'Difficile' }
 };
 
+const party = window.party || [];
+const magazzino = window.magazzino || { materialiAlchemici: 0, compounds: [], composti: [], postazioneAlchemica: false, congegniFissi: [], congegniConteggio: {} };
+window.magazzino = magazzino;
+const mostraNotificaInAlto = (...args) => {
+    if (typeof window.mostraNotificaInAlto === 'function') return window.mostraNotificaInAlto(...args);
+    console.log(...args);
+};
+const aggiornaInterfaccia = () => {
+    if (typeof window.aggiornaInterfaccia === 'function') window.aggiornaInterfaccia();
+};
+
 // Ricette integrate dal database ricette.js (window.RICETTE)
 function getRicetteDisponibili(p) {
     const haMaestriaNatura = p.masteries && p.masteries.map(m => m.toLowerCase()).includes('natura');
@@ -267,8 +278,8 @@ function completaAlchimia(p, nomeRicetta, grado, cdEffettiva, collaboratore) {
 }
 
 function aggiungiComposto(nome, ricettaDati, qualita) {
-    if (!magazzino.composti) magazzino.composti = [];
-    magazzino.composti.push({
+    magazzino.compounds = magazzino.compounds || [];
+    magazzino.compounds.push({
         id: `composto-${Date.now()}-${Math.floor(Math.random() * 9999)}`,
         nome,
         qualita, // 'normale', 'instabile', 'tossico'

@@ -1,4 +1,4 @@
-import { party, Personaggio, salvaPersonaggioCloud, avviaAscoltoDatiCloud, fetchUserCharacters } from "../logic/logic.js";
+import { party, Personaggio, salvaPersonaggioCloud, avviaAscoltoDatiCloud, fetchUserCharacters, apiUrl } from "../logic/logic.js";
 
 function showLobbyScreen(user) {
     window.guestMode = false;
@@ -83,9 +83,9 @@ async function renderCharacterList() {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        nomePersonaggio: nome,
-                        propostoDa: user.username,
-                        userId: user.id
+                        userId: user.id,
+                        nome,
+                        descrizione: `Proposta personaggio: ${nome}`
                     })
                 });
                 
@@ -294,7 +294,21 @@ window.continueAsGuest = window.continueAsGuest || (typeof continueAsGuest === '
 
 let oreTotali = 0;
 let cimitero = [];
+let magazzino = window.magazzino || { materialiAlchemici: 0, compounds: [], composti: [], postazioneAlchemica: false, congegniFissi: [], congegniConteggio: {}, cibo: 0, conserve: 0, ciboaviarto: 0, piattiDeliziosi: 0 };
+window.magazzino = magazzino;
 
+function mostraNotificaInAlto(msg, tipo = 'info') {
+    const el = document.getElementById('toast-notify');
+    if (el) {
+        el.textContent = msg;
+        el.dataset.tipo = tipo;
+        el.classList.add('show');
+        clearTimeout(mostraNotificaInAlto._timer);
+        mostraNotificaInAlto._timer = setTimeout(() => el.classList.remove('show'), 2400);
+        return;
+    }
+    console.log(`[${tipo}] ${msg}`);
+}
 
 function mostraCongegniBase() {
     let testo = "=== STRUTTURE FISSE ===\n";
@@ -318,6 +332,19 @@ function mostraCongegniBase() {
 }
 
 let selectedLobbyCharacter = null;
+window.magazzino = window.magazzino || {};
+window.cimitero = cimitero;
+window.oreTotali = oreTotali;
+window.apiUrl = apiUrl;
+window.mostraNotificaInAlto = mostraNotificaInAlto;
+window.hasPerk = function hasPerk(personaggio, perk) {
+    if (!personaggio) return false;
+    if (typeof personaggio.hasPerk === 'function') return personaggio.hasPerk(perk);
+    if (Array.isArray(personaggio.perks)) {
+        return personaggio.perks.some(p => (typeof p === 'string' ? p : p?.nome) === perk);
+    }
+    return false;
+};
 
 function rollDiceNotation(notation) {
     const match = notation.match(/(\d+)d(\d+)/);
@@ -443,6 +470,7 @@ function passaTempoGlobale() {
     // Avanza il tempo globale di 'ore' ore in blocco
     const giornoPrecedente = Math.floor(oreTotali / 24);
     oreTotali += ore;
+    window.oreTotali = oreTotali;
     const giornoAttuale = Math.floor(oreTotali / 24);
 
     // Degrado del cibo: 25% di probabilità per ogni giorno che passa
@@ -498,6 +526,7 @@ function passaTempoGlobale() {
                 giorni: giorniSopravvissuto,
                 data: `${giornoAttuale}° Giorno`
             });
+            window.cimitero = cimitero;
             
             party.splice(i, 1);
             if (typeof chiudiScheda === 'function') chiudiScheda();
@@ -509,7 +538,7 @@ function passaTempoGlobale() {
 }
 
 // --- AGGIORNAMENTO INTERFACCIA PRINCIPALE ---
-function aggiornaInterfaccia() {
+window.aggiornaInterfaccia = function aggiornaInterfaccia() {
     document.getElementById('display-giorno').innerText = Math.floor(oreTotali / 24);
     let ora = oreTotali % 24;
     document.getElementById('display-ora').innerText = `${ora < 10 ? '0' : ''}${ora}:00`;
@@ -1761,24 +1790,22 @@ function renderParty() {
 }
 
 async function renderProposteMaster() {
-    // Mostra questo pannello solo se l'utente è il Master
     const currentUser = getCurrentUser();
     if (!currentUser || currentUser.username !== 'Apocalix1') return;
 
-    // Creiamo un contenitore temporaneo nella dashboard se non esiste nell'HTML
     let panel = document.getElementById('master-proposte-panel');
     if (!panel) {
         panel = document.createElement('div');
         panel.id = 'master-proposte-panel';
         panel.style = "background:#2c3e50; padding:15px; margin:15px 0; border-radius:8px; border:2px solid #f1c40f;";
-        // Lo inseriamo in cima al game-screen del Master
         const gameScreen = document.getElementById('game-screen');
         if (gameScreen) gameScreen.insertBefore(panel, gameScreen.firstChild);
     }
 
     try {
-        const response = await fetch(apiUrl('/api/proposte'));
-        const proposte = await response.json();
+        const response = await fetch(apiUrl('/api/proposals'));
+        const data = await response.json();
+        const proposte = Array.isArray(data.proposals) ? data.proposals : [];
 
         if (!proposte.length) {
             panel.innerHTML = `<h3>👑 Pannello Master: Proposte</h3><p style="color:#eee;">Nessuna proposta di personaggio in attesa.</p>`;
@@ -1787,13 +1814,15 @@ async function renderProposteMaster() {
 
         let html = `<h3>👑 Pannello Master: Nuovi Sopravvissuti in Attesa (${proposte.length})</h3>`;
         proposte.forEach(prop => {
+            const nome = prop.nome || prop.nomePersonaggio || 'Sconosciuto';
+            const propostaDa = prop.propostoDa || prop.user_name || 'Sconosciuto';
             html += `
                 <div style="background:#1a252f; padding:10px; margin-top:8px; display:flex; justify-content:space-between; align-items:center; border-radius:4px;">
                     <div>
-                        <strong>${prop.nomePersonaggio}</strong> proposto da <em>${prop.propostoDa}</em>
+                        <strong>${nome}</strong> proposto da <em>${propostaDa}</em>
                     </div>
                     <div>
-                        <button class="btn-hero" style="background:#2ecc71;" onclick="approvaPersonaggio('${prop.nomePersonaggio}', '${prop.userId}')">APPROVA</button>
+                        <button class="btn-hero" style="background:#2ecc71;" onclick="approvaPersonaggio('${prop.id}', '${nome}')">APPROVA</button>
                         <button class="btn-hero" style="background:#e74c3c;" onclick="rifiutaPersonaggio('${prop.id}')">RIFIUTA</button>
                     </div>
                 </div>`;
@@ -1804,21 +1833,42 @@ async function renderProposteMaster() {
     }
 }
 
-// Funzione per approvare il personaggio ed inserirlo nel Party globale
-async function approvaPersonaggio(nome, userId) {
+async function approvaPersonaggio(id, nome) {
     try {
-        const response = await fetch(apiUrl('/api/proposte/approva'), {
+        const response = await fetch(apiUrl(`/api/proposals/${id}/decision`), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ nome, userId })
+            body: JSON.stringify({ decision: 'approved' })
         });
         if (response.ok) {
             alert(`${nome} è entrato ufficialmente nel gioco!`);
-            renderProposteMaster(); // Aggiorna il pannello
-            aggiornaInterfaccia();   // Aggiorna la griglia dei personaggi
+            renderProposteMaster();
+            aggiornaInterfaccia();
+        } else {
+            const err = await response.json().catch(() => null);
+            alert(err?.error || 'Errore durante l\'approvazione.');
         }
     } catch (e) {
-        alert("Errore durante l'approvazione.");
+        alert('Errore durante l\'approvazione.');
+    }
+}
+
+async function rifiutaPersonaggio(id) {
+    try {
+        const response = await fetch(apiUrl(`/api/proposals/${id}/decision`), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ decision: 'rejected' })
+        });
+        if (response.ok) {
+            alert('Proposta rifiutata.');
+            renderProposteMaster();
+        } else {
+            const err = await response.json().catch(() => null);
+            alert(err?.error || 'Errore durante il rifiuto.');
+        }
+    } catch (e) {
+        alert('Errore durante il rifiuto.');
     }
 }
 
@@ -1840,6 +1890,7 @@ window.onclick = function(event) {
 
 window.renderProposteMaster = renderProposteMaster;
 window.approvaPersonaggio = approvaPersonaggio;
+window.rifiutaPersonaggio = rifiutaPersonaggio;
 
 // Espongo funzioni usate da onclick inline nei template
 window.showPlayerAuth = showPlayerAuth;

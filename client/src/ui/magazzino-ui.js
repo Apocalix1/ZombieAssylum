@@ -17,6 +17,14 @@ let magazzino = {
         rari: 0,
         superRari: 0
     },
+    munizioni : {
+        proiettili: 0,
+        quadrelli: 0,
+        frecce: 0,
+        gomma_pistola: 0,  // Rappresenta le *ore* di usura disponibili
+        gomma_balestra: 0,
+        gomma_arco: 0
+    },
     postazioneAlchemica: false,
     compounds: [],
     libri: [],
@@ -26,6 +34,12 @@ let magazzino = {
     'Cassa Amplificata': 0,
     'Innesco': 0
 }
+};
+
+const MAPPA_MUNIZIONI = {
+    'Pistola':  { reale: 'proiettili', gomma: 'gomma_pistola' },
+    'Balestra': { reale: 'quadrelli',  gomma: 'gomma_balestra' },
+    'Arco':     { reale: 'frecce',     gomma: 'gomma_arco' }
 };
 
 function normalizeMagazzinoItems() {
@@ -199,4 +213,23 @@ function applicaPerkArmato(p) {
         }
     }
 }
+
+function consumaMunizioneAttacco(p, tipoArma) {
+    const mappa = MAPPA_MUNIZIONI[tipoArma];
+    
+    // Se non è un'arma a distanza, nessun consumo necessario
+    if (!mappa) return true; 
+
+    if (magazzino.munizioni[mappa.reale] > 0) {
+        magazzino.munizioni[mappa.reale]--;
+        if (typeof mostraNotificaInAlto === 'function') {
+            mostraNotificaInAlto(`${p.nome} spara! ${mappa.reale} rimanenti: ${magazzino.munizioni[mappa.reale]}`, 'info');
+        }
+        return true; // Colpo effettuato
+    } else {
+        alert(`❌ ${p.nome} non ha abbastanza ${mappa.reale} per usare: ${tipoArma}!`);
+        return false; // Colpo fallito
+    }
+}
+
 window.takeFromMagazzino = takeFromMagazzino;

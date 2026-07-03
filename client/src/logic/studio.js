@@ -542,4 +542,6 @@ function archiviaInBiblioteca(idxPersonaggio, idxDocumento) {
     aggiornaInterfaccia();
 }
 
+
+
 window.bibliotecaBase = window.bibliotecaBase || { documenti: [] };
