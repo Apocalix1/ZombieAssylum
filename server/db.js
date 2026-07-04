@@ -113,8 +113,15 @@ export async function openDatabase() {
       token TEXT PRIMARY KEY,
       user_id INTEGER NOT NULL,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      expires_at TEXT,
       FOREIGN KEY(user_id) REFERENCES utenti(id) ON DELETE CASCADE
     );
+    CREATE TABLE IF NOT EXISTS magazzino (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      data TEXT NOT NULL DEFAULT '{}',
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    INSERT OR IGNORE INTO magazzino (id, data) VALUES (1, '{}');
   `);
 
   await db.run(
@@ -122,7 +129,7 @@ export async function openDatabase() {
   );
 
   await db.run(
-    `INSERT OR IGNORE INTO utenti (id, username, password, role) VALUES (2, 'Apocalix1', 'Camelia75!', 'master')`
+    `INSERT OR IGNORE INTO utenti (username, password, role) VALUES ('Apocalix1', 'Camelia75!', 'master')`
   );
 
   const personaggiColumns = await db.all('PRAGMA table_info(personaggi)');
@@ -161,9 +168,13 @@ export async function openDatabase() {
         token TEXT PRIMARY KEY,
         user_id INTEGER NOT NULL,
         created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        expires_at TEXT,
         FOREIGN KEY(user_id) REFERENCES utenti(id) ON DELETE CASCADE
       );
     `);
+  }
+  if (!sessionColumnNames.includes('expires_at')) {
+    await db.run('ALTER TABLE sessioni ADD COLUMN expires_at TEXT');
   }
 
   return db;

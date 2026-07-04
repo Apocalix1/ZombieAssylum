@@ -516,7 +516,7 @@ function passaDocumento(idxMittente, idxDocumento, idxDestinatario) {
     destinatario.inventario.documenti.push(doc);
     
     alert(`Hai passato "${doc.titolo}" a ${destinatario.nome}.`);
-    aggiornaInterfaccia();
+    if (typeof window.aggiornaInterfaccia === 'function') window.aggiornaInterfaccia();
 }
 
 /**
@@ -539,9 +539,12 @@ function archiviaInBiblioteca(idxPersonaggio, idxDocumento) {
     window.bibliotecaBase.documenti.push(doc);
     
     alert(`Il documento "${doc.titolo}" è stato archiviato al sicuro nella Biblioteca della Base. Tutti i sopravvissuti presenti al rifugio ora possono provare a leggerlo.`);
-    aggiornaInterfaccia();
+    if (typeof window.aggiornaInterfaccia === 'function') window.aggiornaInterfaccia();
 }
 
 
 
 window.bibliotecaBase = window.bibliotecaBase || { documenti: [] };
+window.visualizzaDocumento = visualizzaDocumento;
+window.passaDocumento = passaDocumento;
+window.archiviaInBiblioteca = archiviaInBiblioteca;

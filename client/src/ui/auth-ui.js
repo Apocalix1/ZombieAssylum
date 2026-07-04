@@ -39,8 +39,14 @@ async function checkBackend() {
 }
 
 let currentRole = null;
+window.currentRole = currentRole;
 let authMode = 'player'; // 'player' | 'master'
 window.guestMode = false;
+
+function getCurrentUser() {
+    try { return JSON.parse(localStorage.getItem('utente')); } catch { return null; }
+}
+window.getCurrentUser = getCurrentUser;
 
 function isGuestUser() {
     const user = getCurrentUser();
@@ -53,6 +59,9 @@ function updateRoleIndicator(role) {
         roleLabel.textContent = role;
     }
 }
+window.updateRoleIndicator = updateRoleIndicator;
+window.showGameScreen = showGameScreen;
+window.showMasterLogin = showMasterAuth;
 
 function showLandingScreen() {
     window.guestMode = false;
@@ -100,13 +109,28 @@ function showMasterAuth() {
 
 function showGameScreen(role) {
     currentRole = role;
+    window.currentRole = role;
     window.guestMode = role === 'Ospite' || isGuestUser();
     document.body.classList.toggle('guest-mode', window.guestMode);
     const landing = document.getElementById('landing-screen');
     const game = document.getElementById('game-screen');
+    const lobby = document.getElementById('lobby-screen');
     if (landing) landing.classList.add('hidden');
+    if (lobby) lobby.classList.add('hidden');
     if (game) game.classList.remove('hidden');
     updateRoleIndicator(role);
+    
+    // Adatta tasto recluta per Master
+    const reclutaBtn = document.getElementById('btn-recluta');
+    if (reclutaBtn) {
+        if (role === 'Master') {
+            reclutaBtn.innerHTML = '📋 PROPOSTE';
+            reclutaBtn.onclick = () => apriPropostePersonaggi();
+        } else {
+            reclutaBtn.innerHTML = '➕ RECLUTA';
+            reclutaBtn.onclick = () => avviaCreazione();
+        }
+    }
 }
 
 async function registerUser() {
@@ -124,7 +148,11 @@ async function registerUser() {
         const user = { ...data.user, token: data.token };
         localStorage.setItem('utente', JSON.stringify(user));
         showAuthMessage('Registrazione avvenuta. Benvenuto!');
-        showLobbyScreen(user);
+        if (typeof window.showLobbyScreen === 'function') {
+            window.showLobbyScreen(user);
+        } else {
+            console.error('showLobbyScreen non definita');
+        }
     } catch (err) {
         showAuthMessage(err.message || 'Errore registrazione');
     }
@@ -145,7 +173,11 @@ async function loginUser() {
         const user = { ...data.user, token: data.token };
         localStorage.setItem('utente', JSON.stringify(user));
         showAuthMessage('Accesso effettuato.');
-        showLobbyScreen(user);
+        if (typeof window.showLobbyScreen === 'function') {
+            window.showLobbyScreen(user);
+        } else {
+            console.error('showLobbyScreen non definita');
+        }
     } catch (err) {
         showAuthMessage(err.message || 'Errore accesso');
     }
@@ -164,8 +196,15 @@ function showAuthMessage(msg) {
 }
 
 window.checkBackend = checkBackend;
+window.showLandingScreen = showLandingScreen;
+window.showPlayerAuth = showPlayerAuth;
+window.showMasterAuth = showMasterAuth;
+window.showGameScreen = showGameScreen;
+window.loginUser = loginUser;
+window.registerUser = registerUser;
+window.continueAsGuest = continueAsGuest;
 window.getCurrentUser = getCurrentUser;
 window.cimitero = window.cimitero || [];
 window.party = window.party || [];
-window.inSpedizione = window.inSpedizione || false;
+window.inSpedizione = typeof window.inSpedizione !== 'undefined' ? window.inSpedizione : false;
 window.apiUrl = apiUrl;

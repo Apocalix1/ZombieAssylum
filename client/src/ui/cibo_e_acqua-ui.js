@@ -1,3 +1,5 @@
+import { magazzino, party, aggiornaInterfaccia } from "../state.js";
+
 function openRisorsaModal(idx, tipo) {
     const p = party[idx];
     if (!p) return;
@@ -410,3 +412,11 @@ function checkRazionamento() {
 }
 
 window.consumiGlobali = window.consumiGlobali || 0;
+window.openRisorsaModal = openRisorsaModal;
+window.manualRisorsa = manualRisorsa;
+window.setAutoRisorsa = setAutoRisorsa;
+window.clearAutoRisorsa = clearAutoRisorsa;
+window.openCucinaModal = openCucinaModal;
+window.nutri = nutri;
+window.bevi = bevi;
+window.processAutomaticActions = processAutomaticActions;

@@ -5,13 +5,13 @@ function chiudiSpedizione() {
 
 function spedisciPersonaggio(idx) {
     party[idx].inSpedizione = true;
-    aggiornaInterfaccia();
+    if (typeof window.aggiornaInterfaccia === 'function') window.aggiornaInterfaccia();
     openSpedizioneModal();
 }
 
 function mandaTuttiInSpedizione() {
     party.forEach(p => p.inSpedizione = true);
-    aggiornaInterfaccia();
+    if (typeof window.aggiornaInterfaccia === 'function') window.aggiornaInterfaccia();
     openSpedizioneModal();
 }
 
@@ -28,7 +28,9 @@ function ritiraTutti() {
         if (p.finoAllUltimoActive) {
             if (Math.random() < 0.4) {
                 if (typeof p.worsenWoundDueToTime === 'function') p.worsenWoundDueToTime();
-                mostraNotificaInAlto(`${p.nome}: Penalità per Fino all'ultimo, la ferita peggiora.`, 'pericolo');
+                if (typeof window.mostraNotificaInAlto === 'function') {
+                    window.mostraNotificaInAlto(`${p.nome}: Penalità per Fino all'ultimo, la ferita peggiora.`, 'pericolo');
+                }
             }
             p.finoAllUltimoActive = false;
         }
@@ -36,7 +38,7 @@ function ritiraTutti() {
         p.puntiFortuna = p.puntiFortunaMax;
     });
     chiudiSpedizione();
-    aggiornaInterfaccia();
+    if (typeof window.aggiornaInterfaccia === 'function') window.aggiornaInterfaccia();
 }
 
 function ritiraPersonaggio(idx) {
@@ -45,14 +47,16 @@ function ritiraPersonaggio(idx) {
     if (p.finoAllUltimoActive) {
         if (Math.random() < 0.4) {
             if (typeof p.worsenWoundDueToTime === 'function') p.worsenWoundDueToTime();
-            mostraNotificaInAlto(`${p.nome}: Penalità per Fino all'ultimo, la ferita peggiora.`, 'pericolo');
+            if (typeof window.mostraNotificaInAlto === 'function') {
+                window.mostraNotificaInAlto(`${p.nome}: Penalità per Fino all'ultimo, la ferita peggiora.`, 'pericolo');
+            }
         }
         p.finoAllUltimoActive = false;
     }
     // Ripristina PF fortuna a massimo al rientro
     p.puntiFortuna = p.puntiFortunaMax;
     renderSpedizioneModal();
-    aggiornaInterfaccia();
+    if (typeof window.aggiornaInterfaccia === 'function') window.aggiornaInterfaccia();
 }
 
 
@@ -63,8 +67,10 @@ function useInizioCombattimento(idx) {
     const dado = p.perkFlags && p.perkFlags.natoPerCombattere ? 6 : 4;
     const roll = Math.floor(Math.random() * dado) + 1 + modDex;
     p.puntiFortuna = Math.min(p.puntiFortunaMax, p.puntiFortuna + roll);
-    mostraNotificaInAlto(`${p.nome} rigenera ${roll} PF fortuna all'inizio del combattimento.`, 'successo');
-    aggiornaInterfaccia();
+    if (typeof window.mostraNotificaInAlto === 'function') {
+        window.mostraNotificaInAlto(`${p.nome} rigenera ${roll} PF fortuna all'inizio del combattimento.`, 'successo');
+    }
+    if (typeof window.aggiornaInterfaccia === 'function') window.aggiornaInterfaccia();
 }
 
 function useRigeneraCombattimento(idx) {
@@ -73,8 +79,10 @@ function useRigeneraCombattimento(idx) {
     const modDex = p.getStatDettagliata('Destrezza').mod;
     const roll = Math.max(1, Math.floor(Math.random() * 4) + 1 + modDex);
     p.puntiFortuna = Math.min(p.puntiFortunaMax, p.puntiFortuna + roll);
-    mostraNotificaInAlto(`${p.nome} rigenera ${roll} PF fortuna in combattimento.`, 'successo');
-    aggiornaInterfaccia();
+    if (typeof window.mostraNotificaInAlto === 'function') {
+        window.mostraNotificaInAlto(`${p.nome} rigenera ${roll} PF fortuna in combattimento.`, 'successo');
+    }
+    if (typeof window.aggiornaInterfaccia === 'function') window.aggiornaInterfaccia();
 }
 
 function useGuerrieroRigenera(idx) {
@@ -85,8 +93,10 @@ function useGuerrieroRigenera(idx) {
     const roll = Math.max(1, Math.floor(Math.random() * 4) + 1 + modCon); // 1d4 + modCon
     p.puntiFortuna = Math.min(p.puntiFortunaMax, p.puntiFortuna + roll);
     p.guerrieroUses = (p.guerrieroUses || 0) + 1;
-    mostraNotificaInAlto(`${p.nome} usa Guerriero e rigenera ${roll} PF fortuna.`, 'successo');
-    aggiornaInterfaccia();
+    if (typeof window.mostraNotificaInAlto === 'function') {
+        window.mostraNotificaInAlto(`${p.nome} usa Guerriero e rigenera ${roll} PF fortuna.`, 'successo');
+    }
+    if (typeof window.aggiornaInterfaccia === 'function') window.aggiornaInterfaccia();
 }
 
 function degradaInCombat(idx) {
@@ -95,13 +105,13 @@ function degradaInCombat(idx) {
     if (p.puntiFeritaReali <= 0) {
         alert(`Condoglianze ${p.nome} è morto in combattimento`);
         party.splice(idx, 1);
-        if (typeof chiudiScheda === 'function') chiudiScheda();
+        if (typeof window.chiudiScheda === 'function') window.chiudiScheda();
         renderSpedizioneModal();
-        aggiornaInterfaccia();
+        if (typeof window.aggiornaInterfaccia === 'function') window.aggiornaInterfaccia();
         return;
     }
     renderSpedizioneModal();
-    aggiornaInterfaccia();
+    if (typeof window.aggiornaInterfaccia === 'function') window.aggiornaInterfaccia();
 }
 
 function ferisciInCombat(idx) {
@@ -540,3 +550,15 @@ function terminaEsplorazione(p) {
 window.mandaTuttiInSpedizione = mandaTuttiInSpedizione;
 window.chiudiSpedizione = chiudiSpedizione;
 window.ritiraTutti = ritiraTutti;
+window.chiudiSpedizione = chiudiSpedizione;
+window.spedisciPersonaggio = spedisciPersonaggio;
+window.mandaTuttiInSpedizione = mandaTuttiInSpedizione;
+window.openSpedizioneModal = openSpedizioneModal;
+window.ritiraTutti = ritiraTutti;
+window.ritiraPersonaggio = ritiraPersonaggio;
+window.useInizioCombattimento = useInizioCombattimento;
+window.useRigeneraCombattimento = useRigeneraCombattimento;
+window.useGuerrieroRigenera = useGuerrieroRigenera;
+window.degradaInCombat = degradaInCombat;
+window.ferisciInCombat = ferisciInCombat;
+window.attivaFinoAllUltimo = typeof attivaFinoAllUltimo === 'function' ? attivaFinoAllUltimo : undefined;

@@ -1,8 +1,15 @@
+import { Personaggio } from "../logic/logic.js";
+import { party } from "../state.js";
+
+let tempP = null;
+let categoriaCorrente = "competenze base";
+
 function avviaCreazione() {
     const nomeInput = document.getElementById('crea-nome');
     if (nomeInput) nomeInput.value = ""; 
 
-    tempP = new Personaggio("Nuovo", Math.floor(oreTotali / 24));
+    tempP = new Personaggio("Nuovo", Math.floor((window.oreTotali || 0) / 24));
+    window.tempP = tempP;
     tempP.puntiCreazione = 48;
     tempP.livelloMagia = 0;
     tempP.spellsKnown = { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0 };
@@ -24,6 +31,7 @@ function avviaCreazione() {
 }
 
 function modificaMagicLevel(delta) {
+    if (!tempP) tempP = window.tempP;
     if (!tempP) return;
     const current = tempP.livelloMagia || 0;
     if (delta > 0) {
@@ -52,6 +60,7 @@ function modificaMagicLevel(delta) {
 }
 
 function modificaIncantesimiConosciuti(livello, delta) {
+    if (!tempP) tempP = window.tempP;
     if (!tempP || typeof tempP.spellsKnown !== 'object') return;
     const massimo = tempP.getMaxKnownSpells ? tempP.getMaxKnownSpells(livello) : 0;
     let attuale = tempP.spellsKnown[livello] || 0;
@@ -73,7 +82,8 @@ function modificaIncantesimiConosciuti(livello, delta) {
 
 function annullaCreazione() { document.getElementById('modal-creazione').style.display = 'none'; }
 
-function confermaCreazione() {
+async function confermaCreazione() {
+    if (!tempP) tempP = window.tempP;
     tempP.lingue = ['Vedum'];
     const nomeInput = document.getElementById('crea-nome');
     const nome = nomeInput ? nomeInput.value.trim() : "";
@@ -137,8 +147,8 @@ function confermaCreazione() {
     tempP.nome = nome;
     if (typeof tempP.initInventarioBase === 'function') {
         tempP.initInventarioBase();
-        if (typeof applicaPerkArmato === 'function') {
-            applicaPerkArmato(tempP);
+        if (typeof window.applicaPerkArmato === 'function') {
+            window.applicaPerkArmato(tempP);
         }
 
         if (hasPerk(tempP, 'Avventuriero')) {
@@ -161,8 +171,10 @@ function confermaCreazione() {
         window.saveCharacterForUser(tempP.nome);
     }
     document.getElementById('modal-creazione').style.display = 'none';
-    aggiornaInterfaccia();
+    if (typeof window.aggiornaInterfaccia === 'function') window.aggiornaInterfaccia();
 }
 window.avviaCreazione = avviaCreazione;
+window.modificaMagicLevel = modificaMagicLevel;
+window.modificaIncantesimiConosciuti = modificaIncantesimiConosciuti;
 window.annullaCreazione = annullaCreazione;
 window.confermaCreazione = confermaCreazione;

@@ -55,7 +55,8 @@ function stringifyCharacterData(value) {
 
 async function createSession(db, userId) {
   const token = crypto.randomBytes(32).toString('hex');
-  await db.run('INSERT INTO sessioni (token, user_id) VALUES (?, ?)', token, userId);
+  const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+  await db.run('INSERT INTO sessioni (token, user_id, expires_at) VALUES (?, ?, ?)', token, userId, expiresAt);
   return token;
 }
 
@@ -70,11 +71,15 @@ async function authenticateUser(req, res, next) {
   try {
     const db = await dbPromise;
     const session = await db.get(
-      'SELECT u.id AS id, u.username AS username, u.role AS role FROM sessioni s JOIN utenti u ON u.id = s.user_id WHERE s.token = ?',
+      'SELECT s.token AS token, s.expires_at AS expires_at, u.id AS id, u.username AS username, u.role AS role FROM sessioni s JOIN utenti u ON u.id = s.user_id WHERE s.token = ?',
       token,
     );
     if (!session) {
       return res.status(401).json({ error: 'Token non valido' });
+    }
+    if (session.expires_at && new Date(session.expires_at) < new Date()) {
+      await db.run('DELETE FROM sessioni WHERE token = ?', token);
+      return res.status(401).json({ error: 'Sessione scaduta, accedi nuovamente' });
     }
     req.user = session;
     next();
@@ -204,29 +209,6 @@ app.get('/api/characters', authenticateUser, async (req, res) => {
   }
 });
 
-app.get('/api/characters/:nome', authenticateUser, async (req, res) => {
-  const nome = req.params.nome;
-  if (!nome) {
-    return res.status(400).json({ error: 'nome mancante' });
-  }
-
-  try {
-    const db = await dbPromise;
-    const character = await db.get(
-      req.user.role === 'master'
-        ? 'SELECT * FROM personaggi WHERE nome = ? ORDER BY updated_at DESC LIMIT 1'
-        : 'SELECT * FROM personaggi WHERE user_id = ? AND nome = ?',
-      ...(req.user.role === 'master' ? [nome] : [req.user.id, nome]),
-    );
-    if (!character) {
-      return res.status(404).json({ error: 'Personaggio non trovato' });
-    }
-    res.json({ personaggio: character });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
 app.get('/api/personaggi/:nome', authenticateUser, async (req, res) => {
   const nome = req.params.nome;
   if (!nome) {
@@ -244,7 +226,128 @@ app.get('/api/personaggi/:nome', authenticateUser, async (req, res) => {
     if (!character) {
       return res.status(404).json({ error: 'Personaggio non trovato' });
     }
+    // Parse data field if it's a string
+    if (character.data && typeof character.data === 'string') {
+      try {
+        character.data = JSON.parse(character.data);
+      } catch (e) {
+        character.data = {};
+      }
+    }
     res.json({ personaggio: character });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/auth/logout', authenticateUser, async (req, res) => {
+  try {
+    const db = await dbPromise;
+    await db.run('DELETE FROM sessioni WHERE token = ?', req.user.token);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/magazzino', authenticateUser, async (req, res) => {
+  try {
+    const db = await dbPromise;
+    const row = await db.get('SELECT * FROM magazzino WHERE id = 1');
+    if (row && row.data && typeof row.data === 'string') {
+      try {
+        row.data = JSON.parse(row.data);
+      } catch (e) {
+        row.data = {};
+      }
+    }
+    res.json({ magazzino: row || { id: 1, data: {}, updated_at: new Date().toISOString() } });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.put('/api/magazzino', authenticateUser, requireMaster, async (req, res) => {
+  const payload = req.body?.data || req.body || {};
+  try {
+    const db = await dbPromise;
+    const current = await db.get('SELECT * FROM magazzino WHERE id = 1');
+    const currentData = current?.data ? JSON.parse(current.data) : {};
+    const mergedData = { ...currentData, ...(payload && typeof payload === 'object' && !Array.isArray(payload) ? payload : {}) };
+    await db.run(
+      'UPDATE magazzino SET data = ?, updated_at = ? WHERE id = 1',
+      JSON.stringify(mergedData),
+      new Date().toISOString(),
+    );
+    const updated = await db.get('SELECT * FROM magazzino WHERE id = 1');
+    if (updated && updated.data && typeof updated.data === 'string') {
+      try {
+        updated.data = JSON.parse(updated.data);
+      } catch (e) {
+        updated.data = {};
+      }
+    }
+    res.json({ magazzino: updated });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/personaggi/:id/stati', authenticateUser, async (req, res) => {
+  const targetId = Number(req.params.id);
+  try {
+    const db = await dbPromise;
+    const now = new Date().toISOString();
+    const query = targetId
+      ? 'SELECT * FROM stati_alterati WHERE personaggio_id = ? AND (durata_minuti = 0 OR datetime(applicato_il, "+" || durata_minuti || " minutes") > datetime(?)) ORDER BY applicato_il DESC'
+      : 'SELECT * FROM stati_alterati WHERE personaggio_id = (SELECT id FROM personaggi WHERE nome = ? LIMIT 1) AND (durata_minuti = 0 OR datetime(applicato_il, "+" || durata_minuti || " minutes") > datetime(?)) ORDER BY applicato_il DESC';
+    const params = targetId ? [targetId, now] : [req.params.id, now];
+    const stati = await db.all(query, ...params);
+    res.json({ stati });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/documenti', authenticateUser, async (req, res) => {
+  try {
+    const db = await dbPromise;
+    const personaggioId = req.query.personaggioId ? Number(req.query.personaggioId) : null;
+    let documents;
+    if (req.user.role === 'master') {
+      documents = personaggioId
+        ? await db.all('SELECT * FROM documenti WHERE personaggio_id = ? ORDER BY created_at DESC', personaggioId)
+        : await db.all('SELECT * FROM documenti ORDER BY created_at DESC');
+    } else {
+      // Un giocatore vede i documenti assegnati a lui (tramite personaggio_id)
+      // ma dobbiamo assicurarci che il personaggio appartenga all'utente loggato
+      if (personaggioId) {
+        documents = await db.all(
+          'SELECT d.* FROM documenti d JOIN personaggi p ON p.id = d.personaggio_id WHERE d.personaggio_id = ? AND p.user_id = ? ORDER BY d.created_at DESC',
+          personaggioId, req.user.id
+        );
+      } else {
+        documents = await db.all(
+          'SELECT d.* FROM documenti d JOIN personaggi p ON p.id = d.personaggio_id WHERE p.user_id = ? ORDER BY d.created_at DESC',
+          req.user.id
+        );
+      }
+    }
+
+    // Parsa il contenuto se è un JSON (lingua_richiesta, etc.)
+    documents = documents.map(doc => {
+      if (doc.contenuto && doc.contenuto.startsWith('{')) {
+        try {
+          const parsed = JSON.parse(doc.contenuto);
+          return { ...doc, ...parsed };
+        } catch (e) {
+          return doc;
+        }
+      }
+      return doc;
+    });
+
+    res.json({ documenti: documents });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -354,20 +457,34 @@ app.post('/api/proposals/:id/decision', authenticateUser, requireMaster, async (
   }
 });
 
+app.post('/api/master/push-commands', authenticateUser, requireMaster, async (req, res) => {
+  const { target, tipo, valore, note } = req.body;
+  if (!target || !tipo) {
+    return res.status(400).json({ error: 'target e tipo richiesti' });
+  }
+
+  try {
+    res.json({ success: true, target, tipo, valore, note });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.post('/api/master/documents', authenticateUser, requireMaster, async (req, res) => {
-  const { titolo, contenuto, personaggio_id } = req.body;
-  if (!titolo || !contenuto) {
+  const { titolo, contenuto, personaggio_id, personaggioId, lingua_richiesta, testo_originale, testo_criptato } = req.body;
+  if (!titolo || (!contenuto && !(testo_originale || testo_criptato))) {
     return res.status(400).json({ error: 'titolo e contenuto richiesti' });
   }
 
   try {
     const db = await dbPromise;
+    const payload = contenuto || JSON.stringify({ lingua_richiesta, testo_originale, testo_criptato });
     const result = await db.run(
       'INSERT INTO documenti (master_id, personaggio_id, titolo, contenuto) VALUES (?, ?, ?, ?)',
       req.user.id,
-      personaggio_id || null,
+      personaggio_id || personaggioId || null,
       titolo,
-      contenuto,
+      payload,
     );
     const document = await db.get('SELECT * FROM documenti WHERE id = ?', result.lastID);
     res.json({ document });

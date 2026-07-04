@@ -56,9 +56,9 @@ if (res.ok) alert(`📜 Documento "${titolo}" consegnato al giocatore!`);
 
 */
 
-export async function masterApplicaStato(personaggioId, nomeStato, tipo, descrizione, durataMinuti) {
+export async function masterApplicaStato(personaggioId, nomeStato, tipo, descrizione, durataMinuti, valore = 0) {
 
-const payload = { personaggio_id: personaggioId, nome: nomeStato, tipo, descrizione, durata_minuti: durataMinuti };
+const payload = { personaggio_id: personaggioId, nome: nomeStato, tipo, descrizione, durata_minuti: durataMinuti, valore };
 
 
 

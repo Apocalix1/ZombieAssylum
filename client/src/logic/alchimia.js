@@ -14,8 +14,10 @@ const mostraNotificaInAlto = (...args) => {
     if (typeof window.mostraNotificaInAlto === 'function') return window.mostraNotificaInAlto(...args);
     console.log(...args);
 };
-const aggiornaInterfaccia = () => {
-    if (typeof window.aggiornaInterfaccia === 'function') window.aggiornaInterfaccia();
+const aggiornaInterfaccia_local = () => {
+    if (typeof window.aggiornaInterfaccia === 'function' && window.aggiornaInterfaccia !== aggiornaInterfaccia_local) {
+        window.aggiornaInterfaccia();
+    }
 };
 
 // Ricette integrate dal database ricette.js (window.RICETTE)
@@ -217,7 +219,7 @@ function avviaCreazione_Alchimia(idx, nomeRicetta, grado) {
     const msg = `${p.nome} inizia a creare "${nomeRicetta}" (${tempoFinale}h, CD ${cdEffettiva})${collaboratore ? ` con l'aiuto di ${collaboratore.nome}` : ''}.`;
     mostraNotificaInAlto(msg, 'successo');
     chiudiAlchimia();
-    aggiornaInterfaccia();
+    aggiornaInterfaccia_local();
 }
 
 function completaAlchimia(p, nomeRicetta, grado, cdEffettiva, collaboratore) {
@@ -274,7 +276,7 @@ function completaAlchimia(p, nomeRicetta, grado, cdEffettiva, collaboratore) {
     if (collaboratore) esito += `\n(Collaboratore: ${collaboratore.nome})`;
     alert(esito);
     mostraNotificaInAlto(`Alchimia completata da ${p.nome}: "${nomeRicetta}"`, colorNotifica);
-    aggiornaInterfaccia();
+    aggiornaInterfaccia_local();
 }
 
 function aggiungiComposto(nome, ricettaDati, qualita) {
@@ -296,7 +298,7 @@ function creaPostazioneAlchemica() {
     magazzino.materialiAlchemici -= 15;
     magazzino.postazioneAlchemica = true;
     if (typeof mostraNotificaInAlto === 'function') mostraNotificaInAlto('Postazione alchemica creata.', 'successo');
-    aggiornaInterfaccia();
+    aggiornaInterfaccia_local();
     renderAlchemyModal();
 }
 
@@ -351,7 +353,7 @@ function startAlchemyRecipe(grado, recipeIdx) {
     } else {
         p.azioneCorrente = nuovaAzione;
     }
-    aggiornaInterfaccia();
+    aggiornaInterfaccia_local();
     renderAlchemyModal();
 }
 
@@ -387,7 +389,7 @@ function completeAlchemyAction(p, action) {
         }
     }
     assistenzaSelezionata = null;
-    aggiornaInterfaccia();
+    aggiornaInterfaccia_local();
     renderAlchemyModal();
 }
 
@@ -431,7 +433,7 @@ function usaCompostoAlchemico(personaggioIdx, nomeComposto) {
             alert("Oggetto non utilizzabile direttamente o non trovato.");
             return; // Esci senza consumare l'oggetto
     }
-    aggiornaInterfaccia();
+    aggiornaInterfaccia_local();
 }
 
 function lootAlchemici(tiro) {

@@ -1,9 +1,28 @@
-import { party, Personaggio, salvaPersonaggioCloud, avviaAscoltoDatiCloud, fetchUserCharacters, apiUrl, buildAuthHeaders, refreshPartyListeners } from "../logic/logic.js";
+import { magazzino, party as stateParty } from "../state.js";
+import { Personaggio, salvaPersonaggioCloud, avviaAscoltoDatiCloud, fetchUserCharacters, apiUrl, buildAuthHeaders, refreshPartyListeners } from "../logic/logic.js";
+
+const party = stateParty;
+
+// Esposizioni Globali per compatibilità con HTML inline e altri script non-modulari
+window.showLobbyScreen = showLobbyScreen;
+window.apriScheda = apriScheda;
+window.chiudiModal = chiudiModal;
+window.mostraNotificaInAlto = mostraNotificaInAlto;
+
+function chiudiModal(id) {
+    const el = document.getElementById(id);
+    if (el) el.style.display = 'none';
+}
 
 function showLobbyScreen(user) {
+    if (user && user.role === 'master') {
+        showGameScreen('Master');
+        apriPannelloMaster();
+        return;
+    }
     window.guestMode = false;
     document.body.classList.remove('guest-mode');
-    currentRole = 'Lobby';
+    window.currentRole = 'Lobby';
     const landing = document.getElementById('landing-screen');
     const game = document.getElementById('game-screen');
     const lobby = document.getElementById('lobby-screen');
@@ -13,6 +32,16 @@ function showLobbyScreen(user) {
     updateRoleIndicator(user && user.role ? (user.role === 'master' ? 'Master' : 'Giocatore') : 'Giocatore');
     const userEl = document.getElementById('lobby-user');
     if (userEl) userEl.textContent = user ? `Utente: ${user.username}` : '';
+    
+    const masterBtn = document.getElementById('btn-master-panel');
+    if (masterBtn) {
+        if (user && user.role === 'master') {
+            masterBtn.classList.remove('hidden');
+        } else {
+            masterBtn.classList.add('hidden');
+        }
+    }
+    
     renderCharacterList();
 }
 
@@ -242,7 +271,13 @@ function initUI() {
     document.getElementById('btn-register')?.addEventListener('click', () => registerUser());
     document.getElementById('btn-guest')?.addEventListener('click', () => continueAsGuest());
     // Lobby buttons
-    document.getElementById('lobby-btn-recluta')?.addEventListener('click', () => { document.getElementById('modal-creazione').style.display = 'flex'; });
+    document.getElementById('lobby-btn-recluta')?.addEventListener('click', () => { 
+        if (typeof window.avviaCreazione === 'function') {
+            window.avviaCreazione();
+        } else {
+            document.getElementById('modal-creazione').style.display = 'block';
+        }
+    });
     document.getElementById('lobby-enter-play')?.addEventListener('click', async () => {
         if (!selectedLobbyCharacter) return alert('Seleziona un personaggio dalla lista');
         const nome = selectedLobbyCharacter;
@@ -250,7 +285,11 @@ function initUI() {
         if (pData) {
             const p = Object.assign(new Personaggio(pData.nome, pData.giornoInizio || 0), pData);
             party.push(p);
-            showGameScreen('Giocatore');
+            if (typeof window.showGameScreen === 'function') {
+                window.showGameScreen('Giocatore');
+            } else {
+                console.error('showGameScreen non definita');
+            }
             return;
         }
         const user = getCurrentUser();
@@ -260,14 +299,21 @@ function initUI() {
                 const pdata = typeof fromServer.data === 'string' ? JSON.parse(fromServer.data || '{}') : fromServer.data;
                 const p = Object.assign(new Personaggio(pdata.nome, pdata.giornoInizio || 0), pdata);
                 party.push(p);
-                showGameScreen('Giocatore');
+                if (typeof window.showGameScreen === 'function') {
+                    window.showGameScreen('Giocatore');
+                } else {
+                    console.error('showGameScreen non definita');
+                }
                 return;
             }
         }
         alert('Impossibile caricare il personaggio.');
     });
-    document.getElementById('lobby-btn-magazzino')?.addEventListener('click', () => openMagazzino());
-    showLandingScreen();
+    if (typeof window.showLandingScreen === 'function') {
+        window.showLandingScreen();
+    } else {
+        console.warn('showLandingScreen non definita in initUI');
+    }
     if (typeof avviaAscoltoDatiCloud === 'function') {
         avviaAscoltoDatiCloud();
     }
@@ -301,8 +347,9 @@ window.showLandingScreen = window.showLandingScreen || (typeof showLandingScreen
 window.continueAsGuest = window.continueAsGuest || (typeof continueAsGuest === 'function' ? continueAsGuest : undefined);
 
 let oreTotali = 0;
+window.oreTotali = 0;
 let cimitero = [];
-let magazzino = window.magazzino || { materialiAlchemici: 0, compounds: [], composti: [], postazioneAlchemica: false, congegniFissi: [], congegniConteggio: {}, cibo: 0, conserve: 0, ciboaviarto: 0, piattiDeliziosi: 0 };
+// let magazzino = ... // Rimosso perché importato da state.js
 window.magazzino = magazzino;
 
 function mostraNotificaInAlto(msg, tipo = 'info') {
@@ -339,12 +386,239 @@ function mostraCongegniBase() {
     alert(testo);
 }
 
+import { masterInviaDocumento, masterApplicaStato } from '../logic/master_action.js';
+
+window.apriDocumentiPersonaggio = function(idx) {
+    const p = party[idx];
+    if (!p) return;
+    
+    let modal = document.getElementById('modal-documenti-personaggio');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'modal-documenti-personaggio';
+        modal.className = 'modal';
+        modal.innerHTML = `
+            <div class="modal-content">
+                <h2 style="color:#8e44ad; letter-spacing: 2px; margin-bottom:15px;">📜 DOCUMENTI</h2>
+                <div id="documenti-personaggio-content" style="text-align:left; max-height:400px; overflow-y:auto; background:#111; padding:10px; border:1px solid #333;"></div>
+                <div class="modal-footer">
+                    <button class="btn-big btn-cancel" onclick="chiudiModal('modal-documenti-personaggio')">CHIUDI</button>
+                </div>
+            </div>`;
+        document.body.appendChild(modal);
+    }
+    
+    const content = document.getElementById('documenti-personaggio-content');
+    const docs = p.documenti || [];
+    
+    if (docs.length === 0) {
+        content.innerHTML = '<p style="color:#aaa;">Nessun documento trovato per questo personaggio.</p>';
+    } else {
+        content.innerHTML = docs.map((d, i) => `
+            <div style="background:#222; padding:10px; border:1px solid #444; margin-bottom:8px; border-radius:4px;">
+                <div style="font-weight:bold; color:#f1c40f; margin-bottom:4px;">${d.titolo}</div>
+                <div style="font-size:0.85rem; color:#ccc; margin-bottom:6px; font-style:italic;">Lingua: ${d.lingua}</div>
+                <div style="font-size:0.9rem; color:#eee; white-space:pre-wrap;">${d.testo}</div>
+            </div>
+        `).join('');
+    }
+    
+    modal.style.display = 'block';
+};
+
+window.apriStatiPersonaggio = function(idx) {
+    const p = party[idx];
+    if (!p) return;
+    
+    let modal = document.getElementById('modal-stati-personaggio');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'modal-stati-personaggio';
+        modal.className = 'modal';
+        modal.innerHTML = `
+            <div class="modal-content">
+                <h2 style="color:#2980b9; letter-spacing: 2px; margin-bottom:15px;">✨ STATI E BUFF</h2>
+                <div id="stati-personaggio-content" style="text-align:left; max-height:400px; overflow-y:auto; background:#111; padding:10px; border:1px solid #333;"></div>
+                <div class="modal-footer">
+                    <button class="btn-big btn-cancel" onclick="chiudiModal('modal-stati-personaggio')">CHIUDI</button>
+                </div>
+            </div>`;
+        document.body.appendChild(modal);
+    }
+    
+    const content = document.getElementById('stati-personaggio-content');
+    const stati = p.statiAlterati || [];
+    
+    if (stati.length === 0) {
+        content.innerHTML = '<p style="color:#aaa;">Nessuno stato alterato attivo.</p>';
+    } else {
+        content.innerHTML = stati.map((s, i) => `
+            <div style="background:#222; padding:10px; border:1px solid ${s.tipo === 'buff' ? '#27ae60' : '#c0392b'}; margin-bottom:8px; border-radius:4px;">
+                <div style="font-weight:bold; color:${s.tipo === 'buff' ? '#2ecc71' : '#e74c3c'}; margin-bottom:4px;">${s.nome.toUpperCase()} (${s.tipo})</div>
+                <div style="font-size:0.9rem; color:#eee; margin-bottom:4px;">${s.descrizione || s.desc || ''}</div>
+                <div style="font-size:0.8rem; color:#aaa;">Durata residua: ${s.durata} min</div>
+            </div>
+        `).join('');
+    }
+    
+    modal.style.display = 'block';
+};
+
+window.apriPropostePersonaggi = function() {
+    if (typeof apriPannelloMaster === 'function') {
+        apriPannelloMaster();
+        // Potremmo voler scorrere fino alla sezione dei personaggi
+        setTimeout(() => {
+            const el = document.getElementById('master-all-chars');
+            if (el) el.scrollIntoView({ behavior: 'smooth' });
+        }, 300);
+    }
+};
+
+window.apriPannelloMaster = async function apriPannelloMaster() {
+    const modal = document.getElementById('modal-master-panel');
+    const content = document.getElementById('master-panel-content');
+    if (!modal || !content) return;
+    modal.style.display = 'block';
+    
+    // Carica personaggi per select
+    let options = party.map((p, i) => `<option value="${p.id || p.nome}">${p.nome}</option>`).join('');
+    
+    content.innerHTML = `
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+            <div style="border-right: 1px solid #333; padding-right: 20px;">
+                <h3 style="color:#f1c40f;">📜 Invia Documento</h3>
+                <div style="margin-bottom:10px;">
+                    <label>Destinatario:</label><br>
+                    <select id="master-doc-target" style="width:100%; background:#222; color:white; border:1px solid #444; padding:5px;">
+                        ${options}
+                    </select>
+                </div>
+                <div style="margin-bottom:10px;">
+                    <label>Titolo:</label><br>
+                    <input type="text" id="master-doc-titolo" style="width:100%; background:#222; color:white; border:1px solid #444; padding:5px;">
+                </div>
+                <div style="margin-bottom:10px;">
+                    <label>Lingua:</label><br>
+                    <select id="master-doc-lingua" style="width:100%; background:#222; color:white; border:1px solid #444; padding:5px;">
+                        <option value="Comune">Comune</option>
+                        <option value="Arcano">Arcano</option>
+                        <option value="Antico">Antico</option>
+                    </select>
+                </div>
+                <div style="margin-bottom:10px;">
+                    <label>Testo:</label><br>
+                    <textarea id="master-doc-testo" rows="4" style="width:100%; background:#222; color:white; border:1px solid #444; padding:5px;"></textarea>
+                </div>
+                <button class="btn-hero" onclick="masterActionInvia()">INVIA DOCUMENTO</button>
+                <div style="margin-top:10px;">
+                     <button class="btn-hero" style="background:#8e44ad;" onclick="window.creaDocumentoMaster()">CREA DOCUMENTO</button>
+                </div>
+            </div>
+            
+            <div>
+                <h3 style="color:#f1c40f;">⚙️ Applica Stato</h3>
+                <div style="margin-bottom:10px;">
+                    <label>Vittima:</label><br>
+                    <select id="master-state-target" style="width:100%; background:#222; color:white; border:1px solid #444; padding:5px;">
+                        ${options}
+                    </select>
+                </div>
+                <div style="margin-bottom:10px;">
+                    <label>Tipo:</label><br>
+                    <select id="master-state-nome" style="width:100%; background:#222; color:white; border:1px solid #444; padding:5px;">
+                        <option value="Forza">Forza</option>
+                        <option value="Destrezza">Destrezza</option>
+                        <option value="Costituzione">Costituzione</option>
+                        <option value="Intelligenza">Intelligenza</option>
+                        <option value="Saggezza">Saggezza</option>
+                        <option value="Carisma">Carisma</option>
+                        <option value="Fame">Fame</option>
+                        <option value="Sete">Sete</option>
+                        <option value="Sonno">Sonno</option>
+                        <option value="Fatica">Fatica</option>
+                    </select>
+                </div>
+                <div style="margin-bottom:10px;">
+                    <label>Positivo o negativo:</label><br>
+                    <select id="master-state-polarita" style="width:100%; background:#222; color:white; border:1px solid #444; padding:5px;">
+                        <option value="1">Positivo (+)</option>
+                        <option value="-1">Negativo (-)</option>
+                    </select>
+                </div>
+                <div style="margin-bottom:10px; display:none;">
+                    <!-- Campi legacy nascosti ma mantenuti per compatibilità masterActionStato -->
+                    <select id="master-state-tipo"><option value="buff">buff</option></select>
+                    <input type="number" id="master-state-durata" value="1440">
+                    <textarea id="master-state-desc"></textarea>
+                </div>
+                <button class="btn-hero" onclick="masterActionStato()">APPLICA</button>
+            </div>
+        </div>
+        <div style="margin-top:20px; border-top:1px solid #333; padding-top:10px;">
+             <h3 style="color:#f1c40f;">👥 Tutti i Personaggi</h3>
+             <div id="master-all-chars" style="font-size:0.9rem;">Caricamento...</div>
+        </div>
+    `;
+    
+    // Carica tutti i personaggi (master view)
+    try {
+        const data = await fetch(apiUrl('/api/characters?all=true'), {
+            headers: buildAuthHeaders()
+        }).then(r => r.json());
+        if (data.characters) {
+            const list = data.characters.map(c => `
+                <div style="padding:5px; border-bottom:1px solid #222;">
+                    <strong>${c.nome}</strong> (${c.classe}) - User ID: ${c.user_id} - Stamina: ${c.stamina}
+                </div>
+            `).join('');
+            document.getElementById('master-all-chars').innerHTML = list;
+        }
+    } catch (e) {
+        document.getElementById('master-all-chars').innerText = "Errore caricamento personaggi.";
+    }
+};
+
+window.masterActionInvia = async function() {
+    const target = document.getElementById('master-doc-target').value;
+    const titolo = document.getElementById('master-doc-titolo').value;
+    const lingua = document.getElementById('master-doc-lingua').value;
+    const testo = document.getElementById('master-doc-testo').value;
+    if (!titolo || !testo) return alert("Titolo e testo obbligatori");
+    await masterInviaDocumento(titolo, lingua, testo, target);
+};
+
+window.creaDocumentoMaster = function() {
+    const titolo = prompt("Inserisci il titolo del documento:");
+    if (!titolo) return;
+    const testo = prompt("Inserisci il testo del documento:");
+    if (!testo) return;
+    const lingua = prompt("Inserisci la lingua del documento:", "Comune");
+    
+    // Invia senza destinatario specifico (id null) per crearlo nel database globale
+    masterInviaDocumento(titolo, lingua, testo, null);
+};
+
+window.masterActionStato = async function() {
+    const target = document.getElementById('master-state-target').value;
+    const nome = document.getElementById('master-state-nome').value;
+    const tipo = document.getElementById('master-state-tipo').value;
+    const durata = parseInt(document.getElementById('master-state-durata').value);
+    const desc = document.getElementById('master-state-desc').value;
+    const polarita = parseInt(document.getElementById('master-state-polarita').value || "1");
+    
+    if (!nome) return alert("Nome stato obbligatorio");
+    
+    // Usiamo il campo 'valore' per passare la polarità/entità del buff
+    await masterApplicaStato(target, nome, tipo, desc, durata, polarita);
+};
+
 let selectedLobbyCharacter = null;
-window.magazzino = magazzino;
-window.cimitero = cimitero;
-window.oreTotali = oreTotali;
-window.apiUrl = apiUrl;
-window.mostraNotificaInAlto = mostraNotificaInAlto;
+// Funzioni rimosse perché ridondanti o non più usate
+// chiudiCimitero() è ora gestita direttamente o tramite toggle in cimitero-ui.js
+// La gestione del magazzino è centralizzata in state.js e logic.js
+window.showLobbyScreen = showLobbyScreen;
+
 window.hasPerk = function hasPerk(personaggio, perk) {
     if (!personaggio) return false;
     if (typeof personaggio.hasPerk === 'function') return personaggio.hasPerk(perk);
@@ -390,10 +664,6 @@ function perkObjectName(perk) {
     if (typeof perk === 'string') return normalizePerkName(perk);
     if (typeof perk === 'object' && perk && perk.nome) return normalizePerkName(perk.nome);
     return "";
-}
-
-function perkHasName(perk, nomePerk) {
-    return getPerkBaseName(perkObjectName(perk)) === getPerkBaseName(nomePerk);
 }
 
 function getPerkCount(personaggio, nomePerk) {
@@ -562,22 +832,27 @@ function passaTempoGlobale() {
 
 // --- AGGIORNAMENTO INTERFACCIA PRINCIPALE ---
 window.aggiornaInterfaccia = function aggiornaInterfaccia() {
-    document.getElementById('display-giorno').innerText = Math.floor(oreTotali / 24);
-    let ora = oreTotali % 24;
-    document.getElementById('display-ora').innerText = `${ora < 10 ? '0' : ''}${ora}:00`;
-    document.getElementById('display-cibo').innerText = magazzino.cibo.toFixed(1);
+    if (window._isUpdatingUI) return;
+    window._isUpdatingUI = true;
+    try {
+        const giornoAttuale = Math.floor(oreTotali / 24);
+    const oraAttuale = oreTotali % 24;
+    
+    document.getElementById('display-giorno').innerText = giornoAttuale;
+    document.getElementById('display-ora').innerText = `${oraAttuale < 10 ? '0' : ''}${oraAttuale}:00`;
+    document.getElementById('display-cibo').innerText = (magazzino.cibo || 0).toFixed(1);
     const conserveDisplay = document.getElementById('display-conserve');
-    if (conserveDisplay) conserveDisplay.innerText = magazzino.conserve;
+    if (conserveDisplay) conserveDisplay.innerText = magazzino.conserve || 0;
     const deliziosiDisplay = document.getElementById('display-piatti-deliziosi');
-    if (deliziosiDisplay) deliziosiDisplay.innerText = magazzino.piattiDeliziosi;
+    if (deliziosiDisplay) deliziosiDisplay.innerText = magazzino.piattiDeliziosi || 0;
     const ciboAvariatoDisplay = document.getElementById('display-cibo-avariato');
-    if (ciboAvariatoDisplay) ciboAvariatoDisplay.innerText = magazzino.ciboaviarto.toFixed(1);
-    document.getElementById('display-acqua').innerText = magazzino.acqua.toFixed(1);
-    document.getElementById('display-alchemici').innerText = magazzino.materialiAlchemici;
-    document.getElementById('display-ingranaggi').innerText = magazzino.ingranaggi;
-    document.getElementById('display-medici-base').innerText = magazzino.materialiMedici.base;
-    document.getElementById('display-medici-avanzati').innerText = magazzino.materialiMedici.avanzati;
-    document.getElementById('display-medici-critici').innerText = magazzino.materialiMedici.critici;
+    if (ciboAvariatoDisplay) ciboAvariatoDisplay.innerText = (magazzino.ciboaviarto || 0).toFixed(1);
+    document.getElementById('display-acqua').innerText = (magazzino.acqua || 0).toFixed(1);
+    document.getElementById('display-alchemici').innerText = magazzino.materialiAlchemici || 0;
+    document.getElementById('display-ingranaggi').innerText = magazzino.ingranaggi || 0;
+    document.getElementById('display-medici-base').innerText = (magazzino.materialiMedici || {}).base || 0;
+    document.getElementById('display-medici-avanzati').innerText = (magazzino.materialiMedici || {}).avanzati || 0;
+    document.getElementById('display-medici-critici').innerText = (magazzino.materialiMedici || {}).critici || 0;
 
     const container = document.getElementById('party-container');
     container.innerHTML = "";
@@ -597,6 +872,7 @@ window.aggiornaInterfaccia = function aggiornaInterfaccia() {
     party.forEach(papply => { if (typeof applyPerkEffects === 'function') applyPerkEffects(papply); });
 
     party.forEach((p, idx) => {
+        const giornoAttuale = Math.floor(oreTotali / 24);
         // Calcolo Barre con Decimali
         const risorse = [
             { label: "Fame", attuale: p.fame, max: 14 },
@@ -630,65 +906,97 @@ window.aggiornaInterfaccia = function aggiornaInterfaccia() {
 
         let card = document.createElement('div');
         card.className = `card-personaggio ${p.inSpedizione ? 'spedizione-active' : ''}`;
+
+        // Determina se l'utente corrente può vedere/comandare questo personaggio
+        const user = getCurrentUser();
+        const isMaster = user && user.role === 'master';
+        const isOwner = user && p.user_id === user.id;
+        const canManage = isMaster || isOwner;
+        const isGuest = window.guestMode;
+
+        // Se è un giocatore e non è il proprietario, nascondi statistiche e azioni
+        let detailsHtml = '';
+        if (canManage) {
+            detailsHtml = `
+                <div style="font-size:0.8em; margin-bottom:4px;">
+                    <strong>PF Reali:</strong> ${p.puntiFeritaReali} / ${p.puntiFeritaRealiMax} - ${p.woundState}
+                </div>
+                <div style="font-size:0.8em; margin-bottom:6px; color:#ddd;">
+                    <strong>PCA in corso:</strong> ${Object.entries(p.pca || {}).filter(([, v]) => v > 0).map(([cat, val]) => `${cat}: ${val.toFixed(1)}`).join(' • ') || 'Nessuno'}
+                </div>
+                <div style="font-size:0.8em; margin-bottom:6px; color:#ddd;">
+                    <strong>Piatti deliziosi:</strong> ${magazzino.piattiDeliziosi}
+                </div>
+                ${getBarra(p.puntiFeritaReali, p.puntiFeritaRealiMax, '#c0392b')}
+                <div style="font-size:0.75em; margin-bottom:10px; color:#aaa;">${p.woundEffectText}</div>
+                <div style="font-size:0.7em; margin-bottom:10px;">Stato: <b>${statoAzione}</b></div>
+            
+                <div style="display:flex; gap:4px; margin-bottom:10px;">
+                    <button class="btn-big" style="flex:1; background:#8e44ad;" onclick="apriDocumentiPersonaggio(${idx})">📜 Doc</button>
+                    <button class="btn-big" style="flex:1; background:#2980b9;" onclick="apriStatiPersonaggio(${idx})">✨ Stati</button>
+                </div>
+            
+                <div class="mini-bars-container">${barsHtml}</div>
+
+                <button onclick="apriScheda(${idx})" style="width:100%; margin-bottom:10px;">Visualizza Scheda</button>
+                <div class="action-dropdowns" style="margin-top: 12px; display:grid; gap:6px;">
+                    <details class="action-dropdown">
+                        <summary>SOPRAVVIVI</summary>
+                        <div class="dropdown-buttons">
+                            <button onclick="openRisorsaModal(${idx}, 'fame')">Nutri</button>
+                            <button onclick="openRisorsaModal(${idx}, 'sete')">Bevi</button>
+                            <button onclick="openRisorsaModal(${idx}, 'sonno')">Dormi</button>
+                            <button onclick="apriMedica(${idx})">Medica</button>
+                        </div>
+                    </details>
+                    <details class="action-dropdown">
+                        <summary>CREA</summary>
+                        <div class="dropdown-buttons">
+                            <button onclick="openCucinaModal(${idx})">Cucina</button>
+                            <button onclick="alchimiaPersonaggio(${idx})">Alchimia</button>
+                            <button onclick="artificeriaPersonaggio(${idx})">Artificeria</button>
+                        </div>
+                    </details>
+                    <details class="action-dropdown">
+                        <summary>MIGLIORA</summary>
+                        <div class="dropdown-buttons">
+                            <button onclick="allenamento(${idx})">Allenamento</button>
+                            <button onclick="studio(${idx})">Studio</button>
+                        </div>
+                    </details>
+                    <details class="action-dropdown">
+                        <summary>ESPLORA</summary>
+                        <div class="dropdown-buttons">
+                            <button onclick="spedisciPersonaggio(${idx})">Spedisci</button>
+                            <button onclick="esplora(${idx})">🔎 Esplora</button>
+                        </div>
+                    </details>
+                </div>
+            `;
+        } else {
+            // Se non è il proprietario, vede solo il nome e lo stato di azione (opzionale, ma non vede stat vitali)
+            detailsHtml = `
+                <div style="padding: 20px; text-align: center; color: #666; font-style: italic;">
+                    Statistiche e azioni riservate al proprietario
+                </div>
+                <div style="font-size:0.7em; margin-top:10px; text-align:center;">Stato: <b>${p.inSpedizione ? 'In Spedizione' : 'In Rifugio'}</b></div>
+            `;
+        }
+
         card.innerHTML = `
             <div class="card-header">
                 <h3 style="margin:0">${p.nome}</h3>
-                <span class="fatica-badge">Fatic. ${p.faticaTotale}</span>
+                ${canManage ? `<span class="fatica-badge">Fatic. ${p.faticaTotale}</span>` : ''}
             </div>
-            <div style="font-size:0.8em; margin-bottom:4px;">
-                <strong>PF Reali:</strong> ${p.puntiFeritaReali} / ${p.puntiFeritaRealiMax} - ${p.woundState}
-            </div>
-            <div style="font-size:0.8em; margin-bottom:6px; color:#ddd;">
-                <strong>PCA in corso:</strong> ${Object.entries(p.pca || {}).filter(([, v]) => v > 0).map(([cat, val]) => `${cat}: ${val.toFixed(1)}`).join(' • ') || 'Nessuno'}
-            </div>
-            <div style="font-size:0.8em; margin-bottom:6px; color:#ddd;">
-                <strong>Piatti deliziosi:</strong> ${magazzino.piattiDeliziosi}
-            </div>
-            ${getBarra(p.puntiFeritaReali, p.puntiFeritaRealiMax, '#c0392b')}
-            <div style="font-size:0.75em; margin-bottom:10px; color:#aaa;">${p.woundEffectText}</div>
-            <div style="font-size:0.7em; margin-bottom:10px;">Stato: <b>${statoAzione}</b></div>
-            
-            <div class="mini-bars-container">${barsHtml}</div>
-
-            <button onclick="apriScheda(${idx})" style="width:100%; margin-bottom:10px;">Visualizza Scheda</button>
-            <div class="action-dropdowns" style="margin-top: 12px; display:grid; gap:6px;">
-                <details class="action-dropdown">
-                    <summary>SOPRAVVIVI</summary>
-                    <div class="dropdown-buttons">
-                        <button onclick="openRisorsaModal(${idx}, 'fame')">Nutri</button>
-                        <button onclick="openRisorsaModal(${idx}, 'sete')">Bevi</button>
-                        <button onclick="openRisorsaModal(${idx}, 'sonno')">Dormi</button>
-                        <button onclick="apriMedica(${idx})">Medica</button>
-                    </div>
-                </details>
-                <details class="action-dropdown">
-                    <summary>CREA</summary>
-                    <div class="dropdown-buttons">
-                                <button onclick="openCucinaModal(${idx})">Cucina</button>
-                        <button onclick="alchimiaPersonaggio(${idx})">Alchimia</button>
-                        <button onclick="artificeriaPersonaggio(${idx})">Artificeria</button>
-                    </div>
-                </details>
-                <details class="action-dropdown">
-                    <summary>MIGLIORA</summary>
-                    <div class="dropdown-buttons">
-                        <button onclick="allenamento(${idx})">Allenamento</button>
-                        <button onclick="studio(${idx})">Studio</button>
-                    </div>
-                </details>
-                <details class="action-dropdown">
-                    <summary>ESPLORA</summary>
-                    <div class="dropdown-buttons">
-                        <button onclick="spedisciPersonaggio(${idx})">Spedisci</button>
-                        <button onclick="esplora(${idx})">🔎 Esplora</button>
-                    </div>
-                </details>
-            </div>
+            ${detailsHtml}
         `;
         container.appendChild(card);
     });
     renderCimitero();
     autoSaveParty();
+    } finally {
+        window._isUpdatingUI = false;
+    }
 }
 
 // --- LOGICA DELLE AZIONI (Thread e Code) ---
@@ -770,63 +1078,9 @@ function renderAiutoModal() {
 }
 
 function renderAlchemyModal() {
-    const container = document.getElementById('alchimia-content');
-    if (!container) return;
-    const p = party[alchimiaPersonaggioSelezionata];
-    if (!p) {
-        container.innerHTML = '<p>Seleziona prima un personaggio valido.</p>';
-        return;
+    if (typeof alchimiaPersonaggio === 'function') {
+        alchimiaPersonaggio(alchimiaPersonaggioSelezionata);
     }
-
-    const naturaRating = p.getSkillRating('Natura');
-    const naturaText = naturaRating >= 2 ? 'Maestria' : naturaRating === 1 ? 'Competenza' : 'Nessuna competenza';
-    const assistInfo = assistenzaSelezionata && assistenzaSelezionata.tipo === 'alchimia' ? `Assistente selezionato: <strong>${party[assistenzaSelezionata.idx]?.nome || 'Nessuno'}</strong>` : 'Nessun assistente alchemico selezionato.';
-
-    let html = `<div style="margin-bottom:14px; color:#ddd;">
-        <strong>Alchimista:</strong> ${p.nome}<br>
-        <strong>Intelligenza:</strong> ${p.intelligenza} (mod ${p.getStatDettagliata('Intelligenza').mod})<br>
-        <strong>Natura:</strong> ${naturaText}<br>
-        <strong>Stazione:</strong> ${magazzino.postazioneAlchemica ? 'Creata' : 'Non presente'}<br>
-        ${assistInfo}
-    </div>`;
-
-    if (!magazzino.postazioneAlchemica && magazzino.materialiAlchemici >= 15) {
-        html += `<div style="margin-bottom:12px;"><button class="btn-hero" onclick="creaPostazioneAlchemica()">Crea postazione alchemica (15 materiali alchemici)</button></div>`;
-    }
-
-    Object.entries(RICETTE).forEach(([grado, ricette]) => {
-        const gradeReq = grado === 'difficile' ? 'Maestria in Natura' : 'Competenza in Natura';
-        html += `<div style="background:#1a1a1a; padding:10px; border:1px solid #333; border-radius:8px; margin-bottom:10px;">
-            <div style="font-weight:bold; color:#f1c40f; margin-bottom:8px; text-transform:capitalize;">${grado}</div>
-            <div style="font-size:0.85rem; color:#aaa; margin-bottom:10px;">Requisito: ${gradeReq}</div>
-            <div style="display:grid; grid-template-columns: 1fr 60px 60px 60px 130px 100px; gap:8px; font-size:0.85rem; font-weight:bold; color:#bbb; margin-bottom:6px;">
-                <div>Nome</div><div>CD</div><div>Ore</div><div>Costo</div><div>Effetto</div><div>Azione</div>
-            </div>`;
-        ricette.forEach((recipe, recipeIdx) => {
-            const hasRequirement = grado === 'difficile' ? naturaRating >= 2 : naturaRating >= 1;
-            const canCraft = magazzino.materialiAlchemici >= recipe.costo && hasRequirement;
-            html += `<div style="display:grid; grid-template-columns: 1fr 60px 60px 60px 130px 100px; gap:8px; font-size:0.85rem; color:#eee; align-items:center; border-top:1px solid #222; padding-top:8px; margin-top:8px;">
-                <div>${recipe.nome}</div>
-                <div>${recipe.cd}</div>
-                <div>${recipe.tempo}</div>
-                <div>${recipe.costo}</div>
-                <div style="color:#ccc;">${recipe.desc}</div>
-                <button class="btn-small" onclick="startAlchemyRecipe('${grado}', ${recipeIdx})" ${canCraft ? '' : 'disabled'}>Inizia</button>
-            </div>`;
-        });
-        html += `</div>`;
-    });
-
-    if (magazzino.compounds && magazzino.compounds.length > 0) {
-        html += `<div style="margin-top:14px; color:#ddd; font-size:0.9rem;">
-            <strong>Composti creati:</strong> ${magazzino.compounds.length}
-            <div style="margin-top:6px; background:#111; padding:10px; border:1px solid #333; border-radius:6px;">
-                ${magazzino.compounds.map(c => `<div>${c.nome} ${c.stabile ? '(stabile)' : '(instabile)'}</div>`).join('')}
-            </div>
-        </div>`;
-    }
-
-    container.innerHTML = html;
 }
 
 function puoIniziareAzione(p, tipo) {
@@ -1194,15 +1448,23 @@ function applyPerkEffects(p) {
     if (!p.inSpedizione) p.puntiFortuna = Math.min(p.puntiFortuna, p.puntiFortunaMax);
 }
 
+window.renderSetupStats = renderSetupStats;
+window.renderSetupPerks = renderSetupPerks;
+window.renderSetupMagic = renderSetupMagic;
+window.DATABASE_PERK = DATABASE_PERK;
+
 function renderSetupStats() {
     const stats = ["Forza", "Destrezza", "Costituzione", "Intelligenza", "Saggezza", "Carisma"];
     const container = document.getElementById('stats-setup-container');
     if (!container) return;
     
+    const p = window.tempP;
+    if (!p) return;
+
     container.innerHTML = ""; 
     stats.forEach(s => {
         // Interroghiamo il getter dinamico per avere il valore influenzato dai perk
-        const dettagli = tempP.getStatDettagliata ? tempP.getStatDettagliata(s) : { valore: tempP[s.toLowerCase()], mod: 0 };
+        const dettagli = p.getStatDettagliata ? p.getStatDettagliata(s) : { valore: p[s.toLowerCase()], mod: 0 };
         const val = dettagli.valore;
         const modSign = dettagli.mod >= 0 ? `+${dettagli.mod}` : dettagli.mod;
 
@@ -1219,7 +1481,7 @@ function renderSetupStats() {
     
     const displayPunti = document.getElementById('punti-residui');
     if (displayPunti) {
-        displayPunti.innerHTML = `Punti Disponibili: <b style="color:${tempP.puntiCreazione < 0 ? '#e74c3c' : '#2ecc71'}">${tempP.puntiCreazione}</b>`;
+        displayPunti.innerHTML = `Punti Disponibili: <b style="color:${p.puntiCreazione < 0 ? '#e74c3c' : '#2ecc71'}">${p.puntiCreazione}</b>`;
     }
 
     renderSetupMagic();
@@ -1228,12 +1490,15 @@ function renderSetupStats() {
 function renderSetupMagic() {
     const container = document.getElementById('magia-setup-container');
     if (!container) return;
+    
+    const p = window.tempP;
+    if (!p) return;
 
-    const livello = tempP.livelloMagia || 0;
-    const manaMax = tempP.getManaMaxFromLevel ? tempP.getManaMaxFromLevel(livello) : 0;
-    const attMagia = tempP.getCastingAttribute ? tempP.getCastingAttribute() : 'Intelligenza';
-    const modMagia = tempP.getCastingModifier ? tempP.getCastingModifier() : 0;
-    const arcanoBonus = tempP.hasArcanoMastery ? tempP.hasArcanoMastery() : false;
+    const livello = p.livelloMagia || 0;
+    const manaMax = p.getManaMaxFromLevel ? p.getManaMaxFromLevel(livello) : 0;
+    const attMagia = p.getCastingAttribute ? p.getCastingAttribute() : 'Intelligenza';
+    const modMagia = p.getCastingModifier ? p.getCastingModifier() : 0;
+    const arcanoBonus = p.hasArcanoMastery ? p.hasArcanoMastery() : false;
 
     container.innerHTML = `
         <div class="stat-row" style="display:grid; grid-template-columns: 1fr auto; gap:8px; background:#111; padding:10px; border-radius:6px; margin-top:10px;">
@@ -1253,8 +1518,8 @@ function renderSetupMagic() {
         </div>
         <div style="margin-top:10px; display:grid; gap:8px;">
             ${[0,1,2,3,4].map(lv => {
-                const maxKnow = tempP.getMaxKnownSpells ? tempP.getMaxKnownSpells(lv) : 0;
-                const current = tempP.spellsKnown && tempP.spellsKnown[lv] != null ? tempP.spellsKnown[lv] : 0;
+                const maxKnow = p.getMaxKnownSpells ? p.getMaxKnownSpells(lv) : 0;
+                const current = p.spellsKnown && p.spellsKnown[lv] != null ? p.spellsKnown[lv] : 0;
                 const levelName = lv === 0 ? 'Trucchetti' : `Incantesimi Lv${lv}`;
                 return `
                     <div style="display:flex; justify-content:space-between; align-items:center; background:#111; padding:8px 10px; border-radius:6px;">
@@ -1279,29 +1544,31 @@ function getMagicLevelCost(livello) {
 }
 
 function modificaStat(stat, ammontare) {
+    const p = window.tempP;
+    if (!p) return;
     const chiave = stat.toLowerCase();
-    const dettagliAttuali = tempP.getStatDettagliata ? tempP.getStatDettagliata(stat) : { valore: tempP[chiave], eccedenza: 0 };
+    const dettagliAttuali = p.getStatDettagliata ? p.getStatDettagliata(stat) : { valore: p[chiave], eccedenza: 0 };
 
     if (ammontare === 1) {
-        const costo = tempP.calcolaCostoStat(tempP[chiave]);
-        if (tempP.puntiCreazione >= costo && dettagliAttuali.valore < 20 && tempP[chiave] < 20) {
-            tempP.puntiCreazione -= costo;
-            tempP[chiave]++;
+        const costo = p.calcolaCostoStat(p[chiave]);
+        if (p.puntiCreazione >= costo && dettagliAttuali.valore < 20 && p[chiave] < 20) {
+            p.puntiCreazione -= costo;
+            p[chiave]++;
         }
     } else {
         // Se la statistica reale è superiore a 6 e quella base è maggiore di 1
-        if (dettagliAttuali.valore > 6 && tempP[chiave] > 1) {
+        if (dettagliAttuali.valore > 6 && p[chiave] > 1) {
             
             // CONTROLLO ECCEDENZA:
             // Se c'è eccedenza (es. il totale teorico era 22), abbassiamo la statistica base
             // MA NON restituiamo punti creazione al giocatore (perché lo schermo mostrava già 20)
             if (dettagliAttuali.eccedenza > 0) {
-                tempP[chiave]--; 
+                p[chiave]--; 
                 // Nessun rimborso di punti creazione!
             } else {
                 // Se non c'è eccedenza, scaliamo normalmente e rimborsiamo i punti
-                tempP[chiave]--;
-                tempP.puntiCreazione += tempP.calcolaCostoStat(tempP[chiave]);
+                p[chiave]--;
+                p.puntiCreazione += p.calcolaCostoStat(p[chiave]);
             }
         }
     }
@@ -1383,6 +1650,10 @@ window.passaTempoGlobale = passaTempoGlobale;
 window.apriBiblioteca = apriBiblioteca;
 window.ritiraTutti = ritiraTutti;
 window.chiudiScheda = chiudiScheda;
+window.gestisciDigitazionePerk = gestisciDigitazionePerk;
+window.cliccaSuggerimentoPerk = cliccaSuggerimentoPerk;
+window.eseguiRicercaPerkSuInvio = eseguiRicercaPerkSuInvio;
+window.togglePerkAffordableOnly = togglePerkAffordableOnly;
 
 // Questa viene chiamata SOLO quando l'utente preme il tasto INVIO
 function eseguiRicercaPerkSuInvio(evento, valore) {
@@ -1667,6 +1938,19 @@ function apriScheda(idx) {
     displayTimer("🛌", "Appena Svegliato", p.timers.sonnoSoddisfatto, "#f1c40f");
 
     if (Object.values(p.timers).every(v => v <= 0)) effettiHtml += `<p style="color:#555;">Nessun effetto</p>`;
+    
+    // Mostra stati alterati ricevuti dal server
+    if (p.statiAlterati && p.statiAlterati.length > 0) {
+        effettiHtml += `<h4 style="color:#f1c40f; margin-top:15px; border-bottom:1px solid #333; padding-bottom:5px;">STATI ALTERATI</h4>`;
+        p.statiAlterati.forEach(s => {
+            effettiHtml += `<div style="margin-bottom:8px; padding:5px; background:#222; border-left:2px solid #f1c40f;">
+                <div style="font-weight:bold; color:#eee;">${s.nome || s.tipo}</div>
+                <div style="font-size:0.75rem; color:#aaa;">${s.descrizione || ''}</div>
+                <div style="font-size:0.7rem; color:#888;">${s.durata_minuti > 0 ? `Scadenza tra ${s.durata_minuti}m` : 'Permanente'}</div>
+            </div>`;
+        });
+    }
+
     effettiHtml += `</div>`;
 
     // 3. Render Finale Layout a 3 Colonne
@@ -1903,17 +2187,26 @@ window.onclick = function(event) {
 window.renderProposteMaster = renderProposteMaster;
 window.approvaPersonaggio = approvaPersonaggio;
 window.rifiutaPersonaggio = rifiutaPersonaggio;
-
-// Espongo funzioni usate da onclick inline nei template
-window.showPlayerAuth = showPlayerAuth;
-window.showMasterAuth = showMasterAuth;
+window.mostraNotificaInAlto = mostraNotificaInAlto;
+window.apriScheda = apriScheda;
+window.chiudiScheda = chiudiScheda;
+window.apriAiutoModal = apriAiutoModal;
+window.openRisorsaModal = openRisorsaModal;
+window.apriMedica = apriMedica;
+window.openCucinaModal = openCucinaModal;
+window.annullaAssistente = annullaAssistente;
+window.visualizzaPerk = visualizzaPerk;
+window.openMagazzino = openMagazzino;
+window.annullaCreazione = typeof annullaCreazione === 'function' ? annullaCreazione : (window.annullaCreazione || undefined);
+window.avviaCreazione = typeof avviaCreazione === 'function' ? avviaCreazione : (window.avviaCreazione || undefined);
+window.passaTempoGlobale = typeof passaTempoGlobale === 'function' ? passaTempoGlobale : (window.passaTempoGlobale || undefined);
+window.apriBiblioteca = typeof apriBiblioteca === 'function' ? apriBiblioteca : (window.apriBiblioteca || undefined);
+window.chiudiModal = chiudiModal;
+window.renderCharacterList = renderCharacterList;
 window.showLobbyScreen = showLobbyScreen;
-window.showGameScreen = showGameScreen;
-window.modificaMagicLevel = typeof modificaMagicLevel === 'function' ? modificaMagicLevel : undefined;
-window.modificaIncantesimiConosciuti = typeof modificaIncantesimiConosciuti === 'function' ? modificaIncantesimiConosciuti : undefined;
-window.confermaCreazione = typeof confermaCreazione === 'function' ? confermaCreazione : undefined;
+window.aggiornaInterfaccia = aggiornaInterfaccia;
 window.initUI = initUI;
-window.showGameScreen = showGameScreen;
-window.showLandingScreen = showLandingScreen;
-window.apriBiblioteca = apriBiblioteca;
+window.modificaMagicLevel = typeof modificaMagicLevel === 'function' ? modificaMagicLevel : (window.modificaMagicLevel || undefined);
+window.modificaIncantesimiConosciuti = typeof modificaIncantesimiConosciuti === 'function' ? modificaIncantesimiConosciuti : (window.modificaIncantesimiConosciuti || undefined);
+window.confermaCreazione = typeof confermaCreazione === 'function' ? confermaCreazione : (window.confermaCreazione || undefined);
 

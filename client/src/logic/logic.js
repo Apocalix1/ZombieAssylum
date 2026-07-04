@@ -1,5 +1,4 @@
-import { db } from "../config/Firebase_confing.js";
-import { doc, collection, setDoc, getDoc, getDocs, updateDoc, onSnapshot, query, where, addDoc, deleteDoc, serverTimestamp, increment, arrayUnion, arrayRemove } from "firebase/firestore";
+import { magazzino, setMagazzino, party, setParty } from '../state.js';
 
 const LOCAL_STORAGE_PREFIX = "personaggio_";
 
@@ -54,291 +53,90 @@ export function buildAuthHeaders(additional = {}) {
     return { ...headers, ...additional };
 }
 
-const PERSONAGGI_COLL = 'personaggi';
-const MAGAZZINO_COLL = 'magazzino';
-const MAGAZZINO_DOC_ID = 'global';
-const PUSH_COMMANDS_COLL = 'comandi_push';
-let currentMagazzinoUnsubscribe = null;
-let currentPartyUnsubscribe = [];
-let currentPushUnsubscribe = null;
+let syncPollingInterval = null;
+let isSyncingMagazzino = false;
+let syncListenersAttached = false;
 
-function personaggioDocRef(nome) {
-    return doc(db, PERSONAGGI_COLL, encodeURIComponent(nome));
-}
-
-function inventarioDocRef(nome, categoria) {
-    return doc(collection(db, PERSONAGGI_COLL, encodeURIComponent(nome), 'inventario'), categoria);
-}
-
-function statoAlteratoDocRef(nome, stato) {
-    return doc(collection(db, PERSONAGGI_COLL, encodeURIComponent(nome), 'stati_alterati'), stato);
-}
-
-function magazzinoDocRef() {
-    return doc(db, MAGAZZINO_COLL, MAGAZZINO_DOC_ID);
-}
-
-function pushCommandQuery(target) {
-    return query(collection(db, PUSH_COMMANDS_COLL), where('target', '==', target));
-}
-
-function pushCommandDocRef(id) {
-    return doc(db, PUSH_COMMANDS_COLL, id);
-}
-
-function buildPersonaggioMainData(personaggio) {
-    return {
-        nome: personaggio.nome,
-        classe: personaggio.classe || 'Sopravvissuto',
-        giornoInizio: personaggio.giornoInizio ?? 0,
-        isRobot: !!personaggio.isRobot,
-        puntiFeritaReali: personaggio.puntiFeritaReali ?? 0,
-        puntiFeritaRealiMax: personaggio.puntiFeritaRealiMax ?? 0,
-        azioneCorrente: personaggio.azioneCorrente || null,
-        capacitaMax: personaggio.capacitaMax ?? 0,
-        pesoAttuale: personaggio.pesoAttuale ?? 0,
-        forzeBase: {
-            forza: personaggio.forza ?? 0,
-            destrezza: personaggio.destrezza ?? 0,
-            costituzione: personaggio.costituzione ?? 0,
-            intelligenza: personaggio.intelligenza ?? 0,
-            saggezza: personaggio.saggezza ?? 0,
-            carisma: personaggio.carisma ?? 0
-        },
-        perks: personaggio.perks || [],
-        vantaggi: personaggio.vantaggi || {},
-        svantaggi: personaggio.svantaggi || {},
-        pca: personaggio.pca || {},
-        armiLivello: personaggio.armiLivello || {},
-        oreAllenamento: personaggio.oreAllenamento ?? 0,
-        ultimoGiornoAllenamento: personaggio.ultimoGiornoAllenamento ?? 0,
-        updated_at: serverTimestamp()
-    };
-}
-
-async function persistPersonaggioMain(personaggio) {
-    const ref = personaggioDocRef(personaggio.nome);
-    await setDoc(ref, buildPersonaggioMainData(personaggio), { merge: true });
-}
-
-async function persistPersonaggioInventory(personaggio) {
-    const inv = personaggio.inventario || {};
-    await Promise.all([
-        setDoc(inventarioDocRef(personaggio.nome, 'munizioni'), {
-            proiettili: inv.munizioni?.proiettili ?? 0,
-            quadrelli: inv.munizioni?.quadrelli ?? 0,
-            frecce: inv.munizioni?.frecce ?? 0,
-            gomma_pistola: inv.munizioni?.gomma_pistola ?? 0,
-            gomma_balestra: inv.munizioni?.gomma_balestra ?? 0,
-            gomma_arco: inv.munizioni?.gomma_arco ?? 0
-        }, { merge: true }),
-        setDoc(inventarioDocRef(personaggio.nome, 'risorse'), {
-            cibo: inv.cibo ?? 0,
-            acqua: inv.acqua ?? 0,
-            ingranaggi: inv.ingranaggi ?? 0,
-            alchemici: inv.alchemici ?? 0,
-            medBase: inv.medBase ?? 0,
-            medAvanzati: inv.medAvanzati ?? 0,
-            medCritici: inv.medCritici ?? 0
-        }, { merge: true }),
-        setDoc(inventarioDocRef(personaggio.nome, 'equipaggiamento'), {
-            armi: inv.armi || [],
-            zaini: inv.zaini || [],
-            consumabili: inv.consumabili || [],
-            compounds: personaggio.composti || [],
-            congegniFissi: personaggio.congegniFissi || [],
-            congegniConteggio: personaggio.congegniConteggio || {}
-        }, { merge: true })
-    ]);
-}
-
-async function persistPersonaggioStati(personaggio) {
-    const timers = personaggio.timers || {};
-    const timerWrites = Object.entries(timers).map(([key, value]) => setDoc(statoAlteratoDocRef(personaggio.nome, key), {
-        type: 'timer',
-        key,
-        value,
-        updated_at: serverTimestamp()
-    }, { merge: true }));
-    await Promise.all(timerWrites);
-}
-
-async function ensureMagazzinoDoc() {
-    const ref = magazzinoDocRef();
-    try {
-        const snap = await getDoc(ref);
-        if (!snap.exists()) {
-            await setDoc(ref, {
-                materialiAlchemici: 0,
-                ingranaggi: 0,
-                materialiMedici: { base: 0, avanzati: 0, critici: 0 },
-                cibo: 0,
-                acqua: 0,
-                armiTrovate: [],
-                oggettiMagici: { comuni: 0, nonComuni: 0, rari: 0, superRari: 0 },
-                piattiDeliziosi: 0,
-                ciboaviarto: 0,
-                conserve: 0,
-                compounds: [],
-                postazioneAlchemica: false,
-                congegniFissi: [],
-                congegniConteggio: {},
-                updated_at: serverTimestamp()
-            });
+function parseCharacterData(value) {
+    if (typeof value === 'string') {
+        try {
+            return JSON.parse(value);
+        } catch {
+            return {};
         }
-    } catch (err) {
-        console.warn('Impossibile inizializzare il documento magazzino:', err?.message || err);
     }
+    return value || {};
+}
+
+function normalizeCharacterRecord(character) {
+    const payload = parseCharacterData(character?.data);
+    return { ...character, data: payload };
+}
+
+async function requestJson(url, options = {}) {
+    const response = await fetch(url, {
+        headers: buildAuthHeaders({ 'Content-Type': 'application/json' }),
+        ...options,
+    });
+    const text = await response.text();
+    let data = {};
+    if (text) {
+        try {
+            data = JSON.parse(text);
+        } catch {
+            data = {};
+        }
+    }
+    if (!response.ok) {
+        throw new Error(data.error || 'Errore richiesta server');
+    }
+    return data;
 }
 
 export async function updateMagazzinoFields(fields) {
     if (!fields || Object.keys(fields).length === 0) return;
-    const ref = magazzinoDocRef();
     try {
-        await updateDoc(ref, fields);
-    } catch (err) {
-        if (err?.code === 'not-found' || err?.message?.includes('No document to update')) {
-            await ensureMagazzinoDoc();
-            await updateDoc(ref, fields);
-        } else {
-            console.warn('Errore aggiornamento magazzino:', err?.message || err);
-        }
+        await requestJson(apiUrl('/api/magazzino'), {
+            method: 'PUT',
+            body: JSON.stringify({ data: fields }),
+        });
+    } catch (error) {
+        console.warn('Errore aggiornamento magazzino:', error?.message || error);
     }
 }
 
 export async function addPushCommand(command) {
-    const cmd = {
-        target: command.target,
-        tipo: command.tipo,
-        valore: command.valore ?? null,
-        note: command.note || null,
-        timestamp: serverTimestamp()
-    };
-    await addDoc(collection(db, PUSH_COMMANDS_COLL), cmd);
-}
-
-async function processPushCommand(command) {
-    if (!command || !command.target) return;
-    const push = command;
-    const targetName = push.target;
-    const personaggio = party.find(p => p.nome === targetName);
-    if (!personaggio) {
-        console.warn('Comando push ricevuto per personaggio non presente:', targetName);
-        await deleteDoc(pushCommandDocRef(push.id));
-        return;
-    }
-
-    if (push.tipo === 'DANNO') {
-        const damage = Number(push.valore || 0);
-        const outcome = personaggio.applyDamage(damage);
-        mostraNotificaInAlto(`${personaggio.nome} subisce ${damage} danni! Stato: ${outcome}`, 'pericolo');
-        await salvaPersonaggioCloud(personaggio);
-    } else if (push.tipo === 'APPROVA') {
-        mostraNotificaInAlto(`${personaggio.nome} è stato approvato dal Master.`, 'successo');
-        await salvaPersonaggioCloud(personaggio);
-    } else {
-        mostraNotificaInAlto(`Comando Master: ${push.tipo}`, 'info');
-    }
-
-    await deleteDoc(pushCommandDocRef(push.id));
-}
-
-function attachMagazzinoListener() {
-    if (currentMagazzinoUnsubscribe) currentMagazzinoUnsubscribe();
-    currentMagazzinoUnsubscribe = onSnapshot(magazzinoDocRef(), (snap) => {
-        if (!snap.exists()) return;
-        const data = snap.data();
-        window.magazzino = window.magazzino || {};
-        Object.assign(window.magazzino, data);
-        if (typeof aggiornaInterfaccia === 'function') aggiornaInterfaccia();
-    }, (error) => {
-        console.warn('Errore listener magazzino:', error);
-    });
-}
-
-function attachPartyListeners() {
-    currentPartyUnsubscribe.forEach(unsub => unsub && unsub());
-    currentPartyUnsubscribe = [];
-    party.forEach(personaggio => {
-        const unsubscribe = onSnapshot(personaggioDocRef(personaggio.nome), (snap) => {
-            if (!snap.exists()) return;
-            const data = snap.data();
-            Object.assign(personaggio, data);
-            if (typeof aggiornaInterfaccia === 'function') aggiornaInterfaccia();
-        }, (error) => {
-            console.warn('Errore listener personaggio:', error);
+    try {
+        await requestJson(apiUrl('/api/master/push-commands'), {
+            method: 'POST',
+            body: JSON.stringify(command),
         });
-        currentPartyUnsubscribe.push(unsubscribe);
-    });
-}
-
-function attachPushCommandListener(target) {
-    if (!target) return;
-    if (currentPushUnsubscribe) currentPushUnsubscribe();
-    currentPushUnsubscribe = onSnapshot(pushCommandQuery(target), async (querySnapshot) => {
-        for (const change of querySnapshot.docChanges()) {
-            if (change.type === 'added') {
-                await processPushCommand({ id: change.doc.id, ...change.doc.data() });
-            }
-        }
-    }, (error) => {
-        console.warn('Errore listener comandi push:', error);
-    });
+    } catch (error) {
+        console.warn('Errore invio comando push:', error?.message || error);
+    }
 }
 
 export async function fetchPersonaggioFromCloud(nome) {
     if (!nome) return null;
-    const ref = personaggioDocRef(nome);
-    const snap = await getDoc(ref);
-    if (!snap.exists()) return null;
-    const data = snap.data();
-    const invSnapshots = await Promise.all([
-        getDoc(inventarioDocRef(nome, 'munizioni')),
-        getDoc(inventarioDocRef(nome, 'risorse')),
-        getDoc(inventarioDocRef(nome, 'equipaggiamento'))
-    ]);
-    const inv = {
-        munizioni: invSnapshots[0].exists() ? invSnapshots[0].data() : {},
-        cibo: invSnapshots[1].exists() ? invSnapshots[1].data().cibo : 0,
-        acqua: invSnapshots[1].exists() ? invSnapshots[1].data().acqua : 0,
-        ingranaggi: invSnapshots[1].exists() ? invSnapshots[1].data().ingranaggi : 0,
-        alchemici: invSnapshots[1].exists() ? invSnapshots[1].data().alchemici : 0,
-        medBase: invSnapshots[1].exists() ? invSnapshots[1].data().medBase : 0,
-        medAvanzati: invSnapshots[1].exists() ? invSnapshots[1].data().medAvanzati : 0,
-        medCritici: invSnapshots[1].exists() ? invSnapshots[1].data().medCritici : 0,
-        armi: invSnapshots[2].exists() ? invSnapshots[2].data().armi || [] : [],
-        zaini: invSnapshots[2].exists() ? invSnapshots[2].data().zaini || [] : [],
-        consumabili: invSnapshots[2].exists() ? invSnapshots[2].data().consumabili || [] : [],
-        compounds: invSnapshots[2].exists() ? invSnapshots[2].data().compounds || [] : [],
-        congegniFissi: invSnapshots[2].exists() ? invSnapshots[2].data().congegniFissi || [] : [],
-        congegniConteggio: invSnapshots[2].exists() ? invSnapshots[2].data().congegniConteggio || {} : {}
-    };
-    const personaggio = { ...data, inventario: inv };
-    return {
-        data: personaggio,
-        updated_at: data.updated_at?.toDate?.().toISOString?.() || nowTimestamp()
-    };
+    try {
+        const data = await requestJson(apiUrl(`/api/personaggi/${encodeURIComponent(nome)}`));
+        return {
+            data: normalizeCharacterRecord(data.personaggio),
+            updated_at: data.personaggio?.updated_at || nowTimestamp(),
+        };
+    } catch (error) {
+        console.warn('Impossibile caricare il personaggio dal server:', error?.message || error);
+        return null;
+    }
 }
 
-async function persistPersonaggioToFirestore(personaggio) {
-    await ensureMagazzinoDoc();
-    await persistPersonaggioMain(personaggio);
-    await persistPersonaggioInventory(personaggio);
-    await persistPersonaggioStati(personaggio);
-}
-
-export async function fetchCharacterNamesFromCloud() {
-    // Placeholder: Firestore query by owner can be added later once the schema prevede un campo owner
-    return [];
-}
-
-export async function avviaAscoltoDatiCloud() {
-    console.log("📡 Sincronizzazione Cloud attiva.");
-    attachMagazzinoListener();
-    attachPartyListeners();
-    const user = getCurrentUser();
-    if (user?.username) {
-        attachPushCommandListener(user.username);
+export async function fetchUserCharacters() {
+    try {
+        const data = await requestJson(apiUrl('/api/characters'));
+        return Array.isArray(data.characters) ? data.characters.map(normalizeCharacterRecord) : [];
+    } catch (error) {
+        console.warn('Impossibile caricare personaggi dal server:', error?.message || error);
+        return [];
     }
 }
 
@@ -346,74 +144,155 @@ export async function salvaPersonaggioCloud(personaggio) {
     personaggio.updated_at = nowTimestamp();
     salvaPersonaggioLocalmente(personaggio);
     try {
-        await persistPersonaggioToFirestore(personaggio);
-    } catch (err) {
-        console.warn('Salvataggio cloud differito a causa di errore:', err?.message || err);
+        await requestJson(apiUrl('/api/characters'), {
+            method: 'POST',
+            body: JSON.stringify({
+                nome: personaggio.nome,
+                classe: personaggio.classe || 'Sopravvissuto',
+                data: JSON.stringify(personaggio),
+                updated_at: personaggio.updated_at,
+            }),
+        });
+    } catch (error) {
+        console.warn('Salvataggio cloud differito:', error?.message || error);
     }
-}
-
-async function synchronizePersonaggioWithFirestore(personaggio) {
-    const cloudData = await fetchPersonaggioFromCloud(personaggio.nome);
-    if (!cloudData) {
-        await persistPersonaggioToFirestore(personaggio);
-        return personaggio;
-    }
-    const localUpdated = new Date(personaggio.updated_at || nowTimestamp());
-    const cloudUpdated = new Date(cloudData.updated_at || nowTimestamp());
-    const merged = localUpdated >= cloudUpdated ? personaggio : { ...cloudData.data, updated_at: cloudData.updated_at };
-    await persistPersonaggioToFirestore(merged);
-    return merged;
-}
-
-async function inviaDatiAlServer(personaggio) {
-    return await persistPersonaggioToFirestore(personaggio);
 }
 
 async function sincronizzaPersonaggio(personaggioLocale) {
     const localCopy = salvaPersonaggioLocalmente(personaggioLocale);
     if (!navigator.onLine) {
-        console.log('🔌 Offline: uso la copia locale.');
         return localCopy;
     }
     try {
-        return await synchronizePersonaggioWithFirestore(localCopy);
+        const cloudData = await fetchPersonaggioFromCloud(personaggioLocale.nome);
+        if (!cloudData) {
+            await salvaPersonaggioCloud(localCopy);
+            return localCopy;
+        }
+        
+        // Vince il più recente (updated_at)
+        const localUpdated = new Date(localCopy.updated_at || nowTimestamp());
+        const cloudUpdated = new Date(cloudData.updated_at || nowTimestamp());
+        
+        if (localUpdated >= cloudUpdated) {
+            // Se il locale è più recente, aggiorna il server
+            await salvaPersonaggioCloud(localCopy);
+            return localCopy;
+        } else {
+            // Se il cloud è più recente, aggiorna il locale
+            const merged = { ...cloudData.data, updated_at: cloudData.updated_at };
+            salvaPersonaggioLocalmente(merged);
+            
+            // Aggiorna l'oggetto nel party se presente
+            const idx = party.findIndex(p => p.nome === merged.nome);
+            if (idx !== -1) {
+                // Esegui merge dei dati nell'oggetto esistente per non perdere riferimenti/metodi
+                Object.assign(party[idx], merged);
+            }
+            
+            return merged;
+        }
     } catch (error) {
-        console.log('🔌 Impossibile sincronizzare con Firestore:', error.message || error);
+        console.warn('Impossibile sincronizzare con il server:', error?.message || error);
         return localCopy;
     }
 }
 
-export async function fetchUserCharacters(userId) {
-    if (!userId) return [];
+async function syncMagazzinoDalServer() {
+    if (isSyncingMagazzino) return;
+    isSyncingMagazzino = true;
     try {
-        const user = getCurrentUser();
-        if (navigator.onLine && user?.username) {
-            const q = query(collection(db, PERSONAGGI_COLL), where('owner', '==', user.username));
-            const snapshot = await getDocs(q);
-            return snapshot.docs.map(doc => ({ nome: doc.id, ...doc.data() }));
+        const data = await requestJson(apiUrl('/api/magazzino'));
+        if (data.magazzino && data.magazzino.data) {
+            setMagazzino(data.magazzino.data);
+            window.magazzino = magazzino; // Mantieni compatibilità per ora
+            // Chiamiamo aggiornaInterfaccia solo se non siamo già dentro un ciclo di aggiornamento
+            if (typeof window.aggiornaInterfaccia === 'function' && !window._isUpdatingUI) {
+                window.aggiornaInterfaccia();
+            }
+            // Aggiorniamo anche il cimitero se presente
+            if (typeof window.renderCimitero === 'function') {
+                window.renderCimitero();
+            }
         }
-    } catch (err) {
-        console.warn('Impossibile caricare personaggi da Firestore:', err.message || err);
+    } catch (error) {
+        console.warn('Impossibile aggiornare il magazzino dal server:', error?.message || error);
+    } finally {
+        isSyncingMagazzino = false;
+    }
+}
+
+async function syncStatiDalServer() {
+    if (!Array.isArray(party)) return;
+    for (const personaggio of party) {
+        try {
+            const data = await requestJson(apiUrl(`/api/personaggi/${encodeURIComponent(personaggio.id || personaggio.nome)}/stati`));
+            if (Array.isArray(data.stati)) {
+                applicaStatiAlterati(personaggio, data.stati);
+                if (typeof aggiornaInterfaccia === 'function') aggiornaInterfaccia();
+            }
+        } catch (error) {
+            console.warn('Impossibile sincronizzare stati:', error?.message || error);
+        }
+    }
+}
+
+async function syncDocumentiDalServer() {
+    if (!Array.isArray(party)) return;
+    for (const personaggio of party) {
+        try {
+            const data = await requestJson(apiUrl(`/api/documenti?personaggioId=${personaggio.id || ''}`));
+            if (Array.isArray(data.documenti)) {
+                personaggio.documenti = data.documenti;
+            }
+        } catch (error) {
+            console.warn('Impossibile sincronizzare documenti:', error?.message || error);
+        }
+    }
+}
+
+function applicaStatiAlterati(personaggio, listaStati) {
+    personaggio.statiAlterati = listaStati;
+    
+    // Aggiorna le statistiche derivate se necessario
+    if (personaggio instanceof Personaggio) {
+        // La logica di getStatDettagliata userà automaticamente i nuovi stati
+    }
+}
+
+export async function avviaAscoltoDatiCloud() {
+    if (syncPollingInterval) return;
+    syncPollingInterval = setInterval(async () => {
+        if (navigator.onLine) {
+            await syncMagazzinoDalServer();
+            await syncStatiDalServer();
+            await syncDocumentiDalServer();
+            if (party.length > 0 && typeof sincronizzaPersonaggio === 'function') {
+                party.forEach(p => sincronizzaPersonaggio(p));
+            }
+        }
+    }, 15000);
+
+    if (!syncListenersAttached) {
+        window.addEventListener('online', async () => {
+            await syncMagazzinoDalServer();
+            await syncStatiDalServer();
+            await syncDocumentiDalServer();
+            party.forEach(p => sincronizzaPersonaggio(p));
+        });
+        syncListenersAttached = true;
     }
 
-    try {
-        const response = await fetch(apiUrl('/api/characters'), {
-            headers: buildAuthHeaders()
-        });
-        if (!response.ok) return [];
-        const data = await response.json();
-        return Array.isArray(data.characters) ? data.characters : [];
-    } catch (err) {
-        console.warn('Impossibile caricare personaggi da server:', err.message || err);
-        return [];
-    }
+    await syncMagazzinoDalServer();
+    await syncStatiDalServer();
+    await syncDocumentiDalServer();
 }
 
 export function refreshPartyListeners() {
-    attachPartyListeners();
+    if (typeof window.aggiornaInterfaccia === 'function') window.aggiornaInterfaccia();
 }
 
-export let party = [];
+// export let party = []; // Rimosso perché importato da state.js
 export class Personaggio {
     constructor(nome, giornoPartenza = 0) {
         this.nome = nome;
@@ -505,6 +384,8 @@ export class Personaggio {
         this.batteryHoursMax = 7 * 24; // full battery = 7 days = 168 hours
         // Three Laws enforcement (behavioral rules)
         this.robotThreeLaws = true;
+
+        this.statiAlterati = [];
     }
 
     initInventarioBase() {
@@ -600,7 +481,7 @@ export class Personaggio {
             peso += z.pesoUnEquipped;
         });
 
-        return parseFloat(peso.toFixed(2));
+        return parseFloat((peso || 0).toFixed(2));
     }
 
     consumeBattery(hours) {
@@ -899,6 +780,16 @@ export class Personaggio {
         if (statNome === "Costituzione" && this.stadioFame >= 4) modFinale -= 2;
         if ((statNome === "Intelligenza" || statNome === "Destrezza") && this.stadioSete >= 1) modFinale -= 2;
         if ((statNome === "Carisma" || statNome === "Saggezza") && this.stadioSonno >= 1) modFinale -= 2;
+
+        // --- 5. BUFF/DEBUFF PERSONALIZZATI (da interfaccia Master) ---
+        if (this.statiAlterati) {
+            this.statiAlterati.forEach(s => {
+                if (s.nome && s.nome.toLowerCase() === nomeLower) {
+                    modFinale += (s.valore || 0);
+                    motivi.push(`${s.nome} (${s.valore >= 0 ? '+' : ''}${s.valore})`);
+                }
+            });
+        }
 
         return {
             nome: statNome.toUpperCase(),
@@ -1588,10 +1479,27 @@ export class Personaggio {
 
     tickOra() {
         // 1. Calo risorse naturale (1 tacca / 24h)
-        const calo = 1 / 24;
-        this.fame = Math.max(0, this.fame - calo);
-        this.sete = Math.max(0, this.sete - calo);
-        this.sonno = Math.max(0, this.sonno - calo);
+        let caloFame = 1 / 24;
+        let caloSete = 1 / 24;
+        let caloSonno = 1 / 24;
+        let caloFatica = 0; // La fatica non cala naturalmente ma può aumentare o diminuire via buff
+
+        // --- 1.1 Applica Buff/Debuff ai bisogni ---
+        if (this.statiAlterati) {
+            this.statiAlterati.forEach(s => {
+                const tipo = s.nome ? s.nome.toLowerCase() : '';
+                const val = s.valore || 0;
+                if (tipo === 'fame') caloFame -= (val / 24);
+                if (tipo === 'sete') caloSete -= (val / 24);
+                if (tipo === 'sonno') caloSonno -= (val / 24);
+                if (tipo === 'fatica') caloFatica -= (val / 24);
+            });
+        }
+
+        this.fame = Math.max(0, this.fame - caloFame);
+        this.sete = Math.max(0, this.sete - caloSete);
+        this.sonno = Math.max(0, this.sonno - caloSonno);
+        this.faticaBase = Math.max(0, this.faticaBase + caloFatica);
 
         // 2. Processa Azione se non è in spedizione
         if (this.azioneCorrente && !this.inSpedizione) {
@@ -1770,22 +1678,17 @@ export class Personaggio {
     }
 
 }
-export function avviaAscoltoDatiCloud() {
-    console.log("📡 Sincronizzazione Cloud attiva.");
-}
 
-window.party = party;
 window.Personaggio = Personaggio;
 window.salvaPersonaggioCloud = salvaPersonaggioCloud;
 window.sincronizzaPersonaggio = sincronizzaPersonaggio;
 window.caricaDatiDaLocalStorage = caricaDatiDaLocalStorage;
 window.salvaPersonaggioLocalmente = salvaPersonaggioLocalmente;
 window.buildAuthHeaders = buildAuthHeaders;
-window.checkBackend = checkBackend;
 window.getCurrentUser = getCurrentUser;
 window.updateMagazzinoFields = updateMagazzinoFields;
 window.addPushCommand = addPushCommand;
-window.cimitero = cimitero || [];
+window.cimitero = window.cimitero || [];
 window.party = party;
-window.inSpedizione = inSpedizione;
+window.inSpedizione = typeof inSpedizione !== 'undefined' ? inSpedizione : false;
 window.apiUrl = apiUrl;

@@ -1,41 +1,15 @@
-const magazzino = window.magazzino || {
-    cibo: 20,
-    acqua: 20,
-    materialiAlchemici: 5,
-    ingranaggi: 10,
-    conserve: 0,
-    piattiDeliziosi: 0,
-    ciboaviarto: 0,
-    materialiMedici: {
-        base: 2,
-        avanzati: 1,
-        critici: 0
-    },
-    oggettiMagici: {
-        comuni: 0,
-        nonComuni: 0,
-        rari: 0,
-        superRari: 0
-    },
-    munizioni: {
-        proiettili: 0,
-        quadrelli: 0,
-        frecce: 0,
-        gomma_pistola: 0,
-        gomma_balestra: 0,
-        gomma_arco: 0
-    },
-    postazioneAlchemica: false,
-    compounds: [],
-    libri: [],
-    congegniFissi: [],
-    congegniConteggio: {
-        'Orologio / Timer': 0,
-        'Cassa Amplificata': 0,
-        'Innesco': 0
-    }
-};
+import { magazzino as stateMagazzino, party, setMagazzino } from "../state.js";
+
+const magazzino = stateMagazzino;
 window.magazzino = magazzino;
+
+function loadCharactersForUser() {
+    try {
+        const u = JSON.parse(localStorage.getItem('utente'));
+        if (!u) return [];
+        return JSON.parse(localStorage.getItem(`user_chars_${u.username}`) || '[]');
+    } catch { return []; }
+}
 
 const MAPPA_MUNIZIONI = {
     'Pistola':  { reale: 'proiettili', gomma: 'gomma_pistola' },
@@ -143,7 +117,7 @@ async function takeFromMagazzino(key) {
         localStorage.setItem(`${LOCAL_STORAGE_PREFIX}${encodeURIComponent(pObj.nome)}`, JSON.stringify(pObj));
     }
     renderMagazzinoModal();
-    aggiornaInterfaccia();
+    if (typeof window.aggiornaInterfaccia === 'function') window.aggiornaInterfaccia();
 }
 
 function depositaInMagazzino(idxPersonaggio, tipo, quantita) {
@@ -158,7 +132,7 @@ function depositaInMagazzino(idxPersonaggio, tipo, quantita) {
     
     // Aggiunge al magazzino
     magazzino[tipo] += quantita;
-    aggiornaInterfaccia();
+    if (typeof window.aggiornaInterfaccia === 'function') window.aggiornaInterfaccia();
 }
 
 // Ritira dal magazzino
@@ -179,7 +153,7 @@ function ritiraDaMagazzino(idxPersonaggio, tipo, quantita) {
 
     magazzino[tipo] -= quantita;
     p.inventario[tipo] += quantita;
-    aggiornaInterfaccia();
+    if (typeof window.aggiornaInterfaccia === 'function') window.aggiornaInterfaccia();
 }
 
 // Helper per i pesi dinamici del ritiro/deposito
@@ -259,3 +233,12 @@ async function consumaMunizioneAttacco(p, tipoArma) {
 }
 
 window.takeFromMagazzino = takeFromMagazzino;
+window.applicaPerkArmato = applicaPerkArmato;
+window.depositaInMagazzino = depositaInMagazzino;
+window.ritiraDaMagazzino = ritiraDaMagazzino;
+window.openMagazzino = openMagazzino;
+window.takeFromMagazzino = takeFromMagazzino;
+window.closeMagazzino = () => {
+    const modal = document.getElementById('modal-magazzino');
+    if (modal) modal.style.display = 'none';
+};

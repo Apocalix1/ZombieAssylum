@@ -5,15 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Zombie Asylum Gestionale</title>
      <link rel="stylesheet" href="./public/style.css">
-    <script type="importmap">
-    {
-      "imports": {
-        "firebase/app": "https://www.gstatic.com/firebasejs/10.14.0/firebase-app.js",
-        "firebase/auth": "https://www.gstatic.com/firebasejs/10.14.0/firebase-auth.js",
-        "firebase/firestore": "https://www.gstatic.com/firebasejs/10.14.0/firebase-firestore.js"
-      }
-    }
-    </script>
 </head>
 <body>
 
@@ -64,7 +55,7 @@
                 <select id="magazzino-target" style="flex:1;"></select>
             </div>
             <div style="margin-top:12px; display:flex; gap:8px; justify-content:flex-end;">
-                <button class="btn-big btn-cancel" onclick="document.getElementById('modal-magazzino').style.display='none'">CHIUDI</button>
+                <button class="btn-big btn-cancel" onclick="chiudiModal('modal-magazzino')">CHIUDI</button>
             </div>
         </div>
     </div>
@@ -80,7 +71,6 @@
             <div style="display:flex; gap:8px; margin-bottom:12px; justify-content:center;">
                 <button id="lobby-btn-recluta" class="btn-hero">➕ Crea Personaggio</button>
                 <button id="lobby-enter-play" class="btn-hero">Entra in Gioco</button>
-                <button id="lobby-btn-magazzino" class="btn-hero guest-allow">📦 Magazzino</button>
             </div>
             <div id="lobby-characters" style="display:grid; gap:8px;"></div>
         </main>
@@ -110,6 +100,8 @@
                 <button id="btn-spedizione" class="btn-hero" onclick="mandaTuttiInSpedizione()">🚚 SPEDISCI TUTTI</button>
                 <button id="btn-biblioteca" class="btn-hero guest-allow" onclick="apriBiblioteca()">📚 BIBLIOTECA</button>
                 <button id="btn-caduti" class="btn-hero guest-allow" onclick="toggleCimitero()">🪦 CADUTI</button>
+                <button id="btn-magazzino" class="btn-hero guest-allow" onclick="openMagazzino()">📦 MAGAZZINO</button>
+                <button id="btn-master-panel" class="btn-hero master-only hidden" onclick="apriPannelloMaster()">👑 MASTER</button>
             </div>
             <div id="party-container"></div>
         </main>
@@ -182,7 +174,7 @@
             <h2 style="color:#ff0000; letter-spacing: 2px; margin-bottom:15px;">POSTAZIONE MEDICA</h2>
             <div id="medica-content" style="text-align:left;"></div>
             <div class="modal-footer">
-                <button class="btn-big btn-cancel" onclick="document.getElementById('modal-medica').style.display='none'">CHIUDI</button>
+                <button class="btn-big btn-cancel" onclick="chiudiModal('modal-medica')">CHIUDI</button>
             </div>
         </div>
     </div>
@@ -192,7 +184,7 @@
             <h2 id="risorse-titolo" style="color:#ff0000; letter-spacing: 2px; margin-bottom:15px;"></h2>
             <div id="risorse-content" style="text-align:left; max-height:420px; overflow-y:auto; background:#111; padding:10px; border:1px solid #333;"></div>
             <div class="modal-footer">
-                <button class="btn-big btn-cancel" onclick="document.getElementById('modal-risorse').style.display='none'">CHIUDI</button>
+                <button class="btn-big btn-cancel" onclick="chiudiModal('modal-risorse')">CHIUDI</button>
             </div>
         </div>
     </div>
@@ -202,7 +194,7 @@
             <h2 style="color:#ff0000; letter-spacing: 2px; margin-bottom:15px;">CUCINA</h2>
             <div id="cucina-content" style="text-align:left; max-height:420px; overflow-y:auto; background:#111; padding:10px; border:1px solid #333;"></div>
             <div class="modal-footer">
-                <button class="btn-big btn-cancel" onclick="document.getElementById('modal-cucina').style.display='none'">CHIUDI</button>
+                <button class="btn-big btn-cancel" onclick="chiudiModal('modal-cucina')">CHIUDI</button>
             </div>
         </div>
     </div>
@@ -212,7 +204,7 @@
             <h2 style="color:#ff0000; letter-spacing: 2px; margin-bottom:15px;">BIBLIOTECA</h2>
             <div id="biblioteca-content" style="text-align:left; max-height:400px; overflow-y:auto; background:#111; padding:10px; border:1px solid #333;"></div>
             <div class="modal-footer">
-                <button class="btn-big btn-cancel" onclick="document.getElementById('modal-biblioteca').style.display='none'">CHIUDI</button>
+                <button class="btn-big btn-cancel" onclick="chiudiModal('modal-biblioteca')">CHIUDI</button>
             </div>
         </div>
     </div>
@@ -222,7 +214,7 @@
             <h2 style="color:#ff0000; letter-spacing: 2px; margin-bottom:15px;">STUDIO</h2>
             <div id="studio-content" style="text-align:left; max-height:420px; overflow-y:auto; background:#111; padding:10px; border:1px solid #333;"></div>
             <div class="modal-footer">
-                <button class="btn-big btn-cancel" onclick="document.getElementById('modal-studio').style.display='none'">CHIUDI</button>
+                <button class="btn-big btn-cancel" onclick="chiudiModal('modal-studio')">CHIUDI</button>
             </div>
         </div>
     </div>
@@ -232,7 +224,7 @@
             <h2 style="color:#ff0000; letter-spacing: 2px; margin-bottom:15px;">📈 REGISTA ATTACCO</h2>
             <div id="regista-attacco-content" style="text-align:left; max-height:400px; overflow-y:auto; background:#111; padding:10px; border:1px solid #333;"></div>
             <div class="modal-footer">
-                <button class="btn-big btn-cancel" onclick="document.getElementById('modal-regista-attacco').style.display='none'">CHIUDI</button>
+                <button class="btn-big btn-cancel" onclick="chiudiModal('modal-regista-attacco')">CHIUDI</button>
             </div>
         </div>
     </div>
@@ -242,7 +234,7 @@
             <h2 style="color:#ff0000; letter-spacing: 2px; margin-bottom:15px;">🏋️ ALLENAMENTO</h2>
             <div id="allenamento-content" style="text-align:left; max-height:400px; overflow-y:auto; background:#111; padding:10px; border:1px solid #333;"></div>
             <div class="modal-footer">
-                <button class="btn-big btn-cancel" onclick="document.getElementById('modal-allenamento').style.display='none'">CHIUDI</button>
+                <button class="btn-big btn-cancel" onclick="chiudiModal('modal-allenamento')">CHIUDI</button>
             </div>
         </div>
     </div>
@@ -252,7 +244,7 @@
             <h2 style="color:#ff0000; letter-spacing: 2px; margin-bottom:15px;">COMPETENZE E PERK</h2>
             <div id="perk-viewer-content" style="text-align:left; max-height:450px; overflow-y:auto; background:#111; padding:10px; border:1px solid #333;"></div>
             <div class="modal-footer">
-                <button class="btn-big btn-cancel" onclick="document.getElementById('modal-perk-viewer').style.display='none'">CHIUDI</button>
+                <button class="btn-big btn-cancel" onclick="chiudiModal('modal-perk-viewer')">CHIUDI</button>
             </div>
         </div>
     </div>
@@ -262,7 +254,7 @@
             <h2 style="color:#ff0000; letter-spacing: 2px; margin-bottom:15px;">⚗️ ALCHEMIA</h2>
             <div id="alchimia-content" style="text-align:left; max-height:450px; overflow-y:auto; background:#111; padding:10px; border:1px solid #333;"></div>
             <div class="modal-footer">
-                <button class="btn-big btn-cancel" onclick="document.getElementById('modal-alchimia').style.display='none'">CHIUDI</button>
+                <button class="btn-big btn-cancel" onclick="chiudiModal('modal-alchimia')">CHIUDI</button>
             </div>
         </div>
     </div>
@@ -272,39 +264,30 @@
             <h2 style="color:#ff0000; letter-spacing: 2px; margin-bottom:15px;">🤝 AIUTA QUALCUNO</h2>
             <div id="aiuto-content" style="text-align:left; max-height:450px; overflow-y:auto; background:#111; padding:10px; border:1px solid #333;"></div>
             <div class="modal-footer">
-                <button class="btn-big btn-cancel" onclick="document.getElementById('modal-aiuto').style.display='none'">CHIUDI</button>
+                <button class="btn-big btn-cancel" onclick="chiudiModal('modal-aiuto')">CHIUDI</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-master-panel" class="modal">
+        <div class="modal-content" style="width: 80%; max-width: 800px;">
+            <h2 style="color:#f1c40f; letter-spacing: 2px; margin-bottom:15px;">👑 PANNELLO MASTER</h2>
+            <div id="master-panel-content" style="text-align:left; max-height:500px; overflow-y:auto; background:#111; padding:15px; border:1px solid #f1c40f;">
+                <!-- Caricato via JS in ui.js -->
+            </div>
+            <div class="modal-footer">
+                <button class="btn-big btn-cancel" onclick="chiudiModal('modal-master-panel')">CHIUDI</button>
             </div>
         </div>
     </div>
     </div>
     <script>
         (function(){
-            const defaultMagazzino = {
-                cibo: 0,
-                acqua: 0,
-                conserve: 0,
-                ciboaviarto: 0,
-                piattiDeliziosi: 0,
-                materialiAlchemici: 0,
-                ingranaggi: 0,
-                materialiMedici: { base: 0, avanzati: 0, critici: 0 },
-                postazioneAlchemica: false,
-                compounds: [],
-                composti: [],
-                congegniFissi: [],
-                congegniConteggio: {},
-                oggettiMagici: { comuni: 0, nonComuni: 0, rari: 0, superRari: 0 },
-                munizioni: { gomma: 0, reale: 0 },
-                libri: [],
-                armiTrovate: [],
-            };
-            window.magazzino = window.magazzino || defaultMagazzino;
-        })();
-        (function(){
             const path = location.pathname || '';
             const base = path.includes('/client/') || path === '/client' ? '/client' : '';
             const scripts = [
                 // 1. Core e Moduli di Logica Base
+                { src: base + '/src/state.js', module: true },
                 { src: base + '/src/logic/logic.js', module: true },
                 { src: base + '/src/database/perks.js' },
                 { src: base + '/src/database/ricette.js' },
@@ -334,4 +317,5 @@
             }
         })();
     </script>
+    </body>
 </html>
