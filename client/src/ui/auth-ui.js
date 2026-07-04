@@ -27,11 +27,13 @@ function updateBackendStatus(online) {
 
 async function checkBackend() {
     try {
-        // Tenta un ping rapido all'API per vedere se risponde
-        const url = typeof apiUrl === 'function' ? apiUrl('/api/auth/login') : 'http://localhost:4000/api/auth/login';
-        const res = await fetch(url, { method: 'GET' }).catch(() => ({ ok: false }));
-        return true; 
+        const url = typeof apiUrl === 'function' ? apiUrl('/api/ping') : 'http://localhost:4000/api/ping';
+        const res = await fetch(url, { method: 'GET' });
+        const online = res.ok;
+        updateBackendStatus(online);
+        return online;
     } catch (e) {
+        updateBackendStatus(false);
         return false;
     }
 }
@@ -163,7 +165,7 @@ function showAuthMessage(msg) {
 
 window.checkBackend = checkBackend;
 window.getCurrentUser = getCurrentUser;
-window.cimitero = cimitero || [];
-window.party = party;
-window.inSpedizione = inSpedizione;
+window.cimitero = window.cimitero || [];
+window.party = window.party || [];
+window.inSpedizione = window.inSpedizione || false;
 window.apiUrl = apiUrl;

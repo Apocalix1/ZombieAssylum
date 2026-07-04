@@ -22,6 +22,23 @@ function sanitizeUser(user) {
   return sanitized;
 }
 
+function hashPassword(password) {
+  const salt = crypto.randomBytes(16).toString('hex');
+  const derived = crypto.scryptSync(password, salt, 64).toString('hex');
+  return `scrypt$${salt}$${derived}`;
+}
+
+function verifyPassword(storedPassword, password) {
+  if (!storedPassword || !password) return false;
+  if (storedPassword.startsWith('scrypt$')) {
+    const [, salt, derived] = storedPassword.split('$');
+    if (!salt || !derived) return false;
+    const hash = crypto.scryptSync(password, salt, 64).toString('hex');
+    return crypto.timingSafeEqual(Buffer.from(hash, 'hex'), Buffer.from(derived, 'hex'));
+  }
+  return storedPassword === password;
+}
+
 function stringifyCharacterData(value) {
   if (typeof value === 'string') {
     try {
@@ -125,7 +142,7 @@ app.post('/api/auth/register', async (req, res) => {
     const result = await db.run(
       'INSERT INTO utenti (username, password, role) VALUES (?, ?, ?)',
       username,
-      password,
+      hashPassword(password),
       'giocatore',
     );
 
@@ -149,8 +166,12 @@ app.post('/api/auth/login', async (req, res) => {
   try {
     const db = await dbPromise;
     const user = await db.get('SELECT id, username, role, password FROM utenti WHERE username = ?', username);
-    if (!user || user.password !== password) {
+    if (!user || !verifyPassword(user.password, password)) {
       return res.status(401).json({ error: 'credenziali non valide' });
+    }
+
+    if (!user.password.startsWith('scrypt$')) {
+      await db.run('UPDATE utenti SET password = ? WHERE id = ?', hashPassword(password), user.id);
     }
 
     const token = await createSession(db, user.id);
@@ -269,17 +290,14 @@ app.post('/api/characters', authenticateUser, async (req, res) => {
 app.get('/api/proposals', authenticateUser, requireMaster, async (req, res) => {
   try {
     const db = await dbPromise;
-    const proposals = await db.all('SELECT * FROM proposte WHERE stato = ? ORDER BY created_at DESC', 'in_attesa');
-    res.json({ proposals });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-app.get('/api/proposte', authenticateUser, requireMaster, async (req, res) => {
-  try {
-    const db = await dbPromise;
-    const proposals = await db.all('SELECT * FROM proposte WHERE stato = ? ORDER BY created_at DESC', 'in_attesa');
+    const proposals = await db.all(
+      `SELECT p.*, u.username AS user_name
+       FROM proposte p
+       JOIN utenti u ON p.user_id = u.id
+       WHERE p.stato = ?
+       ORDER BY p.created_at DESC`,
+      'in_attesa'
+    );
     res.json({ proposals });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -312,50 +330,7 @@ app.post('/api/proposals', authenticateUser, async (req, res) => {
   }
 });
 
-app.post('/api/proposte', authenticateUser, async (req, res) => {
-  const { nome, descrizione, characterData } = req.body;
-  if (!nome) {
-    return res.status(400).json({ error: 'nome del personaggio richiesto' });
-  }
 
-  try {
-    const db = await dbPromise;
-    const desc = descrizione || `Proposta personaggio: ${nome}`;
-    const characterPayload = stringifyCharacterData(characterData || {});
-    const result = await db.run(
-      'INSERT INTO proposte (user_id, nome, descrizione, stato, character_data) VALUES (?, ?, ?, ?, ?)',
-      req.user.id,
-      nome,
-      desc,
-      'in_attesa',
-      characterPayload,
-    );
-    const proposal = await db.get('SELECT * FROM proposte WHERE id = ?', result.lastID);
-    res.json({ proposal });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-app.post('/api/proposte/approva', authenticateUser, requireMaster, async (req, res) => {
-  const { id, nome, userId } = req.body;
-  try {
-    const db = await dbPromise;
-    let proposal;
-    if (id) {
-      proposal = await db.get('SELECT * FROM proposte WHERE id = ?', id);
-    } else if (nome && userId) {
-      proposal = await db.get('SELECT * FROM proposte WHERE nome = ? AND user_id = ? AND stato = ?', nome, userId, 'in_attesa');
-    }
-    if (!proposal) {
-      return res.status(404).json({ error: 'Proposta non trovata' });
-    }
-    const updatedProposal = await handleProposalDecision(db, proposal, 'approved');
-    res.json({ proposal: updatedProposal });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
 
 // 👑 DECISIONE DEL MASTER (APPROVA/RIFIUTA) CON INIEZIONE AUTOMATICA NEL PARTY
 app.post('/api/proposals/:id/decision', authenticateUser, requireMaster, async (req, res) => {
@@ -380,7 +355,7 @@ app.post('/api/proposals/:id/decision', authenticateUser, requireMaster, async (
 });
 
 app.post('/api/master/documents', authenticateUser, requireMaster, async (req, res) => {
-  const { titolo, contenuto } = req.body;
+  const { titolo, contenuto, personaggio_id } = req.body;
   if (!titolo || !contenuto) {
     return res.status(400).json({ error: 'titolo e contenuto richiesti' });
   }
@@ -388,8 +363,9 @@ app.post('/api/master/documents', authenticateUser, requireMaster, async (req, r
   try {
     const db = await dbPromise;
     const result = await db.run(
-      'INSERT INTO documenti (master_id, titolo, contenuto) VALUES (?, ?, ?)',
+      'INSERT INTO documenti (master_id, personaggio_id, titolo, contenuto) VALUES (?, ?, ?, ?)',
       req.user.id,
+      personaggio_id || null,
       titolo,
       contenuto,
     );
@@ -401,18 +377,32 @@ app.post('/api/master/documents', authenticateUser, requireMaster, async (req, r
 });
 
 app.post('/api/master/apply-state', authenticateUser, requireMaster, async (req, res) => {
-  const { personaggioId, tipo, valore, fonte = 'master' } = req.body;
-  if (!personaggioId || !tipo || typeof valore !== 'number') {
-    return res.status(400).json({ error: 'personaggioId, tipo e valore numerico richiesti' });
+  const {
+    personaggio_id,
+    personaggioId,
+    nome,
+    tipo,
+    descrizione = '',
+    durata_minuti = 0,
+    valore = 0,
+    fonte = 'master'
+  } = req.body;
+
+  const targetId = personaggio_id || personaggioId;
+  if (!targetId || !tipo) {
+    return res.status(400).json({ error: 'personaggio_id e tipo richiesti' });
   }
 
   try {
     const db = await dbPromise;
     await db.run(
-      'INSERT INTO stati_alterati (personaggio_id, tipo, valore, fonte) VALUES (?, ?, ?, ?)',
-      personaggioId,
+      'INSERT INTO stati_alterati (personaggio_id, nome, tipo, descrizione, durata_minuti, valore, fonte) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      targetId,
+      nome || '',
       tipo,
-      valore,
+      descrizione,
+      durata_minuti,
+      typeof valore === 'number' ? valore : 0,
       fonte,
     );
     res.json({ success: true });
@@ -421,47 +411,7 @@ app.post('/api/master/apply-state', authenticateUser, requireMaster, async (req,
   }
 });
 
-app.post('/api/master/crea-documento', authenticateUser, requireMaster, async (req, res) => {
-  const { titolo, contenuto } = req.body;
-  if (!titolo || !contenuto) {
-    return res.status(400).json({ error: 'titolo e contenuto richiesti' });
-  }
 
-  try {
-    const db = await dbPromise;
-    const result = await db.run(
-      'INSERT INTO documenti (master_id, titolo, contenuto) VALUES (?, ?, ?)',
-      req.user.id,
-      titolo,
-      contenuto,
-    );
-    const document = await db.get('SELECT * FROM documenti WHERE id = ?', result.lastID);
-    res.json({ document });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-app.post('/api/master/applica-stato', authenticateUser, requireMaster, async (req, res) => {
-  const { personaggioId, tipo, valore, fonte = 'master' } = req.body;
-  if (!personaggioId || !tipo || typeof valore !== 'number') {
-    return res.status(400).json({ error: 'personaggioId, tipo e valore numerico richiesti' });
-  }
-
-  try {
-    const db = await dbPromise;
-    await db.run(
-      'INSERT INTO stati_alterati (personaggio_id, tipo, valore, fonte) VALUES (?, ?, ?, ?)',
-      personaggioId,
-      tipo,
-      valore,
-      fonte,
-    );
-    res.json({ success: true });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
 
 app.get('/api/master/count-proposals', authenticateUser, requireMaster, async (req, res) => {
   try {

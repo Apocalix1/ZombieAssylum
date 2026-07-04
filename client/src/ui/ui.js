@@ -1,4 +1,4 @@
-import { party, Personaggio, salvaPersonaggioCloud, avviaAscoltoDatiCloud, fetchUserCharacters, apiUrl } from "../logic/logic.js";
+import { party, Personaggio, salvaPersonaggioCloud, avviaAscoltoDatiCloud, fetchUserCharacters, apiUrl, buildAuthHeaders, refreshPartyListeners } from "../logic/logic.js";
 
 function showLobbyScreen(user) {
     window.guestMode = false;
@@ -37,6 +37,7 @@ function saveCharacterForUser(nome) {
     if (!arr.includes(nome)) arr.push(nome);
     localStorage.setItem(key, JSON.stringify(arr));
 }
+window.saveCharacterForUser = saveCharacterForUser;
 
 async function loadCharacterNamesForUser() {
     const user = getCurrentUser();
@@ -80,12 +81,12 @@ async function renderCharacterList() {
             try {
                 const localCharacter = window.caricaDatiDaLocalStorage ? window.caricaDatiDaLocalStorage(nome) : null;
                 const characterData = localCharacter || { nome };
-                const response = await fetch(apiUrl('/api/proposte'), {
+                const response = await fetch(apiUrl('/api/proposals'), {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: buildAuthHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify({
                         nome,
-                        descrizione: `Proposta personaggio: ${nome}`
+                        descrizione: `Proposta personaggio: ${nome}`,
                         characterData,
                     })
                 });
@@ -154,7 +155,7 @@ async function fetchCharacterDataFromServer(nome, userId) {
     if (!navigator.onLine || !userId) return null;
     try {
         const response = await fetch(apiUrl(`/api/personaggi/${encodeURIComponent(nome)}`), {
-            headers: window.buildAuthHeaders ? window.buildAuthHeaders() : {}
+            headers: buildAuthHeaders()
         });
         if (!response.ok) return null;
         const data = await response.json();
@@ -221,6 +222,7 @@ export function inizializzaBottoniUI() {
         }
         try { saveCharacterForUser && saveCharacterForUser(nuovoEroe.nome); } catch (e) {}
         document.getElementById("modal-creazione").style.display = "none";
+        refreshPartyListeners && refreshPartyListeners();
         aggiornaInterfaccia();
         renderCharacterList && renderCharacterList();
     });
@@ -268,6 +270,9 @@ function initUI() {
     showLandingScreen();
     if (typeof avviaAscoltoDatiCloud === 'function') {
         avviaAscoltoDatiCloud();
+    }
+    if (typeof refreshPartyListeners === 'function') {
+        refreshPartyListeners();
     }
     // Controllo backend e aggiorno badge; ripeto ogni 10s
     checkBackend();
@@ -335,7 +340,7 @@ function mostraCongegniBase() {
 }
 
 let selectedLobbyCharacter = null;
-window.magazzino = window.magazzino || {};
+window.magazzino = magazzino;
 window.cimitero = cimitero;
 window.oreTotali = oreTotali;
 window.apiUrl = apiUrl;
@@ -348,6 +353,21 @@ window.hasPerk = function hasPerk(personaggio, perk) {
     }
     return false;
 };
+
+let lastPartyAutoSave = 0;
+async function autoSaveParty() {
+    const now = Date.now();
+    if (now - lastPartyAutoSave < 10000) return;
+    lastPartyAutoSave = now;
+    if (!navigator.onLine || !party.length) return;
+    for (const personaggio of party) {
+        try {
+            await salvaPersonaggioCloud(personaggio);
+        } catch (err) {
+            console.warn('Auto-save fallito per', personaggio.nome, err?.message || err);
+        }
+    }
+}
 
 function rollDiceNotation(notation) {
     const match = notation.match(/(\d+)d(\d+)/);
@@ -668,6 +688,7 @@ window.aggiornaInterfaccia = function aggiornaInterfaccia() {
         container.appendChild(card);
     });
     renderCimitero();
+    autoSaveParty();
 }
 
 // --- LOGICA DELLE AZIONI (Thread e Code) ---
@@ -1778,20 +1799,6 @@ function apriScheda(idx) {
 
 function chiudiScheda() { document.getElementById('modal-scheda').style.display = 'none'; }
 
-function renderParty() {
-    const container = document.getElementById('party-container');
-    container.innerHTML = party.map((p, idx) => `
-        <div class="card-personaggio">
-            <h3>${p.nome}</h3>
-            <p>Fatic. ${p.faticaBase}</p>
-            <div class="stat-bar"><div class="bar-fill" style="width: ${p.fame}%"></div></div>
-            <div class="stat-bar"><div class="bar-fill" style="width: ${p.sete}%"></div></div>
-            <div class="stat-bar"><div class="bar-fill" style="width: ${p.sonno}%"></div></div>
-            <button class="guest-allow" onclick="apriScheda(${idx})">DETTAGLI</button>
-        </div>
-    `).join('');
-}
-
 async function renderProposteMaster() {
     const currentUser = getCurrentUser();
     if (!currentUser || currentUser.username !== 'Apocalix1') return;
@@ -1806,7 +1813,9 @@ async function renderProposteMaster() {
     }
 
     try {
-        const response = await fetch(apiUrl('/api/proposals'));
+        const response = await fetch(apiUrl('/api/proposals'), {
+            headers: buildAuthHeaders()
+        });
         const data = await response.json();
         const proposte = Array.isArray(data.proposals) ? data.proposals : [];
 
@@ -1840,7 +1849,7 @@ async function approvaPersonaggio(id, nome) {
     try {
         const response = await fetch(apiUrl(`/api/proposals/${id}/decision`), {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: buildAuthHeaders({ 'Content-Type': 'application/json' }),
             body: JSON.stringify({ decision: 'approved' })
         });
         if (response.ok) {
@@ -1860,7 +1869,7 @@ async function rifiutaPersonaggio(id) {
     try {
         const response = await fetch(apiUrl(`/api/proposals/${id}/decision`), {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: buildAuthHeaders({ 'Content-Type': 'application/json' }),
             body: JSON.stringify({ decision: 'rejected' })
         });
         if (response.ok) {

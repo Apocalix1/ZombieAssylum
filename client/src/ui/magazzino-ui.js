@@ -1,40 +1,41 @@
-let magazzino = {
+const magazzino = window.magazzino || {
     cibo: 20,
     acqua: 20,
     materialiAlchemici: 5,
     ingranaggi: 10,
     conserve: 0,
     piattiDeliziosi: 0,
-    ciboaviarto:0,
+    ciboaviarto: 0,
     materialiMedici: {
         base: 2,
         avanzati: 1,
         critici: 0
     },
-    oggettiMagici: {  
+    oggettiMagici: {
         comuni: 0,
         nonComuni: 0,
         rari: 0,
         superRari: 0
     },
-    munizioni : {
+    munizioni: {
         proiettili: 0,
         quadrelli: 0,
         frecce: 0,
-        gomma_pistola: 0,  // Rappresenta le *ore* di usura disponibili
+        gomma_pistola: 0,
         gomma_balestra: 0,
         gomma_arco: 0
     },
     postazioneAlchemica: false,
     compounds: [],
     libri: [],
-    congengnifissi: [],
-    congegniConteggio : {
-    'Orologio / Timer': 0,
-    'Cassa Amplificata': 0,
-    'Innesco': 0
-}
+    congegniFissi: [],
+    congegniConteggio: {
+        'Orologio / Timer': 0,
+        'Cassa Amplificata': 0,
+        'Innesco': 0
+    }
 };
+window.magazzino = magazzino;
 
 const MAPPA_MUNIZIONI = {
     'Pistola':  { reale: 'proiettili', gomma: 'gomma_pistola' },
@@ -89,7 +90,7 @@ function renderMagazzinoModal() {
     `).join('');
 }
 
-function takeFromMagazzino(key) {
+async function takeFromMagazzino(key) {
     const target = document.getElementById('magazzino-target')?.value;
     if (!target) return alert('Seleziona il destinatario');
     // find item and decrement
@@ -103,6 +104,23 @@ function takeFromMagazzino(key) {
     else if (key === 'medici_base' && magazzino.materialiMedici.base > 0) { magazzino.materialiMedici.base--; taken = true; }
     else if (key === 'medici_avanzati' && magazzino.materialiMedici.avanzati > 0) { magazzino.materialiMedici.avanzati--; taken = true; }
     if (!taken) return alert('Articolo non disponibile.');
+
+    try {
+        if (typeof window.updateMagazzinoFields === 'function') {
+            const fields = {};
+            if (key === 'cibo') fields.cibo = (magazzino.cibo || 0);
+            else if (key === 'acqua') fields.acqua = (magazzino.acqua || 0);
+            else if (key === 'conserve') fields.conserve = (magazzino.conserve || 0);
+            else if (key === 'piattiDeliziosi') fields.piattiDeliziosi = (magazzino.piattiDeliziosi || 0);
+            else if (key === 'materialiAlchemici') fields.materialiAlchemici = (magazzino.materialiAlchemici || 0);
+            else if (key === 'ingranaggi') fields.ingranaggi = (magazzino.ingranaggi || 0);
+            else if (key === 'medici_base') fields.materialiMedici = { ...(magazzino.materialiMedici || {}), base: (magazzino.materialiMedici?.base || 0) };
+            else if (key === 'medici_avanzati') fields.materialiMedici = { ...(magazzino.materialiMedici || {}), avanzati: (magazzino.materialiMedici?.avanzati || 0) };
+            if (Object.keys(fields).length) await window.updateMagazzinoFields(fields);
+        }
+    } catch (error) {
+        console.warn('Sync magazzino fallita:', error?.message || error);
+    }
 
     // load character data from localStorage (or party)
     let pObj = null;
@@ -214,21 +232,29 @@ function applicaPerkArmato(p) {
     }
 }
 
-function consumaMunizioneAttacco(p, tipoArma) {
+async function consumaMunizioneAttacco(p, tipoArma) {
     const mappa = MAPPA_MUNIZIONI[tipoArma];
     
-    // Se non è un'arma a distanza, nessun consumo necessario
-    if (!mappa) return true; 
+    if (!mappa) return true;
 
-    if (magazzino.munizioni[mappa.reale] > 0) {
+    if ((magazzino.munizioni?.[mappa.reale] || 0) > 0) {
         magazzino.munizioni[mappa.reale]--;
+        if (typeof window.updateMagazzinoFields === 'function') {
+            try {
+                await window.updateMagazzinoFields({
+                    [`munizioni.${mappa.reale}`]: magazzino.munizioni[mappa.reale]
+                });
+            } catch (error) {
+                console.warn('Errore aggiornamento munizioni Firestore:', error?.message || error);
+            }
+        }
         if (typeof mostraNotificaInAlto === 'function') {
             mostraNotificaInAlto(`${p.nome} spara! ${mappa.reale} rimanenti: ${magazzino.munizioni[mappa.reale]}`, 'info');
         }
-        return true; // Colpo effettuato
+        return true;
     } else {
         alert(`❌ ${p.nome} non ha abbastanza ${mappa.reale} per usare: ${tipoArma}!`);
-        return false; // Colpo fallito
+        return false;
     }
 }
 

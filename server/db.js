@@ -87,17 +87,22 @@ export async function openDatabase() {
     CREATE TABLE IF NOT EXISTS documenti (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       master_id INTEGER NOT NULL,
+      personaggio_id INTEGER,
       titolo TEXT NOT NULL,
       contenuto TEXT NOT NULL,
       stato TEXT NOT NULL DEFAULT 'aperto',
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY(master_id) REFERENCES utenti(id) ON DELETE CASCADE
+      FOREIGN KEY(master_id) REFERENCES utenti(id) ON DELETE CASCADE,
+      FOREIGN KEY(personaggio_id) REFERENCES personaggi(id) ON DELETE SET NULL
     );
 
     CREATE TABLE IF NOT EXISTS stati_alterati (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       personaggio_id INTEGER NOT NULL,
+      nome TEXT NOT NULL DEFAULT '',
       tipo TEXT NOT NULL,
+      descrizione TEXT NOT NULL DEFAULT '',
+      durata_minuti INTEGER NOT NULL DEFAULT 0,
       valore INTEGER NOT NULL DEFAULT 0,
       fonte TEXT NOT NULL DEFAULT 'sistema',
       applicato_il TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -131,7 +136,23 @@ export async function openDatabase() {
   if (!proposalColumnNames.includes('character_data')) {
     await db.run("ALTER TABLE proposte ADD COLUMN character_data TEXT NOT NULL DEFAULT '{}'");
   }
+  const documentColumns = await db.all('PRAGMA table_info(documenti)');
+  const documentColumnNames = documentColumns.map(column => column.name);
+  if (!documentColumnNames.includes('personaggio_id')) {
+    await db.run('ALTER TABLE documenti ADD COLUMN personaggio_id INTEGER');
+  }
 
+  const stateColumns = await db.all('PRAGMA table_info(stati_alterati)');
+  const stateColumnNames = stateColumns.map(column => column.name);
+  if (!stateColumnNames.includes('nome')) {
+    await db.run('ALTER TABLE stati_alterati ADD COLUMN nome TEXT NOT NULL DEFAULT ""');
+  }
+  if (!stateColumnNames.includes('descrizione')) {
+    await db.run('ALTER TABLE stati_alterati ADD COLUMN descrizione TEXT NOT NULL DEFAULT ""');
+  }
+  if (!stateColumnNames.includes('durata_minuti')) {
+    await db.run('ALTER TABLE stati_alterati ADD COLUMN durata_minuti INTEGER NOT NULL DEFAULT 0');
+  }
   const sessionColumns = await db.all('PRAGMA table_info(sessioni)');
   const sessionColumnNames = sessionColumns.map(column => column.name);
   if (!sessionColumnNames.length) {

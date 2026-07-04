@@ -150,7 +150,16 @@ function confermaCreazione() {
     }
 
     party.push(tempP);
-    
+    if (typeof window.salvaPersonaggioCloud === 'function') {
+        try {
+            await window.salvaPersonaggioCloud(tempP);
+        } catch (err) {
+            console.warn('Errore salvataggio personaggio:', err?.message || err);
+        }
+    }
+    if (typeof window.saveCharacterForUser === 'function') {
+        window.saveCharacterForUser(tempP.nome);
+    }
     document.getElementById('modal-creazione').style.display = 'none';
     aggiornaInterfaccia();
 }
