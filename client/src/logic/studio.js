@@ -29,6 +29,12 @@ const BOOK_SUBJECT_TITLES = {
         'Come aura farmarmare come Flagello (corso non indirizzato ad essere effetivamente bravi)',
         'Come svillupare la propria tecnica speciale',
     ],
+    'Lingue':[
+        'Lingue di Teverat e come averle in bocca',
+        'Grammatica per bambini e Dragonidi',
+        'Hia hia ah, ye ye ye (Come tradurre ogni stupidone)',
+        'Perchè odiare queste lingue: Non hanno senso',
+    ],
     'Giochi di carte': [
         'Corso allenamento per battere tua nonna a carte 2/5',
         'Non è azzardo, è strategia da vero Baro',
@@ -39,7 +45,7 @@ const BOOK_SUBJECT_TITLES = {
         'Come nascondere ai tuoi la tua sessualità',
         'Manipolazione, 10 trucchi da Alpha',
         'Psicologia Oscura, i trucchi da sapere fin da bambino',
-        'Non serve pagare tutte le tasse'
+        'Come convincere chiunque a farti venderti l\'anima di qualcuno a metà prezzo-Nudar Chylligun'
     ],
     'Storia': [
         'Top 10 guerre (esclusa quelle delle città) (WacthmojoTeverat)',
@@ -78,7 +84,7 @@ const BOOK_SUBJECT_TITLES = {
         'Fiori e frutti coltivabili in giardino'
     ],
     'Manodopera': [
-        'Non chiamare un esperto! E\' una truffa',
+        'Picchiare tutto non è mai la soluzione',
         'Tubature, Finestre e tutto quello che ti può servire',
         'Quale strumento usare per cosa',
         'Diventa un uomo di mano'
@@ -98,7 +104,7 @@ const BOOK_SUBJECT_TITLES = {
     'Medicina': [
         'Ti smonto e non sto scherzando',
         'Non si dice ritardato',
-        'E\' morto con o senza capppello?',
+        'E\' morto con o senza cappello?',
         'Pene e vagina, come scegliere',
         'Primo succhiotto',
         'Infermieristica',
@@ -340,7 +346,7 @@ function renderStudioModal() {
     let html = `<div style="margin-bottom:14px; font-size:0.9rem; color:#ddd;">
         <strong>Studente:</strong> ${selezionato.nome}<br>
         <strong>Medicina:</strong> Livello ${selezionato.livelloMedicina} - PM ${selezionato.pmMedicina}/${getStudyPMCap(selezionato)}<br>
-        <strong>Ore studiosi oggi:</strong> ${selezionato.oreStudioGiornaliere}/8 ${selezionato.studyOverload ? '(<span style="color:#e74c3c">Sovraccarico</span>)' : ''}
+      <strong>Ore studiosi oggi:</strong> ${selezionato.oreStudioGiornaliere}/${getSogliaStudioGiornaliera(selezionato)} ${selezionato.studyOverload ? '(<span style="color:#e74c3c">Sovraccarico</span>)' : ''}
     </div>`;
     html += '<div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:12px;">';
     party.forEach((p, idx) => {
@@ -483,7 +489,7 @@ function completaStudioBookAction(p, action) {
 
     // Ore di studio giornaliere (usiamo effectiveHours originali)
     p.oreStudioGiornaliere += effectiveHours;
-    p.studyOverload = p.oreStudioGiornaliere > 8;
+    p.studyOverload = p.oreStudioGiornaliere > p.getSogliaStudioGiornaliero(); // FIX: soglia dinamica
 
     if (book.subject === 'Medicina') {
         const pmGained = awardStudyPM(p, effectiveHours);

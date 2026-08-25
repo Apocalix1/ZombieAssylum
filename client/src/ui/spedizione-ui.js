@@ -1,4 +1,8 @@
 // spedizione-ui.js
+import { party } from '../state.js';
+import { magazzino, setMagazzino } from '../state.js'; // oppure importa da dove viene esportato
+import { apiUrl, buildAuthHeaders, salvaPersonaggioCloud } from '../logic/logic.js';
+import { mostraNotificaInAlto } from '../ui/ui.js';
 
 function chiudiSpedizione() {
     const panel = document.getElementById('side-spedizione');
@@ -530,7 +534,7 @@ function esplora(idx) {
     if (typeof window.puoIniziareAzione === 'function' && !window.puoIniziareAzione(leader, 'esplora')) return;
     if (typeof leader.initInventarioBase === 'function') leader.initInventarioBase();
 
-    if (leader.pesoAttuale >= leader.capacitaMax) {
+    if (leader.pesoAttuale > leader.capacitaMax) {
         if (!confirm(`⚠️ Attenzione! ${leader.nome} ha lo zaino già pieno. Non potrà riportare alcun oggetto. Partire lo stesso?`)) return;
     }
 
@@ -733,159 +737,176 @@ function lootPiattiDeliziosi(tiro) {
 
 function terminaEsplorazione(p) {
     if (!p) return;
+    try {
+        const act = p.azioneCorrente || {};
+        let bonus = act.pericoloBonus !== undefined ? act.pericoloBonus : getExplorationBonus(p);
+        const mult = act.pericoloMultiplo || 1;
+        const diffLevel = act.livelloPericolo || 0;
+        const numCompagni = act.numCompagni || 0;
 
-    const act = p.azioneCorrente || {};
-    let bonus = act.pericoloBonus !== undefined ? act.pericoloBonus : getExplorationBonus(p);
-    const mult = act.pericoloMultiplo || 1;
-    const diffLevel = act.livelloPericolo || 0;
-    const numCompagni = act.numCompagni || 0;
-
-    if (numCompagni === 0 && p.hasPerk && p.hasPerk('Solitario')) {
-        bonus += 1;
-    }
-
-    const pericoli = calcolaEventiPericolo(p, mult, numCompagni);
-    const skill = p.getSkillModifierForCheck ? p.getSkillModifierForCheck('Sopravvivenza') : { modifier: 0, advantage: false, disadvantage: false };
-
-    // Tiri standard base
-    const mediciTiro = Math.min(20, rollD20WithAdv(skill.advantage, skill.disadvantage) + bonus);
-    const ingranaggiTiro = Math.min(20, rollD20WithAdv(skill.advantage, skill.disadvantage) + bonus);
-    const alchemiciTiro = Math.min(20, rollD20WithAdv(skill.advantage, skill.disadvantage) + bonus);
-    const ciboTiro = Math.min(20, rollD20WithAdv(skill.advantage, skill.disadvantage) + bonus);
-    const acquaTiro = Math.min(20, rollD20WithAdv(skill.advantage, skill.disadvantage) + bonus) * 1.25;
-    const booksTiro = Math.min(20, (typeof rollD20 === 'function' ? rollD20() : Math.floor(Math.random()*20)+1) + bonus);
-
-    // Generazione base
-    let medici = lootMedici(mediciTiro);
-    let ingranaggi = lootIngranaggi(ingranaggiTiro);
-    let alchemici = lootAlchemici(alchemiciTiro);
-    let cibo = lootCiboAcqua(ciboTiro);
-    let acqua = lootCiboAcqua(acquaTiro);
-    let deliziosi = lootPiattiDeliziosi(ciboTiro);
-    let booksFound = lootBooks(booksTiro);
-
-    // Generazione oggetti speciali
-    let oggMagiciTrovati = (typeof lootOggettiMagici === 'function') ? lootOggettiMagici(diffLevel) : { comuni: 0, nonComuni: 0, rari: 0, superRari: 0 };
-    let armiTrovate = rollArmiTrovate(diffLevel);
-
-    // --- APPLICAZIONE MALUS LOOT PERSO ---
-    if (pericoli.lootLost > 0) {
-        const ritieni = 1 - (pericoli.lootLost / 100);
-        medici.base = Math.floor(medici.base * ritieni);
-        medici.avanzati = Math.floor(medici.avanzati * ritieni);
-        medici.critici = Math.floor(medici.critici * ritieni);
-        ingranaggi = Math.floor(ingranaggi * ritieni);
-        alchemici = Math.floor(alchemici * ritieni);
-        cibo = Math.floor(cibo * ritieni);
-        acqua = Math.floor(acqua * ritieni);
-        deliziosi = Math.floor(deliziosi * ritieni);
-        booksFound = Math.floor(booksFound * ritieni);
-
-        armiTrovate = armiTrovate.filter(arma => {
-            if (arma.tipo === 'arma') {
-                return Math.random() > (pericoli.lootLost / 100);
-            } else {
-                arma.qta = Math.floor(arma.qta * ritieni);
-                return arma.qta > 0;
-            }
-        });
-    }
-
-    // --- APPLICAZIONE DANNI FISICI ---
-    if (pericoli.hpDamage > 0) p.puntiFeritaReali -= pericoli.hpDamage;
-    if (pericoli.fatigueStagies > 0 && typeof p.faticaBase !== 'undefined') p.faticaBase += pericoli.fatigueStagies;
-
-    // --- ASSEGNAZIONE MAGAZZINO ---
-    p.initInventarioBase();
-    p.inventario.alchemici = (p.inventario.alchemici || 0) + alchemici;
-    p.inventario.ingranaggi = (p.inventario.ingranaggi || 0) + ingranaggi;
-    p.inventario.medBase = (p.inventario.medBase || 0) + medici.base;
-    p.inventario.medAvanzati = (p.inventario.medAvanzati || 0) + medici.avanzati;
-    p.inventario.medCritici = (p.inventario.medCritici || 0) + medici.critici;
-    p.inventario.cibo = (p.inventario.cibo || 0) + cibo;
-    p.inventario.acqua = (p.inventario.acqua || 0) + acqua;
-    p.inventario.piattiDeliziosi = (p.inventario.piattiDeliziosi || 0) + deliziosi;
-    let nuovoZaino = rollZainoTrovato(diffLevel);
-    if (nuovoZaino) {
-        p.initInventarioBase();
-        if (!p.zainoEquipaggiato || nuovoZaino.bonus > p.zainoEquipaggiato.bonus) {
-            if (p.zainoEquipaggiato) p.inventario.zaini.push(p.zainoEquipaggiato);
-            p.zainoEquipaggiato = nuovoZaino;
-            mostraNotificaInAlto(`${p.nome} ha trovato e indossato: ${nuovoZaino.nome}!`, 'successo');
-        } else {
-            p.inventario.zaini.push(nuovoZaino);
-            mostraNotificaInAlto(`${p.nome} ha trovato uno zaino (${nuovoZaino.nome}) e lo porta con sé.`, 'successo');
+        if (numCompagni === 0 && p.hasPerk && p.hasPerk('Solitario')) {
+            bonus += 1;
         }
-    }
-    if (p.pesoAttuale > p.capacitaMax) {
-        apriSceltaEccedenza(party.indexOf(p));
-    }
 
-    // Oggetti magici e armi restano a gestione di gruppo/master (vanno diretti in magazzino)
-    magazzino.oggettiMagici.comuni += oggMagiciTrovati.comuni;
-    magazzino.oggettiMagici.nonComuni += oggMagiciTrovati.nonComuni;
-    magazzino.oggettiMagici.rari += oggMagiciTrovati.rari;
-    magazzino.oggettiMagici.superRari += oggMagiciTrovati.superRari;
+        const pericoli = calcolaEventiPericolo(p, mult, numCompagni);
+        const skill = p.getSkillModifierForCheck ? p.getSkillModifierForCheck('Sopravvivenza') : {
+            modifier: 0,
+            advantage: false,
+            disadvantage: false
+        };
 
-    if (!magazzino.armiTrovate) magazzino.armiTrovate = [];
-    let infoArmiStr = "";
-    if (armiTrovate.length > 0) {
-        armiTrovate.forEach(arma => {
-            magazzino.armiTrovate.push(arma);
-            infoArmiStr += `  - ${arma.nome} (x${arma.qta})\n`;
-        });
-    }
+        // Tiri standard base
+        const mediciTiro = Math.min(20, rollD20WithAdv(skill.advantage, skill.disadvantage) + bonus);
+        const ingranaggiTiro = Math.min(20, rollD20WithAdv(skill.advantage, skill.disadvantage) + bonus);
+        const alchemiciTiro = Math.min(20, rollD20WithAdv(skill.advantage, skill.disadvantage) + bonus);
+        const ciboTiro = Math.min(20, rollD20WithAdv(skill.advantage, skill.disadvantage) + bonus);
+        const acquaTiro = Math.min(20, rollD20WithAdv(skill.advantage, skill.disadvantage) + bonus) * 1.25;
+        const booksTiro = Math.min(20, (typeof rollD20 === 'function' ? rollD20() : Math.floor(Math.random() * 20) + 1) + bonus);
 
-    let infoMagica = "";
-    if (oggMagiciTrovati.comuni > 0)     infoMagica += `• Oggetti Magici Comuni: +${oggMagiciTrovati.comuni}\n`;
-    if (oggMagiciTrovati.nonComuni > 0)  infoMagica += `• Oggetti Magici Non Comuni: +${oggMagiciTrovati.nonComuni}\n`;
-    if (oggMagiciTrovati.rari > 0)       infoMagica += `• Oggetti Magici Rari: +${oggMagiciTrovati.rari}\n`;
-    if (oggMagiciTrovati.superRari > 0)  infoMagica += `• 🌟 Oggetti Magici SUPER RARI: +${oggMagiciTrovati.superRari}\n`;
+        // Generazione base
+        let medici = lootMedici(mediciTiro);
+        let ingranaggi = lootIngranaggi(ingranaggiTiro);
+        let alchemici = lootAlchemici(alchemiciTiro);
+        let cibo = lootCiboAcqua(ciboTiro);
+        let acqua = lootCiboAcqua(acquaTiro);
+        let deliziosi = lootPiattiDeliziosi(ciboTiro);
+        let booksFound = lootBooks(booksTiro);
 
-    let infoMalus = "";
-    if (pericoli.lootLost > 0) infoMalus += `⚠️ Bottino perso durante la via: -${pericoli.lootLost}%\n`;
-    if (pericoli.hpDamage > 0) infoMalus += `🩸 Ferite subite: -${pericoli.hpDamage} PF\n`;
-    if (pericoli.fatigueStagies > 0) infoMalus += `😓 Fatica aumentata: +${pericoli.fatigueStagies} stadi\n`;
+        // Generazione oggetti speciali
+        let oggMagiciTrovati = (typeof lootOggettiMagici === 'function') ? lootOggettiMagici(diffLevel) : {
+            comuni: 0,
+            nonComuni: 0,
+            rari: 0,
+            superRari: 0
+        };
+        let armiTrovate = rollArmiTrovate(diffLevel);
 
-    alert(`Esplorazione completata da ${p.nome}!\n\nRisultati:\n` +
-        `• Materiali alchemici: +${alchemici}\n` +
-        `• Ingranaggi: +${ingranaggi}\n` +
-        `• Medici: base +${medici.base}, avz +${medici.avanzati}, crit +${medici.critici}\n` +
-        `• Cibo: +${cibo}\n` +
-        `• Acqua: +${acqua}\n` +
-        `${deliziosi > 0 ? `• Piatti deliziosi: +${deliziosi}\n` : ''}` +
-        `• Libri: +${booksFound}\n` +
-        `${infoArmiStr ? `• ⚔️ Armi/Munizioni Trovate:\n${infoArmiStr}` : ''}` +
-        infoMagica + "\n" +
-        (infoMalus ? `\n--- EVENTI AVVERSI ---\n${infoMalus}` : "Nessun evento avverso!")
-    );
-    if (typeof window.salvaPersonaggioCloud === 'function') {
-        window.salvaPersonaggioCloud(p);
+        // --- APPLICAZIONE MALUS LOOT PERSO ---
+        if (pericoli.lootLost > 0) {
+            const ritieni = 1 - (pericoli.lootLost / 100);
+            medici.base = Math.floor(medici.base * ritieni);
+            medici.avanzati = Math.floor(medici.avanzati * ritieni);
+            medici.critici = Math.floor(medici.critici * ritieni);
+            ingranaggi = Math.floor(ingranaggi * ritieni);
+            alchemici = Math.floor(alchemici * ritieni);
+            cibo = Math.floor(cibo * ritieni);
+            acqua = Math.floor(acqua * ritieni);
+            deliziosi = Math.floor(deliziosi * ritieni);
+            booksFound = Math.floor(booksFound * ritieni);
+
+            armiTrovate = armiTrovate.filter(arma => {
+                if (arma.tipo === 'arma') {
+                    return Math.random() > (pericoli.lootLost / 100);
+                } else {
+                    arma.qta = Math.floor(arma.qta * ritieni);
+                    return arma.qta > 0;
+                }
+            });
+        }
+
+        // --- APPLICAZIONE DANNI FISICI ---
+        if (pericoli.hpDamage > 0) p.puntiFeritaReali -= pericoli.hpDamage;
+        if (pericoli.fatigueStagies > 0 && typeof p.faticaBase !== 'undefined') p.faticaBase += pericoli.fatigueStagies;
+
+        // --- ASSEGNAZIONE MAGAZZINO ---
+        p.initInventarioBase();
+        p.inventario.alchemici = (p.inventario.alchemici || 0) + alchemici;
+        p.inventario.ingranaggi = (p.inventario.ingranaggi || 0) + ingranaggi;
+        p.inventario.medBase = (p.inventario.medBase || 0) + medici.base;
+        p.inventario.medAvanzati = (p.inventario.medAvanzati || 0) + medici.avanzati;
+        p.inventario.medCritici = (p.inventario.medCritici || 0) + medici.critici;
+        p.inventario.cibo = (p.inventario.cibo || 0) + cibo;
+        p.inventario.acqua = (p.inventario.acqua || 0) + acqua;
+        p.inventario.piattiDeliziosi = (p.inventario.piattiDeliziosi || 0) + deliziosi;
+        let nuovoZaino = rollZainoTrovato(diffLevel);
+        if (nuovoZaino) {
+            p.initInventarioBase();
+            if (!p.zainoEquipaggiato || nuovoZaino.bonus > p.zainoEquipaggiato.bonus) {
+                if (p.zainoEquipaggiato) p.inventario.zaini.push(p.zainoEquipaggiato);
+                p.zainoEquipaggiato = nuovoZaino;
+                mostraNotificaInAlto(`${p.nome} ha trovato e indossato: ${nuovoZaino.nome}!`, 'successo');
+            } else {
+                p.inventario.zaini.push(nuovoZaino);
+                mostraNotificaInAlto(`${p.nome} ha trovato uno zaino (${nuovoZaino.nome}) e lo porta con sé.`, 'successo');
+            }
+        }
+        if (p.pesoAttuale > p.capacitaMax) {
+            apriSceltaEccedenza(party.indexOf(p));
+        }
+
+        // Oggetti magici e armi restano a gestione di gruppo/master (vanno diretti in magazzino)
+        magazzino.oggettiMagici.comuni += oggMagiciTrovati.comuni;
+        magazzino.oggettiMagici.nonComuni += oggMagiciTrovati.nonComuni;
+        magazzino.oggettiMagici.rari += oggMagiciTrovati.rari;
+        magazzino.oggettiMagici.superRari += oggMagiciTrovati.superRari;
+
+        if (!magazzino.armiTrovate) magazzino.armiTrovate = [];
+        let infoArmiStr = "";
+        if (armiTrovate.length > 0) {
+            armiTrovate.forEach(arma => {
+                magazzino.armiTrovate.push(arma);
+                infoArmiStr += `  - ${arma.nome} (x${arma.qta})\n`;
+            });
+        }
+
+        let infoMagica = "";
+        if (oggMagiciTrovati.comuni > 0) infoMagica += `• Oggetti Magici Comuni: +${oggMagiciTrovati.comuni}\n`;
+        if (oggMagiciTrovati.nonComuni > 0) infoMagica += `• Oggetti Magici Non Comuni: +${oggMagiciTrovati.nonComuni}\n`;
+        if (oggMagiciTrovati.rari > 0) infoMagica += `• Oggetti Magici Rari: +${oggMagiciTrovati.rari}\n`;
+        if (oggMagiciTrovati.superRari > 0) infoMagica += `• 🌟 Oggetti Magici SUPER RARI: +${oggMagiciTrovati.superRari}\n`;
+
+        let infoMalus = "";
+        if (pericoli.lootLost > 0) infoMalus += `⚠️ Bottino perso durante la via: -${pericoli.lootLost}%\n`;
+        if (pericoli.hpDamage > 0) infoMalus += `🩸 Ferite subite: -${pericoli.hpDamage} PF\n`;
+        if (pericoli.fatigueStagies > 0) infoMalus += `😓 Fatica aumentata: +${pericoli.fatigueStagies} stadi\n`;
+
+        alert(`Esplorazione completata da ${p.nome}!\n\nRisultati:\n` +
+            `• Materiali alchemici: +${alchemici}\n` +
+            `• Ingranaggi: +${ingranaggi}\n` +
+            `• Medici: base +${medici.base}, avz +${medici.avanzati}, crit +${medici.critici}\n` +
+            `• Cibo: +${cibo}\n` +
+            `• Acqua: +${acqua}\n` +
+            `${deliziosi > 0 ? `• Piatti deliziosi: +${deliziosi}\n` : ''}` +
+            `• Libri: +${booksFound}\n` +
+            `${infoArmiStr ? `• ⚔️ Armi/Munizioni Trovate:\n${infoArmiStr}` : ''}` +
+            infoMagica + "\n" +
+            (infoMalus ? `\n--- EVENTI AVVERSI ---\n${infoMalus}` : "Nessun evento avverso!")
+        );
+        if (typeof window.salvaPersonaggioCloud === 'function') {
+            window.salvaPersonaggioCloud(p);
+        }
+        if (typeof window.updateMagazzinoFields === 'function') {
+            window.updateMagazzinoFields({
+                oggettiMagici: magazzino.oggettiMagici,
+                armiTrovate: magazzino.armiTrovate
+            });
+        }
+        p.azioneCorrente = null;
+        if (typeof window.apriGestioneRitorno === 'function') {
+            window.apriGestioneRitorno(party.indexOf(p));
+        }
+        // Riepilogo per la notifica
+        let msgNotifica = `Esplorazione completata da ${p.nome}!\n`;
+        msgNotifica += `• Alchemici: +${alchemici}\n• Ingranaggi: +${ingranaggi}\n`;
+        msgNotifica += `• Medici: base +${medici.base}, avz +${medici.avanzati}, crit +${medici.critici}\n`;
+        msgNotifica += `• Cibo: +${cibo}\n• Acqua: +${acqua}\n`;
+        if (deliziosi > 0) msgNotifica += `• Piatti deliziosi: +${deliziosi}\n`;
+        if (booksFound > 0) msgNotifica += `• Libri: +${booksFound}\n`;
+        if (infoArmiStr) msgNotifica += `• Armi: ${infoArmiStr}`;
+        if (infoMagica) msgNotifica += infoMagica;
+        if (infoMalus) msgNotifica += `\n${infoMalus}`;
+        mostraNotificaInAlto(msgNotifica, 'successo');
+        aggiornaInterfaccia();
+    } catch (e) {
+        console.error('Errore in terminaEsplorazione:', e);
+        if (typeof mostraNotificaInAlto === 'function') {
+            mostraNotificaInAlto(`⚠️ Esplorazione di ${p.nome} terminata con errore: ${e.message}`, 'pericolo');
+        }
+        p.azioneCorrente = null;
+        if (typeof salvaPersonaggioCloud === 'function') salvaPersonaggioCloud(p);
+        aggiornaInterfaccia();
     }
-    if (typeof window.updateMagazzinoFields === 'function') {
-        window.updateMagazzinoFields({
-            oggettiMagici: magazzino.oggettiMagici,
-            armiTrovate: magazzino.armiTrovate
-        });
-    }
-    p.azioneCorrente = null;
-    if (typeof window.apriGestioneRitorno === 'function') {
-        window.apriGestioneRitorno(party.indexOf(p));
-    }
-    // Riepilogo per la notifica
-    let msgNotifica = `Esplorazione completata da ${p.nome}!\n`;
-    msgNotifica += `• Alchemici: +${alchemici}\n• Ingranaggi: +${ingranaggi}\n`;
-    msgNotifica += `• Medici: base +${medici.base}, avz +${medici.avanzati}, crit +${medici.critici}\n`;
-    msgNotifica += `• Cibo: +${cibo}\n• Acqua: +${acqua}\n`;
-    if (deliziosi > 0) msgNotifica += `• Piatti deliziosi: +${deliziosi}\n`;
-    if (booksFound > 0) msgNotifica += `• Libri: +${booksFound}\n`;
-    if (infoArmiStr) msgNotifica += `• Armi: ${infoArmiStr}`;
-    if (infoMagica) msgNotifica += infoMagica;
-    if (infoMalus) msgNotifica += `\n${infoMalus}`;
-    mostraNotificaInAlto(msgNotifica, 'successo');
-    aggiornaInterfaccia();
 }
-
 function apriSceltaEccedenza(idx) {
     const p = party[idx];
     if (!p) return;
@@ -1025,3 +1046,4 @@ window.rollZainoTrovato = rollZainoTrovato;
 window.renderSpedizioneModal = renderSpedizioneModal;
 window.segnaVittoria = segnaVittoria;
 window.getExplorationBonus = getExplorationBonus;
+

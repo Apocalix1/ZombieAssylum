@@ -136,14 +136,28 @@ window.apriImpostaRancore = function(idx) {
 
 	if (p.rancoreTargetId === target.id) {
 		p.rancoreTargetId = null;
+		p.rancoreScadenza = null;
 		mostraNotificaInAlto(`${p.nome} non nutre più rancore verso ${target.nome}.`, 'successo');
 	} else {
+		const durataStr = prompt('Per quante ore di gioco deve durare il rancore? (vuoto = permanente)', '24');
+		const durata = parseFloat(durataStr);
 		p.rancoreTargetId = target.id;
-		mostraNotificaInAlto(`${p.nome} nutre rancore verso ${target.nome}.`, 'avviso');
+		p.rancoreScadenza = (!isNaN(durata) && durata > 0) ? (window.oreTotali || 0) + durata : null;
+		mostraNotificaInAlto(`${p.nome} nutre rancore verso ${target.nome}${p.rancoreScadenza ? ` per ${durata}h` : ' (permanente)'}.`, 'avviso');
 	}
 	salvaPersonaggioCloud(p);
 	aggiornaInterfaccia();
 };
+
+window.masterAbilitaSmembramento = async function() {
+	magazzino.smembramentoAbilitato = true;
+	if (typeof window.updateMagazzinoFields === 'function') {
+		await window.updateMagazzinoFields({ smembramentoAbilitato: true });
+	}
+	mostraNotificaInAlto('☠️ Smembramento abilitato per un uso.', 'avviso');
+	aggiornaInterfaccia();
+};
+
 
 window.gestisciCroceRossina = function(idx) {
 	const p = party[idx];

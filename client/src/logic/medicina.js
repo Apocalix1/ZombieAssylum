@@ -2,7 +2,8 @@ import { Personaggio } from '../logic/logic.js';
 if (typeof window.party === 'undefined') window.party = [];
 if (typeof window.magazzino === 'undefined') window.magazzino = { materialiMedici: { base: 0, avanzati: 0, critici: 0 } };
 if (typeof window.assistenzaSelezionata === 'undefined') window.assistenzaSelezionata = null;
-
+window.party = party;
+window.magazzino = magazzino;
 // Variabili locali (non globali) per lo stato interno
 let medicoCorrente = -1;
 
@@ -535,3 +536,4 @@ Personaggio.prototype.checkInfectionRisk = checkInfectionRisk;
 Personaggio.prototype.getRestMultiplier = getRestMultiplier;
 window.lootMedici = lootMedici;
 window.infestazioneWound = infestazioneWound;
+

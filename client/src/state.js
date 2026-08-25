@@ -27,6 +27,8 @@ export let magazzino = {
     armiTrovate: [],
     armi: [],
     oggetti: [],
+    logMovimenti: [],
+    smembramentoAbilitato: false, // NEW
     updated_at: new Date().toISOString()
 };
 

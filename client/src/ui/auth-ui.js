@@ -1,10 +1,52 @@
 // auth-ui.js
 import { Personaggio } from "../logic/logic.js";
 import { party, aggiornaInterfaccia, showLobbyScreen } from "./ui.js";
-import { apiUrl, buildAuthHeaders } from "../logic/logic.js";
+import { getPendingDeadIds,apiUrl, buildAuthHeaders,avviaSincronizzazioneCompleta } from "../logic/logic.js";
 
-// Variabili globali del modulo
-let _masterPollInterval = null;
+async function caricaPartyMaster() {
+    try {
+        const response = await fetch(apiUrl('/api/party'), {
+            headers: buildAuthHeaders()
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const data = await response.json();
+        const partyData = data.party || [];
+
+        // Svuota il party corrente
+        party.length = 0;
+
+        const deadIds = getPendingDeadIds();
+
+        partyData.forEach(pData => {
+            // Salta i personaggi che sono in attesa di morte
+            if (deadIds.includes(pData.id)) return;
+
+            let stats = {};
+            if (pData.data && typeof pData.data === 'object') {
+                stats = pData.data;
+            } else {
+                stats = pData;
+            }
+
+            const nome = stats.nome || pData.nome || 'Sconosciuto';
+            const giornoInizio = stats.giornoInizio || 0;
+            const personaggio = new Personaggio(nome, giornoInizio);
+
+            Object.assign(personaggio, stats);
+            personaggio.id = pData.id;
+            personaggio.user_id = pData.user_id;
+            personaggio.ownerUsername = pData.owner_username || null;
+
+            party.push(personaggio);
+        });
+
+        aggiornaInterfaccia();
+        console.log(`Party master caricato: ${party.length} personaggi`);
+    } catch (err) {
+        console.error('Errore caricamento party per master:', err);
+    }
+}
+
 let currentRole = null;
 window.currentRole = currentRole;
 let authMode = 'player';
@@ -32,69 +74,54 @@ function showAuthMessage(msg) {
     if (el) el.textContent = msg;
 }
 
-// --- Caricamento party per Master ---
-async function caricaPartyMaster() {
-    try {
-        const response = await fetch(apiUrl('/api/party'), {
-            headers: buildAuthHeaders()
-        });
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const data = await response.json();
-        const partyData = data.party || [];
-
-        // Svuota il party corrente
-        party.length = 0;
-
-        partyData.forEach(pData => {
-            let stats = {};
-            if (pData.data && typeof pData.data === 'object') {
-                stats = pData.data;
-            } else {
-                stats = pData;
-            }
-
-            const nome = stats.nome || pData.nome || 'Sconosciuto';
-            const giornoInizio = stats.giornoInizio || 0;
-            const personaggio = new Personaggio(nome, giornoInizio);
-
-            Object.assign(personaggio, stats);
-            personaggio.id = pData.id;
-            personaggio.user_id = pData.user_id;
-            personaggio.ownerUsername = pData.owner_username || null;
-
-            party.push(personaggio);
-        });
-
-        aggiornaInterfaccia();
-        console.log(`Party master caricato: ${party.length} personaggi`);
-    } catch (err) {
-        console.error('Errore caricamento party per master:', err);
-    }
-}
+// --- Caricamento party per Master -- //
+let partyPollIntervalId = null;
+let partyPollDelay = 3000;
+let partyPollVisibilityHandler = null;
 
 function avviaPollingPartyMaster() {
-    if (_masterPollInterval) return;
+    fermaPollingPartyMaster();
     const user = getCurrentUser();
     if (!user || !user.role) return;
 
-    _masterPollInterval = setInterval(async () => {
-        const currentUser = getCurrentUser();
-        if (currentUser && currentUser.role) {
-            await caricaPartyMaster();
+    function startPartyPoll() {
+        if (partyPollIntervalId) clearInterval(partyPollIntervalId);
+        partyPollIntervalId = setInterval(async () => {
+            const currentUser = getCurrentUser();
+            if (currentUser && currentUser.role) {
+                await caricaPartyMaster();
+            } else {
+                fermaPollingPartyMaster();
+            }
+        }, partyPollDelay);
+    }
+
+    startPartyPoll();
+
+    // Listener per visibilitychange
+    const handler = () => {
+        if (document.hidden) {
+            partyPollDelay = 8000;
         } else {
-            fermaPollingPartyMaster();
+            partyPollDelay = 3000;
         }
-    }, 3000); // Polling ogni 10 secondi per tutti
+        startPartyPoll();
+    };
+    document.addEventListener('visibilitychange', handler);
+    partyPollVisibilityHandler = handler;
 }
 
 function fermaPollingPartyMaster() {
-    if (_masterPollInterval) {
-        clearInterval(_masterPollInterval);
-        _masterPollInterval = null;
+    if (partyPollIntervalId) {
+        clearInterval(partyPollIntervalId);
+        partyPollIntervalId = null;
+    }
+    if (partyPollVisibilityHandler) {
+        document.removeEventListener('visibilitychange', partyPollVisibilityHandler);
+        partyPollVisibilityHandler = null;
     }
 }
 
-// --- Funzioni di autenticazione ---
 async function registerUser() {
     const username = document.getElementById('login-username')?.value?.trim();
     const password = document.getElementById('login-password')?.value;
@@ -365,7 +392,7 @@ function showGameScreen(role) {
     updateRoleIndicator(role);
 
     // Attiviamo il polling per tutti i ruoli così da vedere gli aggiornamenti degli altri giocatori
-    avviaPollingPartyMaster();
+    avviaSincronizzazioneCompleta();
 
     // RECLUTA ora è identico per Master e Giocatore: crea sempre un personaggio
     const reclutaBtn = document.getElementById('btn-recluta');
@@ -457,5 +484,3 @@ window.updateRoleIndicator = updateRoleIndicator;
 window.checkBackend = checkBackend;
 window.isGuestUser = isGuestUser;
 window.hasDependencies = hasDependencies;
-
-

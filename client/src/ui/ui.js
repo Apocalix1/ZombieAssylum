@@ -1,9 +1,10 @@
-export { party };
+export {party };
 import { magazzino, party as stateParty } from "../state.js";
 import "../logic/studio.js";
-import { Personaggio, salvaPersonaggioCloud, avviaAscoltoDatiCloud, fetchUserCharacters, apiUrl, buildAuthHeaders, refreshPartyListeners } from "../logic/logic.js";
+import { Personaggio, syncPartyFromServer, salvaPersonaggioCloud,fetchUserCharacters, apiUrl, buildAuthHeaders, refreshPartyListeners } from "../logic/logic.js";
 import { processAutomaticActions} from "./cibo_e_acqua-ui.js";
 import "../ui/magazzino-ui.js";
+import { getPendingDeadIds,queueCommand, processPendingCommands, syncStatiDalServer, syncDocumentiDalServer } from "../logic/logic.js";
 const party = stateParty;
 
 // Esposizioni Globali per compatibilità con HTML inline e altri script non-modulari
@@ -22,7 +23,7 @@ const STATI_PREDEFINITI = {
     'Ispirato':    [{stat:'Carisma', valore:2}],
 }
 
-let tempP = null;
+
 
 function chiudiModal(id) {
     const el = document.getElementById(id);
@@ -64,7 +65,7 @@ export async function showLobbyScreen(user) {
             masterBtn.classList.add('hidden');
         }
     }
-
+    await syncPartyFromServer();
     renderCharacterList();
     // Mostra subito le proposte in sospeso per questo utente
     renderProposte();
@@ -346,7 +347,7 @@ window.oreTotali = 0;
 let cimitero = [];
 window.magazzino = magazzino;
 
-function mostraNotificaInAlto(msg, tipo = 'info', targetUserId = null) {
+export function mostraNotificaInAlto(msg, tipo = 'info', targetUserId = null) {
     const user = getCurrentUser ? getCurrentUser() : window.currentUser;
     
     // Filtro notifiche: il master vede tutto, il giocatore vede solo le sue (o quelle globali se targetUserId è null)
@@ -528,7 +529,15 @@ window.apriPannelloMaster = async function apriPannelloMaster() {
             <h3 style="color:#f1c40f;">🏚️ Magazzino</h3>
             <div id="master-magazzino-editor" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(200px,1fr)); gap:10px;"></div>
         </div>
-
+        <div style="margin-top:12px; display:flex; align-items:center; gap:10px;">
+    <span style="color:#ccc;">☠️ Smembramento cadaveri:</span>
+    <span style="color:${magazzino.smembramentoAbilitato ? '#2ecc71' : '#888'};">${magazzino.smembramentoAbilitato ? 'Abilitato' : 'Disabilitato'}</span>
+    <button class="btn-hero" onclick="masterAbilitaSmembramento()" style="padding:4px 10px; font-size:0.8rem;">Abilita un uso</button>
+</div>
+         <div style="margin-top:20px; border-top:1px solid #333; padding-top:10px;">
+            <h3 style="color:#f1c40f;">📋 Log Transazioni Magazzino</h3>
+            <div id="master-magazzino-log" style="max-height:200px; overflow-y:auto; background:#111; padding:8px; border:1px solid #333; font-size:0.85rem;"></div>
+        </div>
         <div style="margin-top:20px; border-top:1px solid #333; padding-top:10px;">
             <h3 style="color:#f1c40f;">👥 Tutti i Personaggi</h3>
             <div id="master-all-chars" style="max-height:200px; overflow-y:auto; background:#111; padding:8px; border:1px solid #333; font-size:0.85rem;"></div>
@@ -581,6 +590,30 @@ window.apriPannelloMaster = async function apriPannelloMaster() {
     } catch (e) {
         document.getElementById('master-all-chars').innerText = "Errore caricamento personaggi.";
     }
+};
+
+window.renderMasterMagazzinoLog = function() {
+    const container = document.getElementById('master-magazzino-log');
+    if (!container) return;
+
+    const logs = window.magazzino.logMagazzino || [];
+
+    if (logs.length === 0) {
+        container.innerHTML = '<div style="color:#888; font-style:italic;">Nessuna transazione registrata di recente.</div>';
+        return;
+    }
+
+    container.innerHTML = logs.map(l => {
+        const dataFormat = new Date(l.time).toLocaleString('it-IT', { day: '2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
+        const color = l.azione === 'Deposita' ? '#2ecc71' : '#e74c3c';
+        const actionIcon = l.azione === 'Deposita' ? '📥' : '📤';
+        return `
+            <div style="padding:6px; border-bottom:1px solid #222; display:flex; justify-content:space-between; align-items:center;">
+                <span><span style="color:#888;">[${dataFormat}]</span> <strong>${l.personaggio}</strong> ha <span style="color:${color};">${l.azione.toLowerCase()}</span> ${l.quantita}x <strong>${l.tipo}</strong></span>
+                <span style="font-size:1.2rem;">${actionIcon}</span>
+            </div>
+        `;
+    }).join('');
 };
 
 window.apriRiorganizzaAzioni = function(idx) {
@@ -706,15 +739,21 @@ async function autoSaveParty() {
     if (now - lastPartyAutoSave < 10000) return;
     lastPartyAutoSave = now;
     if (!navigator.onLine || !party.length) return;
+
+    const user = getCurrentUser();
+    if (!user) return;
+
     for (const personaggio of party) {
-        try {
-            await salvaPersonaggioCloud(personaggio);
-        } catch (err) {
-            console.warn('Auto-save fallito per', personaggio.nome, err?.message || err);
+        // Salva solo se è master oppure se il personaggio appartiene all'utente
+        if (user.role === 'master' || personaggio.user_id === user.id) {
+            try {
+                await salvaPersonaggioCloud(personaggio);
+            } catch (err) {
+                console.warn('Auto-save fallito per', personaggio.nome, err?.message || err);
+            }
         }
     }
 }
-
 function rollDiceNotation(notation) {
     const match = notation.match(/(\d+)d(\d+)/);
     if (!match) return 0;
@@ -833,33 +872,6 @@ function getPerkCount(personaggio, nomePerk) {
     const target = getPerkBaseName(nomePerk);
     return personaggio.perks.filter(perk => getPerkBaseName(perkObjectName(perk)) === target).length;
 }
-
-function getFoodEfficiency(p) {
-    let scale = 1;
-    if (hasPerk(p, 'Digiuno')) scale *= 1.2;
-    if (hasPerk(p, 'Insaziabile')) scale *= 0.8;
-    if (hasPerk(p, 'Sottopeso')) scale *= (1 / 1.1);
-    if (hasPerk(p, 'Anoressico')) scale *= (1 / 1.2);
-    return scale;
-}
-
-function getWaterEfficiency(p) {
-    let scale = 1;
-    if (hasPerk(p, 'Dromedario')) scale *= 1.2;
-    if (hasPerk(p, 'Bocca asciutta')) scale *= 0.8;
-    return scale;
-}
-
-function recordResourceConsumption(p, amount, tipo = 'cibo') {
-    if (!p.resourceConsumption) p.resourceConsumption = { cibo: 0, acqua: 0 };
-    if (tipo === 'acqua') {
-        p.resourceConsumption.acqua += amount;
-    } else {
-        p.resourceConsumption.cibo += amount;
-    }
-}
-
-window._proposteInSospeso = new Map(); // key: idProposta, value: {mittente, destinatario, tipo, dati, scadenza}
 
 // ========================= SISTEMA PROPOSTE =========================
 window._proposte = window._proposte || [];
@@ -1172,7 +1184,7 @@ function getBarra(val, max, color) {
         </div>`;
 }
 // --- NUOVA LOGICA: PASSA TEMPO GLOBALE (L'unico modo per far scorrere il tempo) ---
-function passaTempoGlobale() {
+async function passaTempoGlobale() {
     const user = getCurrentUser();
     if (!user || user.role !== 'master') {
         alert('Solo il Master può far avanzare il tempo.');
@@ -1244,29 +1256,29 @@ function passaTempoGlobale() {
         if (typeof p.resetDailyStudy === 'function') p.resetDailyStudy(oreTotali);
         const causaMorte = (typeof p.tickOre === 'function') ? p.tickOre(ore) : null;
         if (causaMorte) {
-            // Annulla esplorazione per i compagni
             annullaEsplorazionePerMorte(p);
-
             const giorniSopravvissuto = giornoAttuale - (p.giornoInizio || 0);
             p.causaMorte = causaMorte;
             p.giorniSopravvissuto = giorniSopravvissuto;
             p.giornoMorte = giornoAttuale;
 
-            fetch(apiUrl(`/api/personaggi/${p.id}`), {
-                method: 'PUT',
-                headers: buildAuthHeaders({ 'Content-Type': 'application/json' }),
-                body: JSON.stringify({ data: JSON.stringify(p), status: 'morto' })
-            }).catch(err => console.warn('Errore salvataggio morte:', err));
+            // Accoda il comando di morte invece di fare fetch diretto
+            queueCommand({
+                type: 'markDead',
+                personaggioId: p.id,
+                data: p
+            });
 
             alert(`CONDOGLIANZE: ${p.nome} è morto per ${causaMorte}.`);
             party.splice(i, 1);
             if (typeof chiudiScheda === 'function') chiudiScheda();
-        } else {
+        }else {
             processAutomaticActions(p);
         }
     }
     aggiornaInterfaccia();
 }
+
 
 // --- AGGIORNAMENTO INTERFACCIA PRINCIPALE ---
 window.aggiungiPersonaggioAlParty = function(p) {
@@ -1339,6 +1351,14 @@ export function aggiornaInterfaccia() {
         document.getElementById('display-medici-critici').innerText = (magazzino.materialiMedici || {}).critici || 0;
 
         const container = document.getElementById('party-container');
+        const openDetailsKeys = new Set();
+        container.querySelectorAll('details.action-dropdown[open]').forEach(d => {
+            const card = d.closest('.card-personaggio');
+            const nome = card?.dataset?.nome;
+            const summary = d.querySelector('summary')?.textContent?.trim();
+            if (nome && summary) openDetailsKeys.add(`${nome}::${summary}`);
+        });
+
         container.innerHTML = "";
 
         // Barra assistenza (invariata)
@@ -1415,6 +1435,7 @@ export function aggiornaInterfaccia() {
 
             let card = document.createElement('div');
             card.className = `card-personaggio ${p.inSpedizione ? 'spedizione-active' : ''}`;
+            card.dataset.nome = p.nome;
 
             // Header: nome + badge fatica (solo se canManage)
             let headerHtml = `
@@ -2417,6 +2438,21 @@ window.mandaInGioco = async function(nome) {
     }
 };
 
+window.apriLogMagazzino = async function() {
+    const res = await fetch(apiUrl('/api/magazzino/log'), { headers: buildAuthHeaders() });
+    const data = await res.json();
+    let html = '<div style="display:grid; gap:6px; text-align:left;">';
+    (data.log || []).forEach(r => {
+        html += data.redacted
+            ? `<div style="background:#111; padding:6px; border:1px solid #333;">🔒 ${r.azione} ${r.chiave} (${r.quantita}) — Giorno ${r.giorno}, tra le ${r.finestra_oraria}</div>`
+            : `<div style="background:#111; padding:6px; border:1px solid #333;"><strong>${r.personaggio_nome || '???'}</strong> — ${r.azione} ${r.chiave} (${r.quantita}) — ${new Date(r.timestamp).toLocaleString()}</div>`;
+    });
+    html += '</div>';
+    document.getElementById('risorse-titolo').innerText = 'LOG MAGAZZINO';
+    document.getElementById('risorse-content').innerHTML = html || '<p>Nessun movimento registrato.</p>';
+    document.getElementById('modal-risorse').style.display = 'block';
+};
+
 function togglePerk(nomePerk, forceRemove = false) {
     const p = window.tempP;
     if (!p) return;
@@ -2444,6 +2480,9 @@ function togglePerk(nomePerk, forceRemove = false) {
         }
         if (getPerkBaseName(perkDati.nome) === 'Alchemico') {
             p.masteries = p.masteries.filter(m => m.toLowerCase() !== 'natura');
+        }
+        if (getPerkBaseName(perkDati.nome) === 'Bimbi') {
+            p.masteries = p.masteries.filter(m => m.toLowerCase() !== 'cucina');
         }
         p.puntiCreazione += perkDati.costo;
         renderSetupStats();
@@ -2536,11 +2575,16 @@ function togglePerk(nomePerk, forceRemove = false) {
                         return;
                     }
                     p.perks.push({ ...perkDati, nome: `Ignorante (${trovata})`, disadvantage: [trovata] });
-                } else if (nomePerk === 'Alchimico') {
+                } else if (nomePerk === 'Alchemico') {
                         p.perks.push({...perkDati});
                         if (!p.masteries.map(m => m.toLowerCase()).includes('natura')) {
                             p.masteries.push('Natura');
                         }
+        } else if (nomePerk === 'Bimbi') {
+            p.perks.push({...perkDati});
+            if (!p.masteries.map(m => m.toLowerCase()).includes('cucina')) {
+                p.masteries.push('Cucina');
+            }
         } else {
                 p.perks.push({...perkDati});
             }
@@ -2915,42 +2959,43 @@ async function renderCharacterList() {
 
     // 5. Render dei personaggi vivi
     vivi.forEach(c => {
-        const isLocale = c.status === 'locale';
-        const isOwner = c.user_id === user.id;
-        const canControl = isMaster || isOwner;
+    const isLocale = c.status === 'locale';
+    const isOwner = c.user_id === user.id;
+    const canControl = isMaster || isOwner;
+    const isCaricatoOra = party.some(p => p.nome === c.nome);
 
-        // "Caricato ora" = è presente nel party locale della sessione corrente di gioco
-        const isCaricatoOra = party.some(p => p.nome === c.nome);
+    // DEFINISCI statusBadge PRIMA di usarlo
+    let statusBadge;
+    if (isLocale) {
+        statusBadge = '<div style="font-size:0.85rem;color:#f1c40f;">🏠 Locale (non ancora in gioco)</div>';
+    } else if (isCaricatoOra) {
+        statusBadge = '<div style="font-size:0.85rem;color:#2ecc71;">✅ Attivo e caricato</div>';
+    } else {
+        statusBadge = '<div style="font-size:0.85rem;color:#3498db;">🟢 Attivo sul server</div>';
+    }
 
-        let statusBadge;
-        if (isLocale) {
-            statusBadge = '<div style="font-size:0.85rem;color:#f1c40f;">🏠 Locale (non ancora in gioco)</div>';
-        } else if (isCaricatoOra) {
-            statusBadge = '<div style="font-size:0.85rem;color:#2ecc71;">✅ Attivo e caricato</div>';
-        } else {
-            statusBadge = '<div style="font-size:0.85rem;color:#3498db;">🟢 Attivo sul server</div>';
-        }
+    const ruoloDestinazione = isMaster ? 'Master' : (window.isGuestUser && window.isGuestUser() ? 'Ospite' : 'Giocatore');
+    const enterAction = isCaricatoOra
+        ? `showGameScreen('${ruoloDestinazione}')`
+        : (isLocale ? `mandaInGiocoDaLobby('${c.nome}')` : `entraInGiocoDaLobby('${c.nome}', ${c.id})`);
+    const btnLabel = isCaricatoOra ? 'In Gioco' : (isLocale ? 'Manda in gioco' : 'Entra in gioco');
 
-        const ruoloDestinazione = isMaster ? 'Master' : (window.isGuestUser && window.isGuestUser() ? 'Ospite' : 'Giocatore');
-        const enterAction = isCaricatoOra
-            ? `showGameScreen('${ruoloDestinazione}')`
-            : (isLocale ? `mandaInGiocoDaLobby('${c.nome}')` : `entraInGiocoDaLobby('${c.nome}', ${c.id})`);
-        const btnLabel = isCaricatoOra ? 'In Gioco' : (isLocale ? 'Manda in gioco' : 'Entra in gioco');
-
-        html += `
-            <div class="lobby-char" style="background:#0f0f0f; padding:8px; border:1px solid #222; display:flex; justify-content:space-between; align-items:center;">
-                <div><strong>${c.nome}</strong>${statusBadge}</div>
-                <div style="display:flex; gap:6px;">
-                    ${canControl ? `
-                        <button class="btn-hero" ${isCaricatoOra ? 'style="background:#27ae60;"' : ''} onclick="${enterAction}">${btnLabel}</button>
-                        <button class="btn-hero" style="background:#c0392b;" onclick="eliminaPersonaggioLobby('${c.nome}', ${c.id}, true)">🗑️ Elimina</button>
-                    ` : `
-                        <button class="btn-hero" disabled style="opacity:0.5; cursor:not-allowed;">Solo Visura</button>
-                    `}
-                </div>
+    html += `
+        <div class="lobby-char" style="background:#0f0f0f; padding:8px; border:1px solid #222; display:flex; justify-content:space-between; align-items:center;">
+            <div><strong>${c.nome}</strong>${statusBadge}</div>
+            <div style="display:flex; gap:6px;">
+                ${canControl ? `
+                    <button class="btn-hero" ${isCaricatoOra ? 'style="background:#27ae60;"' : ''} onclick="${enterAction}">${btnLabel}</button>
+                    <button class="btn-hero" style="background:#8e44ad;" 
+        onclick="modificaPersonaggioConControllo('${c.nome.replace(/'/g, "\\'")}', ${c.id || 'null'}, ${isLocale}, ${isCaricatoOra})"> ✏️ Modifica </button>
+                    <button class="btn-hero" style="background:#c0392b;" onclick="eliminaPersonaggioLobby('${c.nome}', ${c.id}, true)">🗑️ Elimina</button>
+                ` : `
+                    <button class="btn-hero" disabled style="opacity:0.5; cursor:not-allowed;">Solo Visura</button>
+                `}
             </div>
-        `;
-    });
+        </div>
+    `;
+});
 
     // 6. Render dei personaggi morti
     morti.forEach(c => {
@@ -2997,6 +3042,8 @@ window.entraInGioco = entraInGioco;
 window.rollD20WithAdv = rollD20WithAdv;
 window.inviaProposta = inviaProposta;
 window.accettaProposta = accettaProposta;
+window.registraAttaccoModal = registraAttaccoModal;
 window.rifiutaProposta = rifiutaProposta;
 window.renderProposte = renderProposte;
 window.verificaProposteInSospeso = verificaProposteInSospeso;
+window.party = party;

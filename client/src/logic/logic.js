@@ -1,7 +1,277 @@
-// logic.js
+
 import { magazzino, setMagazzino, party, setParty } from '../state.js';
 
+// ---------- OUTBOX PER COMANDI OFFLINE ----------
+let pendingCommands = [];
+const PENDING_COMMANDS_KEY = 'pending_commands';
+
+// logic.js - aggiungi dopo le altre funzioni di sync
+
+let syncPartyInterval = null;
+let isSyncing = false;
+
+export async function syncPartyFromServer() {
+    if (isSyncing) return;
+    isSyncing = true;
+    try {
+        const data = await requestJson(apiUrl('/api/party'));
+        if (!data.party || !Array.isArray(data.party)) return;
+
+        const serverChars = data.party;
+        const serverIds = new Set(serverChars.map(c => c.id));
+
+        // 1. Aggiorna o aggiungi personaggi
+        for (const serverChar of serverChars) {
+            const existing = party.find(p => p.id === serverChar.id);
+            if (existing) {
+                // Aggiorna solo se il server è più recente
+                if (serverChar.updated_at > existing.updated_at) {
+                    // Unisci i dati (serverChar.data è un oggetto)
+                    const newData = serverChar.data || {};
+                    Object.assign(existing, newData);
+                    existing.id = serverChar.id;
+                    existing.user_id = serverChar.user_id;
+                    existing.ownerUsername = serverChar.owner_username;
+                    existing.updated_at = serverChar.updated_at;
+                    // Assicurati che l'inventario e altre proprietà siano inizializzate
+                    if (typeof existing.initInventarioBase === 'function') {
+                        existing.initInventarioBase();
+                    }
+                }
+            } else {
+                // Nuovo personaggio – crea istanza
+                const stats = serverChar.data || {};
+                const nome = stats.nome || serverChar.nome || 'Sconosciuto';
+                const p = new Personaggio(nome, stats.giornoInizio || 0);
+                Object.assign(p, stats);
+                p.id = serverChar.id;
+                p.user_id = serverChar.user_id;
+                p.ownerUsername = serverChar.owner_username;
+                p.updated_at = serverChar.updated_at;
+                if (typeof p.initInventarioBase === 'function') {
+                    p.initInventarioBase();
+                }
+                party.push(p);
+            }
+        }
+
+        // 2. Rimuovi personaggi che non sono più nel server (es. morti)
+        for (let i = party.length - 1; i >= 0; i--) {
+            if (!serverIds.has(party[i].id)) {
+                party.splice(i, 1);
+            }
+        }
+
+        // 3. Aggiorna l'interfaccia
+        if (typeof window.aggiornaInterfaccia === 'function') {
+            window.aggiornaInterfaccia();
+        }
+    } catch (error) {
+        console.warn('Errore sincronizzazione party:', error?.message || error);
+    } finally {
+        isSyncing = false;
+    }
+}
+
+/**
+ * Avvia il ciclo di sincronizzazione completo (polling)
+ * - Sincronizza party, magazzino, stati, documenti
+ * - Spinge le modifiche locali al server
+ */
+export function avviaSincronizzazioneCompleta() {
+    if (syncPartyInterval) return;
+
+    // Esegui subito una prima sincronizzazione
+    syncPartyFromServer();
+
+    // Poi ogni 6 secondi
+    syncPartyInterval = setInterval(async () => {
+        if (!navigator.onLine) return;
+        const user = getCurrentUser();
+        if (!user) return;
+
+        // 1. Ricarica party
+        await syncPartyFromServer();
+
+        // 2. Sincronizza magazzino, stati, documenti (dal server al client)
+        await syncMagazzinoDalServer();
+        await syncStatiDalServer();
+        await syncDocumentiDalServer();
+
+        // 3. Spingi le modifiche locali al server (per ogni personaggio)
+        for (const p of party) {
+            if (p.id) {
+                await sincronizzaPersonaggio(p);
+            }
+        }
+
+        // 4. Aggiorna interfaccia (già fatto dentro syncPartyFromServer, ma per sicurezza)
+        if (typeof window.aggiornaInterfaccia === 'function') {
+            window.aggiornaInterfaccia();
+        }
+    }, 3000); // 3 secondi
+}
+
+function savePendingCommands() {
+    try {
+        localStorage.setItem(PENDING_COMMANDS_KEY, JSON.stringify(pendingCommands));
+    } catch (e) {}
+}
+
+export function queueCommand(command) {
+    pendingCommands.push(command);
+    savePendingCommands();
+    processPendingCommands(); // tenta subito se online
+}
+
+export function refreshPartyListeners() {
+    if (typeof window.aggiornaInterfaccia === 'function') window.aggiornaInterfaccia();
+}
+
+
+async function executeCommand(cmd) {
+    switch (cmd.type) {
+        case 'updateMagazzino':
+            await requestJson(apiUrl('/api/magazzino'), {
+                method: 'PUT',
+                body: JSON.stringify({ data: cmd.fields })
+            });
+            break;
+        case 'setOreTotali':
+            await requestJson(apiUrl('/api/magazzino'), {
+                method: 'PUT',
+                body: JSON.stringify({ data: { oreTotali: cmd.ore } })
+            });
+            break;
+        case 'markDead':
+            await requestJson(apiUrl(`/api/personaggi/${cmd.personaggioId}`), {
+                method: 'PUT',
+                body: JSON.stringify({ data: JSON.stringify(cmd.data), status: 'morto' })
+            });
+            break;
+        case 'sendDocument':
+            await requestJson(apiUrl('/api/documenti'), {
+                method: 'POST',
+                body: JSON.stringify(cmd.payload)
+            });
+            break;
+        default:
+            throw new Error('Tipo comando sconosciuto: ' + cmd.type);
+    }
+}
+
+export async function processPendingCommands() {
+    if (!navigator.onLine || pendingCommands.length === 0) return;
+    // Raggruppa i comandi updateMagazzino (merge dei campi)
+    const grouped = {};
+    const others = [];
+    for (const cmd of pendingCommands) {
+        if (cmd.type === 'updateMagazzino') {
+            if (!grouped.updateMagazzino) grouped.updateMagazzino = { fields: {} };
+            Object.assign(grouped.updateMagazzino.fields, cmd.fields);
+        } else {
+            others.push(cmd);
+        }
+    }
+    const toProcess = [];
+    if (grouped.updateMagazzino) toProcess.push({ type: 'updateMagazzino', fields: grouped.updateMagazzino.fields });
+    toProcess.push(...others);
+
+    const toRetry = [];
+    for (const cmd of toProcess) {
+        try {
+            await executeCommand(cmd);
+        } catch (e) {
+            console.warn('Comando fallito, riproverò dopo:', cmd, e);
+            toRetry.push(cmd);
+        }
+    }
+    pendingCommands = toRetry;
+    savePendingCommands();
+}
+
+
+export function getPendingDeadIds() {
+    return pendingCommands
+        .filter(cmd => cmd.type === 'markDead')
+        .map(cmd => cmd.personaggioId);
+}
+// ---------- FINE OUTBOX ----------
+
 export const LOCAL_STORAGE_PREFIX = "personaggio_";
+
+// ---------- POLLING DINAMICO CON VISIBILITY ----------
+let fastPollIntervalId = null;
+let slowPollIntervalId = null;
+let fastPollDelay = 500;
+let slowPollDelay = 3000;
+
+function startFastPoll() {
+    if (fastPollIntervalId) clearInterval(fastPollIntervalId);
+    fastPollIntervalId = setInterval(async () => {
+        if (navigator.onLine) {
+            await syncMagazzinoDalServer();
+        }
+    }, fastPollDelay);
+}
+
+let isSyncingMagazzino = false;
+export async function syncMagazzinoDalServer() {
+    if (isSyncingMagazzino) return;
+    isSyncingMagazzino = true;
+    try {
+        const data = await requestJson(apiUrl('/api/magazzino'));
+        if (data.magazzino && data.magazzino.data) {
+            setMagazzino(data.magazzino.data);
+            window.magazzino = magazzino;
+            if (typeof magazzino.oreTotali === 'number' && magazzino.oreTotali > (window.oreTotali || 0)) {
+                window.oreTotali = magazzino.oreTotali;}
+            if (typeof window.renderCimitero === 'function') {
+                window.renderCimitero();
+            }
+        }
+    } catch (error) {
+        console.warn('Impossibile aggiornare il magazzino dal server:', error?.message || error);
+    } finally {
+        isSyncingMagazzino = false;
+    }
+}
+
+function startSlowPoll() {
+    if (slowPollIntervalId) clearInterval(slowPollIntervalId);
+    slowPollIntervalId = setInterval(async () => {
+        if (navigator.onLine) {
+            const user = getCurrentUser();
+            if (!user) return;
+            // Solo per i giocatori: sincronizza stati, documenti e personaggi propri
+            if (user.role !== 'master') {
+                await syncStatiDalServer();
+                await syncDocumentiDalServer();
+                for (const p of party) {
+                    if (p.user_id === user.id) {
+                        await sincronizzaPersonaggio(p);
+                    }
+                }
+            }
+            // Il master aggiorna il party tramite caricaPartyMaster in auth-ui.js
+            if (typeof window.aggiornaInterfaccia === 'function') window.aggiornaInterfaccia();
+            if (typeof window.renderCharacterList === 'function') window.renderCharacterList();
+        }
+    }, slowPollDelay);
+}
+
+document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+        fastPollDelay = 2000;
+        slowPollDelay = 8000;
+    } else {
+        fastPollDelay = 500;
+        slowPollDelay = 3000;
+    }
+    startFastPoll();
+    startSlowPoll();
+    // Anche il polling del party (in auth-ui.js) verrà gestito separatamente
+});
 
 // logic.js – modifica la sezione apiBaseUrl
 const apiBaseUrl = (() => {
@@ -101,14 +371,15 @@ async function requestJson(url, options = {}) {
 
 export async function updateMagazzinoFields(fields) {
     if (!fields || Object.keys(fields).length === 0) return;
-    try {
-        await requestJson(apiUrl('/api/magazzino'), {
-            method: 'PUT',
-            body: JSON.stringify({ data: fields }),
-        });
-    } catch (error) {
-        console.warn('Errore aggiornamento magazzino:', error?.message || error);
+    // Aggiorna localmente
+    Object.assign(magazzino, fields);
+    window.magazzino = magazzino;
+    if (fields.oreTotali !== undefined) {
+        window.oreTotali = fields.oreTotali;
     }
+    // Accoda il comando
+    queueCommand({ type: 'updateMagazzino', fields });
+    await processPendingCommands();
 }
 
 export async function addPushCommand(command) {
@@ -139,6 +410,10 @@ export async function fetchPersonaggioFromCloud(nome) {
 function salvaPersonaggio(p) {
     if (p && typeof salvaPersonaggioCloud === 'function') {
         salvaPersonaggioCloud(p);
+    }
+    if (error.message.includes('403')) {
+        console.warn('Permesso negato. Salvataggio solo locale.');
+        return; // non riprovare
     }
 }
 
@@ -220,9 +495,35 @@ export async function sincronizzaPersonaggio(personaggioLocale) {
             await salvaPersonaggioCloud(localCopy);
             return localCopy;
         } else {
+            // Il cloud è più aggiornato, ma preserviamo l'azione corrente se presente con onComplete
             const merged = { ...cloudData.data, updated_at: cloudData.updated_at };
-            salvaPersonaggioLocalmente(merged);
             const idx = party.findIndex(p => p.nome === merged.nome);
+            if (idx !== -1) {
+                const localPersonaggio = party[idx];
+                // Se il personaggio locale ha un'azione corrente con onComplete (funzione) o ha una coda non vuota,
+                // preserviamo azioneCorrente e codaAzioni per non perdere il callback.
+                const hasLocalAction = localPersonaggio && localPersonaggio.azioneCorrente && typeof localPersonaggio.azioneCorrente.onComplete === 'function';
+                const hasLocalQueue = localPersonaggio && localPersonaggio.codaAzioni && localPersonaggio.codaAzioni.length > 0;
+                if (hasLocalAction || hasLocalQueue) {
+                    // Salva localmente le azioni in corso
+                    const azioneCorrenteLocale = localPersonaggio.azioneCorrente || null;
+                    const codaAzioniLocale = localPersonaggio.codaAzioni ? [...localPersonaggio.codaAzioni] : [];
+                    // Unisci i dati dal cloud
+                    Object.assign(localPersonaggio, merged);
+                    // Ripristina le azioni locali (che contengono onComplete)
+                    localPersonaggio.azioneCorrente = azioneCorrenteLocale;
+                    localPersonaggio.codaAzioni = codaAzioniLocale;
+                    // Aggiorna il timestamp locale per evitare che al prossimo polling il cloud sovrascriva di nuovo
+                    localPersonaggio.updated_at = nowTimestamp();
+                    salvaPersonaggioLocalmente(localPersonaggio);
+                    // Non salviamo subito sul cloud per non creare un conflitto; il prossimo ciclo di sync farà il merge
+                    return localPersonaggio;
+                }
+            }
+            // Nessuna azione critica da preservare: sovrascrivi normalmente
+            Object.assign(personaggioLocale, merged);
+            salvaPersonaggioLocalmente(personaggioLocale);
+            // Nota: se idx era -1, non facciamo nulla; se idx esisteva ma non è entrato nell'if, riusiamo lo stesso idx
             if (idx !== -1) {
                 Object.assign(party[idx], merged);
             }
@@ -234,33 +535,12 @@ export async function sincronizzaPersonaggio(personaggioLocale) {
     }
 }
 
-let isSyncingMagazzino = false;
-export async function syncMagazzinoDalServer() {
-    if (isSyncingMagazzino) return;
-    isSyncingMagazzino = true;
-    try {
-        const data = await requestJson(apiUrl('/api/magazzino'));
-        if (data.magazzino && data.magazzino.data) {
-            setMagazzino(data.magazzino.data);
-            window.magazzino = magazzino;
-            if (typeof magazzino.oreTotali === 'number' && magazzino.oreTotali > (window.oreTotali || 0)) {
-                window.oreTotali = magazzino.oreTotali;}
-            if (typeof window.renderCimitero === 'function') {
-                window.renderCimitero();
-            }
-        }
-    } catch (error) {
-        console.warn('Impossibile aggiornare il magazzino dal server:', error?.message || error);
-    } finally {
-        isSyncingMagazzino = false;
-    }
-}
-
-async function syncStatiDalServer() {
+export async function syncStatiDalServer(personaggioId = null) {
     if (!Array.isArray(party)) return;
     const user = getCurrentUser();
     if (!user) return;
-    for (const personaggio of party) {
+    const targets = personaggioId ? party.filter(p => p.id === personaggioId) : party;
+    for (const personaggio of targets) {
         if (!personaggio.id) continue;
         if (user.role !== 'master' && personaggio.user_id !== user.id) continue;
         try {
@@ -274,12 +554,12 @@ async function syncStatiDalServer() {
         }
     }
 }
-
-async function syncDocumentiDalServer() {
+export async function syncDocumentiDalServer(personaggioId = null) {
     if (!Array.isArray(party)) return;
     const user = getCurrentUser();
     if (!user) return;
-    for (const personaggio of party) {
+    const targets = personaggioId ? party.filter(p => p.id === personaggioId) : party;
+    for (const personaggio of targets) {
         if (!personaggio.id) continue;
         if (user.role !== 'master' && personaggio.user_id !== user.id) continue;
         try {
@@ -331,74 +611,6 @@ async function syncInvitiPendenti() {
         }
     }
 }
-// DOPO
-let syncPollingIntervalFast = null;
-let syncPollingIntervalSlow = null;
-let syncListenersAttached = false;
-let _slowSyncInFlight = false;
-
-// Poll veloce: 1 sola richiesta leggera (magazzino), sicuro anche a 0.5s
-const FAST_POLL_MS = 500;
-// Poll lento: sync pesante (stati/documenti/personaggi = N richieste), va tenuto più largo
-// per non saturare un tunnel ngrok gratuito o il DB SQLite con burst di richieste
-const SLOW_POLL_MS = 3000;
-
-export async function avviaAscoltoDatiCloud() {
-    if (syncPollingIntervalFast || syncPollingIntervalSlow) return;
-
-    syncPollingIntervalFast = setInterval(async () => {
-        if (!navigator.onLine) return;
-        const user = getCurrentUser();
-        if (!user) return;
-        await syncMagazzinoDalServer();
-        if (typeof window.aggiornaInterfaccia === 'function') window.aggiornaInterfaccia();
-    }, FAST_POLL_MS);
-
-    syncPollingIntervalSlow = setInterval(async () => {
-        if (!navigator.onLine) return;
-        if (_slowSyncInFlight) return; // evita di accodare cicli se il precedente non è ancora finito
-        const user = getCurrentUser();
-        if (!user) return;
-        _slowSyncInFlight = true;
-        try {
-            await syncStatiDalServer();
-            await syncDocumentiDalServer();
-
-            if (user.role === 'master' || window.location.hash === '#lobby' || !window.inGioco) {
-                await fetchUserCharacters();
-            }
-
-            if (party.length > 0) {
-                for (const p of party) {
-                    await sincronizzaPersonaggio(p);
-                }
-            }
-
-            if (typeof window.aggiornaInterfaccia === 'function') window.aggiornaInterfaccia();
-            if (typeof window.renderCharacterList === 'function') window.renderCharacterList();
-        } finally {
-            _slowSyncInFlight = false;
-        }
-    }, SLOW_POLL_MS);
-
-    if (!syncListenersAttached) {
-        window.addEventListener('online', async () => {
-            await syncMagazzinoDalServer();
-            await syncStatiDalServer();
-            await syncDocumentiDalServer();
-            party.forEach(p => sincronizzaPersonaggio(p));
-        });
-        syncListenersAttached = true;
-    }
-
-    await syncMagazzinoDalServer();
-    await syncStatiDalServer();
-    await syncDocumentiDalServer();
-}
-
-export function refreshPartyListeners() {
-    if (typeof window.aggiornaInterfaccia === 'function') window.aggiornaInterfaccia();
-}
 
 // ---------- CLASSE PERSONAGGIO ----------
 export class Personaggio {
@@ -408,16 +620,8 @@ export class Personaggio {
         this.diabeteTipoII = false;
         this.diabeteUltimoPastoTimestamp = null;      // ora di gioco (oreTotali) ultimo pasto
         this.diabeteTimerMax = 72;                    // 3 giorni
-        this.diabeteUltimoConsumoStaminaTimestamp = null;
         this.diabeteStaminaSpesaLog = [];             // [{ora, qty}] finestra 4h iperglicemia
         this._diabeteInstabile = false;               // blocco guarigione PF (Diabete II)
-        this._diabeteInsulinaInizializzata = false;
-        this.forza = 5;
-        this.destrezza = 5;
-        this.costituzione = 5;
-        this.intelligenza = 5;
-        this.saggezza = 5;
-        this.carisma = 5;
         this.pesoCorporeo = { usiCuscinetto: null, benNutritoOreAccumulate: 0 };
 
         this.fame = 14;
@@ -433,6 +637,7 @@ export class Personaggio {
         this.puntiFeritaRealiMaxBase = 5;
         this.puntiFeritaReali = 5;
         this.puntiFortunaMax = 15;
+        this.rancoreDurataOre = null;
         this.puntiFortuna = 15;
         this.vittorieCombattimento = 0;
         this.pmMedicina = 0;
@@ -474,22 +679,17 @@ export class Personaggio {
             'Rampini e fruste': 0,
             'Mazze e armi contundenti': 0
         };
-        this.allattributeMax = {};
         this.oreAllenamento = 0;
         this.ultimoGiornoAllenamento = 0;
 
         this.apprendimento = {};
-        this._asmaShortRestWindowHours = 0;
-        this._asmaShortRestGained = 0;
         this._asmaShortRestBoost = false;
-        this._asmaCapNotified = false;
         this.oreStudioPerMateria = {};
         this.oreStudioGiornaliere = 0;
         this.studyOverload = false;
         this.masteries = [];
         this.vantaggi = {};
         this.svantaggi = {};
-        this.ultimoGiornoStudio = 0;
         this.ultimoStudioOre = 0;
         this.puntiFeritaRealiMax = this.puntiFeritaRealiMaxBase;
         this.azioneCorrente = null;
@@ -520,14 +720,12 @@ export class Personaggio {
         this.lingue = ['Verbum'];
         this.corazzaAPiastreMax = 20;
         this.corazzaAPiastre = 20;
-        this.puntiCreazione = 48;
+        this.puntiCreazione = 63;
         this.livelloMagia = 0;
         this.manaMax = 0;
         this.manaAttuale = 0;
         this.spellsKnown = {0: 0, 1: 0, 2: 0, 3: 0, 4: 0};
-        this.manaRiposoTimer = 0;
         this.piattiDeliziosi = 0;
-        this.autoRisorse = {fame: null, sete: null, sonno: null};
         this.isRobot = false;
         this.robotPFMax = 50;
         this.robotPF = 50;
@@ -614,7 +812,7 @@ export class Personaggio {
         if (this.hasPerk && this.hasPerk('Facchino esperto')) {
             cap *= 2;
         }
-        return Math.max(0, cap);
+        return Math.max(2, cap);
     }
 // Ricalcola pesoAttuale includendo batterie e oggetti magici
     get pesoAttuale() {
@@ -1362,8 +1560,8 @@ export class Personaggio {
                     motivi.push("Grande taglia (+2)");
                 }
                 if (haPerk("Piccola taglia")) {
-                    valoreBase -= 2;
-                    motivi.push("Piccola taglia (-2)");
+                    valoreBase -= 1;
+                    motivi.push("Piccola taglia (-1)");
                 }
                 if (haPerk("Anoressico")) {
                     valoreBase -= 2;
@@ -1890,8 +2088,10 @@ export class Personaggio {
     registraVittoriaCombattimento() {
         this.vittorieCombattimento += 1;
         if (this.vittorieCombattimento % 3 === 0) {
-            const effMax = this.puntiFortunaMaxEffettivo;
-            this.puntiFortunaMax = Math.min(effMax, this.puntiFortunaMax + 1);
+            this.puntiFortunaMax += 1;
+            if (typeof window.mostraNotificaInAlto === 'function') {
+                window.mostraNotificaInAlto(`${this.nome}: +1 Punti Fortuna Massimi (ora ${this.puntiFortunaMax}) per 3 vittorie in combattimento.`, 'successo');
+            }
         }
     }
 
@@ -2324,6 +2524,16 @@ export class Personaggio {
                         window.mostraNotificaInAlto(`${this.nome} è passato da Anoressico a Sottopeso!`, 'successo');
                     }
                 }
+            } else if (this.rancoreTargetId && this.rancoreDurataOre !== null) {
+                this.rancoreDurataOre -= 1;
+                if (this.rancoreDurataOre <= 0) {
+                    const bersaglio = window.party?.find(x => x.id === this.rancoreTargetId);
+                    this.rancoreTargetId = null;
+                    this.rancoreDurataOre = null;
+                    if (typeof window.mostraNotificaInAlto === 'function') {
+                        window.mostraNotificaInAlto(`${this.nome} non nutre più rancore verso ${bersaglio?.nome || 'qualcuno'}: il tempo ha placato l'astio.`, 'successo');
+                    }
+                }
             }
         }
         // ==================== 7. NORMALIZZA PF FORTUNA ====================
@@ -2488,7 +2698,7 @@ export class Personaggio {
         return null;
     }
 
-    tickOre(ore) {
+      tickOre(ore) {
         for (let i = 0; i < ore; i++) {
             const causa = this.tickOra();
             const giornoAttuale = Math.floor((window.oreTotali || 0) / 24);
@@ -2503,11 +2713,12 @@ export class Personaggio {
 
     get velocitaAttuale() {
         let v = this.velcotiaBase || 9;
-        if (this.hasPerk('Grande taglia')) v -= 2;
+        if (this.hasPerk('Grande taglia')) v -= 1;
         if (this.hasPerk('Piccola taglia')) v += 2;
         if (this.hasPerk('Corridore')) v += 1;
         if (this.hasPerk('Obeso')) v -= 3;
         if (this.hasPerk('Sovrappeso')) v -= 1;
+        if(this.hasPerk('Pesante')) v-=3;
         if (this.hasPerk('Carapace/Esoscheletro duro')) v -= 3;
         v = Math.max(0, v);
         if (this.hasPerk('Zoppo')) v = v / 2;
@@ -2654,18 +2865,41 @@ export class Personaggio {
                     window.mostraNotificaInAlto(`⚠️ Bug: l'azione di ${this.nome} si interrompe a metà e fallisce!`, 'pericolo');
                 }
                 this.azioneCorrente = this.codaAzioni.shift() || null;
-                // Salva dopo l'interruzione
                 if (typeof window.salvaPersonaggioCloud === 'function') {
                     window.salvaPersonaggioCloud(this);
                 }
                 return;
             }
+            // Se esiste onComplete, eseguilo
             if (typeof this.azioneCorrente.onComplete === 'function') {
-                try { this.azioneCorrente.onComplete(); } catch (e) { console.warn('Errore in onComplete:', e); }
+                try {
+                    this.azioneCorrente.onComplete();
+                } catch (e) {
+                    console.warn('Errore in onComplete:', e);
+                }
+            } else {
+                // FALLBACK: se manca onComplete, gestiamo i tipi di azione noti
+                const tipo = this.azioneCorrente.tipo;
+                if (tipo === 'esplora') {
+                    if (typeof window.terminaEsplorazione === 'function') {
+                        window.terminaEsplorazione(this);
+                    } else {
+                        console.warn('terminaEsplorazione non disponibile');
+                    }
+                } else if (tipo === 'dormi') {
+                    if (typeof this.applicaRisveglio === 'function') {
+                        this.applicaRisveglio(this.azioneCorrente.oreTotali);
+                    }
+                } else if (tipo === 'allenamento') {
+                    // per allenamento, se non c'è onComplete, non possiamo recuperare la categoria, ma possiamo loggare
+                    console.warn(`Allenamento completato senza onComplete per ${this.nome}`);
+                } else {
+                    console.warn(`Azione ${tipo} completata ma senza onComplete e nessuna gestione predefinita.`);
+                }
             }
         }
+        // Passa alla prossima azione in coda
         this.azioneCorrente = this.codaAzioni.shift() || null;
-        // Salva dopo il cambio di azione
         if (typeof window.salvaPersonaggioCloud === 'function') {
             window.salvaPersonaggioCloud(this);
         }
@@ -2798,6 +3032,10 @@ Personaggio.prototype.getModificatoreTempoAzione = function (tipoAzione, materia
     }
 
     return mult;
+};
+
+Personaggio.prototype.getSogliaStudioGiornaliero = function () {
+    return this.hasPerk('Studente devoto') ? 10 : 8; // +25%
 };
 
 Personaggio.prototype.applicaRisveglio = function (oreDormite) {

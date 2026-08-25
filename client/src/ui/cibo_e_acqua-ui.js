@@ -209,6 +209,7 @@ function openCucinaModal(idx) {
         <div style="color:#aaa; font-size:0.9rem;">2 ore, 15 cibo avariato → 1 cibo sano</div>
     </div>`;
     }
+    //test git e odio i re
     if (hasPerk(p, 'Alchimista disperato')) {
         html += `<div style="display:grid; gap:10px; margin-top:14px;">
         <button class="btn-big" style="background:#6a1b9a;" onclick="scheduleAlchimistaDisperato(${idx})">Trasforma in alchemici (3h)</button>

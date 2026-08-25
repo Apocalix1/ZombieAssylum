@@ -1,7 +1,6 @@
 import { magazzino as stateMagazzino, party, setMagazzino } from "../state.js";
 import { apiUrl, buildAuthHeaders } from '../logic/logic.js';
-import { salvaPersonaggioCloud, caricaDatiDaLocalStorage } from "../logic/logic.js";
-import { Personaggio } from "../logic/logic.js";
+import { salvaPersonaggioCloud, caricaDatiDaLocalStorage, salvaPersonaggioLocalmente } from "../logic/logic.js";
 
 const magazzino = stateMagazzino;
 window.magazzino = magazzino;
@@ -40,6 +39,40 @@ function normalizeMagazzinoItems() {
         items.push({ ...info, count });
     }
     return items;
+}
+
+window.mostraLogMagazzino = function() {
+    const log = magazzino.log || [];
+    if (log.length === 0) {
+        alert('Nessuna operazione registrata.');
+        return;
+    }
+    let msg = '📋 LOG MAGAZZINO\n\n';
+    const viste = log.slice(-50).reverse();
+    viste.forEach(entry => {
+        msg += `${entry.timestamp} – ${entry.personaggio} ${entry.azione} ${entry.quantita} x ${entry.risorsa}\n`;
+    });
+    alert(msg);
+};
+
+function registraLogMagazzino(nomePersonaggio, azione, tipo, quantita) {
+    if (!magazzino.logMagazzino) magazzino.logMagazzino = [];
+    const logEntry = {
+        time: new Date().toISOString(),
+        personaggio: nomePersonaggio,
+        azione: azione, // 'Deposita' o 'Ritira'
+        tipo: tipo,
+        quantita: quantita
+    };
+
+    // Aggiunge in cima alla lista e mantiene solo le ultime 100 transazioni per non appesantire il server
+    magazzino.logMagazzino.unshift(logEntry);
+    if (magazzino.logMagazzino.length > 100) {
+        magazzino.logMagazzino.pop();
+    }
+
+    // Salva il log aggiornato sul server
+    updateMagazzinoFields({ logMagazzino: magazzino.logMagazzino });
 }
 
 function getPersonaggioRisorse(p) {
@@ -397,10 +430,18 @@ function depositaInMagazzino(idx, tipo, quantita) {
     } else {
         magazzino[tipo] = (magazzino[tipo] || 0) + quantita;
     }
-
-    // Sincronizza con il server
+    magazzino.logMovimenti = magazzino.logMovimenti || [];
+    magazzino.logMovimenti.push({
+        oraGioco: window.oreTotali || 0,
+        personaggio: p.nome,
+        tipo: 'deposito', // oppure 'ritiro' nella funzione ritiraDaMagazzino
+        risorsa: tipo,
+        quantita: quantita
+    });
+    if (magazzino.logMovimenti.length > 300) magazzino.logMovimenti.shift();
     syncMagazzinoAfterTransfer();
     salvaPersonaggioCloud(p);
+    registraLogMagazzino(p.nome, 'Deposita', tipo, quantita);
 
     if (typeof window.aggiornaInterfaccia === 'function') window.aggiornaInterfaccia();
     renderMagazzinoModal();
@@ -466,11 +507,20 @@ function ritiraDaMagazzino(idx, tipo, quantita) {
     const invKey = mapInventario[tipo];
     if (!invKey) return alert(`Tipo risorsa non riconosciuto: ${tipo}`);
     p.inventario[invKey] = (p.inventario[invKey] || 0) + quantita;
-
-    // Sincronizza con il server
+    magazzino.logMovimenti = magazzino.logMovimenti || [];
+    magazzino.logMovimenti.push({
+        oraGioco: window.oreTotali || 0,
+        personaggio: p.nome,
+        tipo: 'deposito', // oppure 'ritiro' nella funzione ritiraDaMagazzino
+        risorsa: tipo,
+        quantita: quantita
+    });
+    if (magazzino.logMovimenti.length > 300) magazzino.logMovimenti.shift();
     syncMagazzinoAfterTransfer();
     salvaPersonaggioCloud(p);
 
+    // AGGIUNGI QUESTA RIGA QUI
+    registraLogMagazzino(p.nome, 'Ritira', tipo, quantita);
     if (typeof window.aggiornaInterfaccia === 'function') window.aggiornaInterfaccia();
     renderMagazzinoModal();
     mostraNotificaInAlto(`${p.nome} ha ritirato ${quantita} ${tipo} dal magazzino.`, 'successo');

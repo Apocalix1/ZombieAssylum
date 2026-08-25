@@ -78,10 +78,11 @@
                     <div style="margin-top:8px;">
                         <label style="display:flex; align-items:center; gap:8px;"><input type="checkbox" id="crea-robot"> <strong>Diventa un Robot</strong> <span style="color:#aaa; font-size:0.85rem; margin-left:6px;">(Non avrai più bisogno di cibo, acqua o sonno)</span></label>
                     </div>
-                    <div id="punti-residui">Punti Disponibili: <b style="color:#2ecc71">30</b></div>
+                    <div id="punti-residui">Punti Disponibili: <b style="color:#2ecc71">63</b></div>
                     <div id="stats-setup-container"></div>
                     <div id="magia-setup-container"></div>
                     <div id="artificeria-setup-container"></div>
+                    <div id="armi-setup-container"></div>
                     <div class="stats-note">
                         <p>Le statistiche saranno essenziali per le vostre avventure, ognuno ha il suo peso e importanza:</p>
                         <p><strong>Forza</strong>= Allenamento, Stamina e Attacchi fisici dipendono da essa</p>
@@ -300,31 +301,42 @@
     </div>
 
     <script>
-            const scripts = [
-            { src: '/src/database/perks.js', module: false },
-            { src: '/src/database/ricette.js', module: false },
-            { src: '/src/logic/logic.js', module: true },
-            { src: '/src/ui/ui.js', module: true },
-            { src: '/src/ui/auth-ui.js', module: true },
-            { src: '/src/ui/creazione-ui.js', module: true },
-            { src: '/src/ui/cibo_e_acqua-ui.js', module: true },
-            { src: '/src/ui/magazzino-ui.js', module: true },
-            { src: '/src/ui/spedizione-ui.js', module: true },
-            { src: '/src/ui/cimitero-ui.js', module: true },
-            { src: '/src/logic/alchimia.js', module: true },
-            { src: '/src/logic/artificeria.js', module: true },
-            { src: '/src/logic/studio.js', module: true },
-            { src: '/src/logic/master_action.js', module: true },
-            { src: '/src/logic/medicina.js', module: true }
-            ];
+    // Carica prima i database (non-moduli)
+    const dbScripts = [
+        { src: '/src/database/perks.js', module: false },
+        { src: '/src/database/ricette.js', module: false }
+    ];
+    for (const s of dbScripts) {
+        const el = document.createElement('script');
+        el.src = s.src;
+        if (s.module) el.type = 'module';
+        el.async = false;
+        document.body.appendChild(el);
+    }
 
-            for (const s of scripts) {
-            const el = document.createElement('script');
-            el.src = s.src;
-            if (s.module) el.type = 'module';
-            el.async = false;
-            document.body.appendChild(el);
-        }
-    </script>
+    // Poi carica il resto (moduli)
+    const appScripts = [
+        { src: '/src/logic/logic.js', module: true },
+        { src: '/src/ui/ui.js', module: true },
+        { src: '/src/ui/auth-ui.js', module: true },
+        { src: '/src/ui/creazione-ui.js', module: true },
+        { src: '/src/ui/cibo_e_acqua-ui.js', module: true },
+        { src: '/src/ui/magazzino-ui.js', module: true },
+        { src: '/src/ui/spedizione-ui.js', module: true },
+        { src: '/src/ui/cimitero-ui.js', module: true },
+        { src: '/src/logic/alchimia.js', module: true },
+        { src: '/src/logic/artificeria.js', module: true },
+        { src: '/src/logic/studio.js', module: true },
+        { src: '/src/logic/master_action.js', module: true },
+        { src: '/src/logic/medicina.js', module: true }
+    ];
+    for (const s of appScripts) {
+        const el = document.createElement('script');
+        el.src = s.src;
+        if (s.module) el.type = 'module';
+        el.async = false;
+        document.body.appendChild(el);
+    }
+</script>
     </body>
 </html>
