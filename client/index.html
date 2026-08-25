@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Zombie Asylum Gestionale</title>
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<div id="overlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.7); z-index:2999;"></div>
+    <div id="landing-screen" class="landing-screen">
+        <div class="landing-panel">
+            <div class="landing-header">
+                <div class="landing-tag">ZOMBIE ASYLUM</div>
+                <h1>La tua base, il tuo destino</h1>
+                <p>Entra nella modalità Giocatore o Master.</p>
+            </div>
+            <div class="landing-choices">
+                <button id="btn-player" class="btn-hero btn-landing">GIOCATORE</button>
+                <button id="btn-master" class="btn-hero btn-landing">MASTER</button>
+            </div>
+            <div style="text-align:center; margin-top:10px;">
+                <button id="btn-toggle-mobile" class="btn-hero" style="font-size:0.8rem; padding:8px 14px;">
+                    📱 Modalità Telefono: <span id="mobile-mode-status">OFF</span>
+                </button>
+            </div>
+            <div class="landing-auth hidden">
+                <div class="auth-row">
+                    <input id="login-username" placeholder="Username" type="text" />
+                    <input id="login-password" placeholder="Password" type="password" />
+                </div>
+                <div class="auth-actions">
+                    <button id="btn-login" class="btn-hero">Accedi</button>
+                    <button id="btn-register" class="btn-hero">Crea account</button>
+                </div>
+                <div id="auth-message" style="color:#f1c40f; margin-top:8px; font-size:0.95rem;"></div>
+            </div>
+            <div style="text-align:center; margin-top:8px;">
+                <button id="btn-guest" class="btn-hero">Continua come Ospite</button>
+            </div>
+            <div class="landing-info-cards">
+                <div class="landing-card">
+                    <h3>Giocatore</h3>
+                    <p>Recluta sopravvissuti, gestisci la base, manda in spedizione il party e sopravvivi ai giorni difficili.</p>
+                </div>
+                <div class="landing-card">
+                    <h3>Master</h3>
+                    <p>Controlla proposte, applica stati alterati e gestisci la narrazione di una comunità in lotta contro la follia.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-magazzino" class="modal">
+        <div class="modal-content magazzino-grande">
+            <h2>Magazzino</h2>
+            <div id="magazzino-list" style="text-align:left; max-height:300px; overflow-y:auto; background:#111; padding:10px; border:1px solid #333;"></div>
+            <div style="margin-top:12px; display:flex; gap:8px; align-items:center;">
+                <label>Destinatario:</label>
+                <select id="magazzino-target" style="flex:1;"></select>
+            </div>
+            <div style="margin-top:12px; display:flex; gap:8px; justify-content:flex-end;">
+                <button class="btn-big btn-cancel" onclick="chiudiModal('modal-magazzino')">CHIUDI</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-creazione" class="modal">
+        <div class="modal-content creatore-fullscreen">
+            <h2 style="color: #ff0000; letter-spacing: 2px; margin-bottom:15px;">NUOVO SOPRAVVISSUTO</h2>
+
+            <div class="creazione-grid">
+                <div class="stats-panel">
+                    <div class="input-group">
+                        <input type="text" id="crea-nome" placeholder="Inserisci nome...">
+                    </div>
+                    <div style="margin-top:8px;">
+                        <label style="display:flex; align-items:center; gap:8px;"><input type="checkbox" id="crea-robot"> <strong>Diventa un Robot</strong> <span style="color:#aaa; font-size:0.85rem; margin-left:6px;">(Non avrai più bisogno di cibo, acqua o sonno)</span></label>
+                    </div>
+                    <div id="punti-residui">Punti Disponibili: <b style="color:#2ecc71">30</b></div>
+                    <div id="stats-setup-container"></div>
+                    <div id="magia-setup-container"></div>
+                    <div id="artificeria-setup-container"></div>
+                    <div class="stats-note">
+                        <p>Le statistiche saranno essenziali per le vostre avventure, ognuno ha il suo peso e importanza:</p>
+                        <p><strong>Forza</strong>= Allenamento, Stamina e Attacchi fisici dipendono da essa</p>
+                        <p><strong>Destrezza</strong>= Tiri a distanza, precisione, rigenerazione dei punti fortuna dipendono da essa</p>
+                        <p><strong>Costituzione</strong>= Rigenerazione dei Punti Ferita Reale, facilità di essere curato, resistenza a malattie e cibi avariati dipendono da Essa</p>
+                        <p><strong>Intelligenza</strong>= Medicina, Arteficeria e Alchimia dipendono da essa</p>
+                        <p><strong>Saggezza</strong>= Loot trovato, percezione e sopravvivenza dipendono da essa</p>
+                        <p><strong>Carisma</strong>= Amicizie, trattazioni, simpatie, resistenza alla follia dipendono da essa</p>
+                    </div>
+                </div>
+                <div class="perks-panel">
+                    <div id="perks-setup-container"></div>
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <button class="btn-big btn-cancel" onclick="annullaCreazione()">ANNULLA</button>
+                <button class="btn-big btn-confirm" onclick="confermaCreazione()">SALVA</button>
+            </div>
+        </div>
+    </div>
+    <div id="lobby-screen" class="game-screen hidden">
+        <header>
+            <div id="lobby-header">
+                <h2>Lobby Giocatore</h2>
+                <div id="lobby-user"></div>
+            </div>
+        </header>
+        <main style="padding:16px;">
+            <div style="display:flex; gap:8px; margin-bottom:12px; justify-content:center;">
+                <div style="display:flex; gap:8px; margin-bottom:12px; justify-content:center;">
+                    <button id="lobby-btn-recluta" class="btn-hero">➕ Crea Personaggio</button>
+                    <button id="lobby-btn-entra" class="btn-hero">🎮 Entra in Gioco</button>
+                </div>
+            </div>
+            <div id="lobby-characters" style="display:grid; gap:8px;"></div>
+        </main>
+    </div>
+
+    <div id="game-screen" class="game-screen hidden">
+        <header>
+            <div id="status-bar">
+                <span>📅 GIORNO: <b id="display-giorno">0</b></span>
+                <span>🕒 ORA: <b id="display-ora">00:00</b></span>
+                <span class="role-indicator">🛡️ RUOLO: <b id="display-role">Nessuno</b></span>
+                <span id="backend-status" style="margin-left:12px; color:#f1c40f; font-size:0.95rem;">🔌 Server: <b id="backend-status-text">sconosciuto</b></span>
+                <span>🍞 CIBO: <b id="display-cibo">10</b> <span style="font-size:0.85em; color:#ecf0f1;">(🥫 <b id="display-conserve">0</b> • 🍽️ <b id="display-piatti-deliziosi">0</b> • 🤮 <b id="display-cibo-avariato">0</b>)</span></span>
+                <span>💧 ACQUA: <b id="display-acqua">10</b></span>
+                <span>⚗️ ALCHEMICI: <b id="display-alchemici">5</b></span>
+                <span>🔬 POSTAZIONE: <b id="display-alchemy-status">No</b></span>
+                <span>🧪 COMPOSTI: <b id="display-compounds">0</b></span>
+                <span>⚙️ INGRANAGGI: <b id="display-ingranaggi">3</b></span>
+                <span>🩺 MEDICI: <b id="display-medici-base">2</b>/<b id="display-medici-avanzati">1</b>/<b id="display-medici-critici">0</b></span>
+            </div>
+        </header>
+
+        <main>
+            <div class="controlli-globali">
+                <button id="btn-recluta" class="btn-hero" onclick="avviaCreazione()">➕ RECLUTA</button>
+                <button id="btn-attendi" class="btn-hero" onclick="passaTempoGlobale()">⏳ ATTENDI</button>
+                <button id="btn-spedizione" class="btn-hero" onclick="mandaTuttiInSpedizione()">🚚 SPEDISCI TUTTI</button>
+                <button id="btn-biblioteca" class="btn-hero guest-allow" onclick="apriBiblioteca()">📚 BIBLIOTECA</button>
+                <button id="btn-caduti" class="btn-hero guest-allow" onclick="toggleCimitero()">🪦 CADUTI</button>
+                <button id="btn-magazzino" class="btn-hero guest-allow" onclick="openMagazzino()">📦 MAGAZZINO</button>
+                <button id="btn-master-panel" class="btn-hero master-only hidden" onclick="apriPannelloMaster()">👑 MASTER</button>
+            </div>
+            <div id="party-container"></div>
+        </main>
+
+    <div id="side-cimitero">
+        <h2>I Caduti</h2>
+        <div id="cimitero-lista"></div>
+        <button class="btn-close-side" onclick="chiudiCimitero()">CHIUDI</button>
+    </div>
+
+    <div id="side-spedizione" class="side-panel">
+        <h2>SCHEDA COMBATTIMENTO</h2>
+        <div id="spedizione-content" style="text-align:left;"></div>
+        <div class="side-panel-footer">
+            <button class="btn-big btn-cancel" onclick="chiudiSpedizione()">CHIUDI</button>
+            <button class="btn-big btn-confirm" onclick="ritiraTutti()">RITIRA TUTTI</button>
+        </div>
+    </div>
+
+    <div id="modal-scheda" class="modal">
+        <div class="modal-content">
+            <h2 id="scheda-nome"></h2>
+            <div id="scheda-stats"></div>
+            <div id="scheda-bio"></div>
+            <div class="modal-footer">
+                <button class="btn-big btn-cancel" onclick="chiudiScheda()">CHIUDI</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-medica" class="modal">
+        <div class="modal-content">
+            <h2 style="color:#ff0000; letter-spacing: 2px; margin-bottom:15px;">POSTAZIONE MEDICA</h2>
+            <div id="medica-content" style="text-align:left;"></div>
+            <div class="modal-footer">
+                <button class="btn-big btn-cancel" onclick="chiudiModal('modal-medica')">CHIUDI</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-risorse" class="modal">
+        <div class="modal-content">
+            <h2 id="risorse-titolo" style="color:#ff0000; letter-spacing: 2px; margin-bottom:15px;"></h2>
+            <div id="risorse-content" style="text-align:left; max-height:420px; overflow-y:auto; background:#111; padding:10px; border:1px solid #333;"></div>
+            <div class="modal-footer">
+                <button class="btn-big btn-cancel" onclick="chiudiModal('modal-risorse')">CHIUDI</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-cucina" class="modal">
+        <div class="modal-content">
+            <h2 style="color:#ff0000; letter-spacing: 2px; margin-bottom:15px;">CUCINA</h2>
+            <div id="cucina-content" style="text-align:left; max-height:420px; overflow-y:auto; background:#111; padding:10px; border:1px solid #333;"></div>
+            <div class="modal-footer">
+                <button class="btn-big btn-cancel" onclick="chiudiModal('modal-cucina')">CHIUDI</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-biblioteca" class="modal">
+        <div class="modal-content">
+            <h2 style="color:#ff0000; letter-spacing: 2px; margin-bottom:15px;">BIBLIOTECA</h2>
+            <div id="biblioteca-content" style="text-align:left; max-height:400px; overflow-y:auto; background:#111; padding:10px; border:1px solid #333;"></div>
+            <div class="modal-footer">
+                <button class="btn-big btn-cancel" onclick="chiudiModal('modal-biblioteca')">CHIUDI</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-studio" class="modal">
+        <div class="modal-content">
+            <h2 style="color:#ff0000; letter-spacing: 2px; margin-bottom:15px;">STUDIO</h2>
+            <div id="studio-content" style="text-align:left; max-height:420px; overflow-y:auto; background:#111; padding:10px; border:1px solid #333;"></div>
+            <div class="modal-footer">
+                <button class="btn-big btn-cancel" onclick="chiudiModal('modal-studio')">CHIUDI</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-regista-attacco" class="modal">
+        <div class="modal-content">
+            <h2 style="color:#ff0000; letter-spacing: 2px; margin-bottom:15px;">📈 REGISTA ATTACCO</h2>
+            <div id="regista-attacco-content" style="text-align:left; max-height:400px; overflow-y:auto; background:#111; padding:10px; border:1px solid #333;"></div>
+            <div class="modal-footer">
+                <button class="btn-big btn-cancel" onclick="chiudiModal('modal-regista-attacco')">CHIUDI</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-allenamento" class="modal">
+        <div class="modal-content">
+            <h2 style="color:#ff0000; letter-spacing: 2px; margin-bottom:15px;">🏋️ ALLENAMENTO</h2>
+            <div id="allenamento-content" style="text-align:left; max-height:400px; overflow-y:auto; background:#111; padding:10px; border:1px solid #333;"></div>
+            <div class="modal-footer">
+                <button class="btn-big btn-cancel" onclick="chiudiModal('modal-allenamento')">CHIUDI</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-perk-viewer" class="modal">
+        <div class="modal-content">
+            <h2 style="color:#ff0000; letter-spacing: 2px; margin-bottom:15px;">COMPETENZE E PERK</h2>
+            <div id="perk-viewer-content" style="text-align:left; max-height:450px; overflow-y:auto; background:#111; padding:10px; border:1px solid #333;"></div>
+            <div class="modal-footer">
+                <button class="btn-big btn-cancel" onclick="chiudiModal('modal-perk-viewer')">CHIUDI</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-alchimia" class="modal">
+        <div class="modal-content">
+            <h2 style="color:#ff0000; letter-spacing: 2px; margin-bottom:15px;">⚗️ ALCHEMIA</h2>
+            <div id="alchimia-content" style="text-align:left; max-height:450px; overflow-y:auto; background:#111; padding:10px; border:1px solid #333;"></div>
+            <div class="modal-footer">
+                <button class="btn-big btn-cancel" onclick="chiudiModal('modal-alchimia')">CHIUDI</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-aiuto" class="modal">
+        <div class="modal-content">
+            <h2 style="color:#ff0000; letter-spacing: 2px; margin-bottom:15px;">🤝 AIUTA QUALCUNO</h2>
+            <div id="aiuto-content" style="text-align:left; max-height:450px; overflow-y:auto; background:#111; padding:10px; border:1px solid #333;"></div>
+            <div class="modal-footer">
+                <button class="btn-big btn-cancel" onclick="chiudiModal('modal-aiuto')">CHIUDI</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-master-panel" class="modal">
+        <div class="modal-content" style="width: 80%; max-width: 800px;">
+            <h2 style="color:#f1c40f; letter-spacing: 2px; margin-bottom:15px;">👑 PANNELLO MASTER</h2>
+            <div id="master-panel-content" style="text-align:left; max-height:500px; overflow-y:auto; background:#111; padding:15px; border:1px solid #f1c40f;">
+                <!-- Caricato via JS in ui.js -->
+            </div>
+            <div class="modal-footer">
+                <button class="btn-big btn-cancel" onclick="chiudiModal('modal-master-panel')">CHIUDI</button>
+            </div>
+        </div>
+    </div>
+    </div>
+    <div id="modal-follia" class="modal">
+        <div class="modal-content">
+            <h2 style="color:#e74c3c; letter-spacing: 2px; margin-bottom:15px;">🧠 SISTEMA FOLLIA</h2>
+            <div id="follia-content" style="text-align:left; max-height:450px; overflow-y:auto; background:#111; padding:10px; border:1px solid #333;"></div>
+            <div class="modal-footer">
+                <button class="btn-big btn-cancel" onclick="chiudiModal('modal-follia')">CHIUDI</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+            const scripts = [
+            { src: '/src/database/perks.js', module: false },
+            { src: '/src/database/ricette.js', module: false },
+            { src: '/src/logic/logic.js', module: true },
+            { src: '/src/ui/ui.js', module: true },
+            { src: '/src/ui/auth-ui.js', module: true },
+            { src: '/src/ui/creazione-ui.js', module: true },
+            { src: '/src/ui/cibo_e_acqua-ui.js', module: true },
+            { src: '/src/ui/magazzino-ui.js', module: true },
+            { src: '/src/ui/spedizione-ui.js', module: true },
+            { src: '/src/ui/cimitero-ui.js', module: true },
+            { src: '/src/logic/alchimia.js', module: true },
+            { src: '/src/logic/artificeria.js', module: true },
+            { src: '/src/logic/studio.js', module: true },
+            { src: '/src/logic/master_action.js', module: true },
+            { src: '/src/logic/medicina.js', module: true }
+            ];
+
+            for (const s of scripts) {
+            const el = document.createElement('script');
+            el.src = s.src;
+            if (s.module) el.type = 'module';
+            el.async = false;
+            document.body.appendChild(el);
+        }
+    </script>
+    </body>
+</html>
