@@ -12,8 +12,8 @@ const BOOK_SUBJECT_TITLES = {
         'Incantesimi che non userai mai'
     ],
     'Cucina': [
-        'Dolci e Dessert da Gramon Taurs',
-        'Il vegetariano è overated. 200 ricette su come sentirti un vero predatore',
+        'Come usare ogni tipi di crema al proprio meglio-Orzo Scagliaguzza',
+        'Sentimi: la carne delle razze umanoidi sai che...-Dr Milo',
         'Ricette da tutte le isole volanti',
         'Mestolo d\'oro'
     ],
@@ -60,10 +60,10 @@ const BOOK_SUBJECT_TITLES = {
         'Scassinare non è da ladri'
     ],
     'Sopravvivenza': [
-        'La natura che può salvare',
-        'Come riconoscere le tracce',
+        'Come sopravvivere una notte con Mariapia e Valeria',
+        'Come sopravvivere in un isola deserta con solo il gioco dell\'oca',
         'Guida per chi ancora non ha trovato un affitto',
-        'Sopravivo nella foresta con un coltellino e tante preghiere'
+        'Sopravvivo nella foresta con un coltellino e tante preghiere'
     ],
     'Religione': [
         'Dei e demoni cui non conviene fare patti (Sopratutto Kawanata)',
@@ -78,7 +78,7 @@ const BOOK_SUBJECT_TITLES = {
         'Perchè EmmaxEmy è una delle migliori coppie di Identità 5'
     ],
     'Natura': [
-        '200 piante curative',
+        'Accoppiamento tra ragni e costrutti (Laccio x Corno)',
         'Cosa non dovresti mangiare',
         'Anatomia e funzione delle forme vegetali più comuni',
         'Fiori e frutti coltivabili in giardino'
@@ -87,13 +87,14 @@ const BOOK_SUBJECT_TITLES = {
         'Picchiare tutto non è mai la soluzione',
         'Tubature, Finestre e tutto quello che ti può servire',
         'Quale strumento usare per cosa',
-        'Diventa un uomo di mano'
+        'Come aggiustare la relazione turbalenta con i propri genitori-Atlas Eadalain'
     ],
     'Intrattenere': [
         'Lore completa di 5 notti da Alfredo',
         'Libro analisi sulla Padella magica di Madoka',
         'Vestirsi per impressionare',
-        '100000 Barzellette da Gregorio Formaggi'
+        '100000 Barzellette da Gregorio Formaggi',
+        'Come diventare il protagonista (ad ogni costo)-Markim'
     ],
     'Intimidire': [
         'Come aumentare la tua aura',
@@ -323,6 +324,79 @@ function studio(idx) {
     apriStudio();
 }
 
+
+function avviaStudioLingua(idx) {
+    const p = party[idx];
+    if (!p) return;
+    if (window.hasPerk(p, 'Analfabeta')) { alert('Il tuo personaggio non sa leggere. Che stupidone!'); return; }
+    const tutte = ['Yazyk', 'Engenity', 'Chrimil', 'Ridulphi', 'Antali', 'Puleun', 'Eklesti', 'Meer'];
+    const giaConosciute = p.lingue || ['Verbum'];
+    const disponibili = tutte.filter(l => !giaConosciute.includes(l));
+    if (!disponibili.length) { alert('Conosci già tutte le lingue disponibili!'); return; }
+
+    const scelta = prompt(`Quale lingua vuoi studiare?\n${disponibili.join(', ')}`, disponibili[0]);
+    const lingua = disponibili.find(l => l.toLowerCase() === (scelta || '').toLowerCase());
+    if (!lingua) { alert('Lingua non valida o annullata.'); return; }
+
+    const subject = `Lingua:${lingua}`;
+    if (p.getStudyPoints(subject) >= 70) { alert('Hai già imparato questa lingua.'); return; }
+
+    let ore = parseInt(prompt('Quante ore vuoi dedicare allo studio della lingua?', '4'));
+    if (isNaN(ore) || ore <= 0) return;
+    ore = Math.ceil(ore * p.getModificatoreTempoAzione('studio-lingua', subject));
+
+    pianificaAzione(idx, 'studio-lingua', null, subject, lingua, ore, null);
+    document.getElementById('modal-studio').style.display = 'none';
+}
+
+function completaStudioLinguaAction(p, action) {
+    const subject = action.subject;
+    const lingua = action.linguaTarget;
+    const hours = action.oreTotali;
+
+    const isPessimoStudente = p.hasPerk && p.hasPerk('Pessimo studente');
+    const progressMultiplier = isPessimoStudente ? 0.75 : 1;
+    let effectiveAdjusted = hours;
+    if (p.hasPerk && p.hasPerk('Deconcentrato') && hours > 3) {
+        effectiveAdjusted = 3 + ((hours - 3) / 1.3);
+    }
+
+    p.oreStudioGiornaliere += hours;
+    p.studyOverload = p.oreStudioGiornaliere > getSogliaStudioGiornaliera(p);
+
+    let currentPoints = p.getStudyPoints(subject);
+    const attrMod = p.getStatDettagliata('Intelligenza').mod;
+    const summary = [];
+    const progressHoursInt = Math.ceil(Math.max(0, effectiveAdjusted * progressMultiplier));
+
+    for (let i = 0; i < progressHoursInt && currentPoints < 70; i++) {
+        const nextHourTotal = (p.oreStudioPerMateria[subject] || 0) + 1;
+        p.oreStudioPerMateria[subject] = nextHourTotal;
+        const die = getStudyDieByTotalHours(nextHourTotal, p);
+        let roll = rollDiceNotation(die) + attrMod;
+        if (p.hasPerk && p.hasPerk('Apprendimento accellerato')) roll += 3;
+        if (hasTeacher(p)) roll = Math.max(roll, rollDiceNotation(die) + attrMod);
+        if (p.studyOverload) roll = Math.max(0, roll - 2);
+        currentPoints += roll;
+        summary.push(`${die}+${attrMod}=${roll}`);
+    }
+    currentPoints = Math.min(70, currentPoints);
+    p.apprendimento[subject] = currentPoints;
+    p.ultimoStudioOre = oreTotali;
+
+    let message = `${p.nome} studia ${lingua} per ${hours}h (${summary.join(', ')}) e arriva a ${currentPoints}/70 punti.`;
+    if (currentPoints >= 70 && !p.lingue.includes(lingua)) {
+        p.lingue.push(lingua);
+        message += ` 🎉 Ha imparato ${lingua}!`;
+    }
+    if (p.studyOverload) message += ' Sovraccarico attivo.';
+    mostraNotificaInAlto(message, 'successo');
+    salvaPersonaggioCloud(p);
+}
+
+window.avviaStudioLingua = avviaStudioLingua;
+window.completaStudioLinguaAction = completaStudioLinguaAction;
+
 function apriStudio() {
     const modal = document.getElementById('modal-studio');
     const content = document.getElementById('studio-content');
@@ -355,6 +429,7 @@ function renderStudioModal() {
     html += '</div>';
     html += '<div style="margin-bottom:10px; font-size:0.9rem; color:#ddd;"><strong>Libri disponibili:</strong></div>';
     html += '<div style="display:grid; gap:8px; max-height:320px; overflow-y:auto;">';
+    html += `<button class="btn-hero" style="margin-bottom:10px;" onclick="avviaStudioLingua(${studioPersonaggioSelezionato})">🗣️ Studia una lingua</button>`;
     magazzino.libri.forEach((book, idx) => {
         const remaining = Math.max(0, book.maxStudyHours - book.usedHours);
         html += `<div class="stat-row" style="background:#111; display:grid; grid-template-columns: 1fr 110px 120px 90px; gap:6px; align-items:center;">

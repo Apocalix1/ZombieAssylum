@@ -770,6 +770,8 @@ function getPerkBaseName(nomePerk) {
     if (clean.startsWith("Anziana_")) return "Anziana";
     if (clean.startsWith("Lingue (")) return "Lingue";
     if (clean.startsWith("Ignorante (")) return "Ignorante";
+    if (clean.startsWith("Razzista (")) return "Razzista";
+    if (clean.startsWith("Misogino/Androgeno (")) return "Misogino/Androgeno";
     return clean;
 }
 
@@ -2089,10 +2091,15 @@ function pianificaAzione(idx, tipo, bookId = null, subject = null, bookTitle = n
     const p = party[idx];
     if (!puoIniziareAzione(p, tipo)) return;
     let plannedHours;
-    if (tipo === 'studio-libro') {
+    if (tipo === 'studio-libro' || tipo === 'studio-lingua') {
         if (!bookId || !ore) return;
         plannedHours = ore;
-    } else {
+    } else if (tipo === 'studio-lingua') {
+    nuovaAzione.subject = subject;
+    nuovaAzione.linguaTarget = bookTitle; // riuso il parametro come nome lingua
+    nuovaAzione.onComplete = () => completaStudioLinguaAction(p, nuovaAzione);
+} 
+    else {
         const defaultHours = tipo === 'dormi' ? '8' : '1';
         plannedHours = prompt(`Quante ore vuoi dedicare a: ${tipo.toUpperCase()}?`, defaultHours);
         plannedHours = parseFloat(plannedHours);
@@ -2469,10 +2476,11 @@ function togglePerk(nomePerk, forceRemove = false) {
         const index = p.perks.findIndex(pp => getPerkBaseName(perkObjectName(pp)) === getPerkBaseName(perkDati.nome));
         if (index === -1) return;
         const removed = p.perks[index];
-        if (getPerkBaseName(perkDati.nome) === 'Lingue') {
+        if (getPerkBaseName(perkDati.nome) === 'Lingue'|| getPerkBaseName(perkDati.nome) === 'Razzista') {
             const match = /\(([^)]+)\)/.exec(perkObjectName(removed));
             if (match && p.lingue) p.lingue = p.lingue.filter(l => l !== match[1]);
         }
+
         p.perks.splice(index, 1);
         if (getPerkBaseName(perkDati.nome) === 'Obeso' || getPerkBaseName(perkDati.nome) === 'Sovrappeso') {
             p.pesoCorporeo = p.pesoCorporeo || {};
@@ -2526,6 +2534,48 @@ function togglePerk(nomePerk, forceRemove = false) {
             }
             p.lingue = [...giaConosciute, trovata];
             p.perks.push({...perkDati, nome: `Lingue (${trovata})`});
+        } else if (nomePerk === 'Razzista') {
+            const razze = [
+                'Apide', 'Arakokra (Uccelloide rapace)', 'Bovinide', 'Canide (Umano cane/lupo)',
+                'Caprinide (Pecora umanoide)', 'Cobolto', 'Dawisu (Pavone umanoide)', 'Elfi',
+                'Goblin', 'Grong (Rana umanoide)', 'Huan-lei (Tassoide)', 'Ineac (Umano Iena)',
+                'Kitsune (Volpe umanoide)', 'Mezzelfo', 'Mezzorco', 'Nano', 'Orco',
+                'Sangliere (Cinghiale umanoide)', 'Sirena (umano pesce)', 'Tiefling', 'Umano',
+                'Usagi (coniglio umanoide)', 'Vespide', 'Yuan-thi (Umano serpente)'
+            ];
+            const giaScelte = p.perks
+            .filter(pp => getPerkBaseName(perkObjectName(pp)) === 'Razzista')
+        .   map(pp => {
+            const m = /\(([^)]+)\)$/.exec(perkObjectName(pp));
+            return m ? m[1] : null;
+                    })
+                .filter(Boolean);
+            const disponibili = razze.filter(r => !giaScelte.includes(r));
+            if (disponibili.length === 0) {
+                alert('Hai già preso Razzista verso tutte le razze disponibili!');
+                return;
+            }
+            const scelta = prompt(`Perk "Razzista": verso quale razza ottieni svantaggio Carisma?\n${disponibili.join(", ")}`, disponibili[0]);
+            const trovata = disponibili.find(r => r.toLowerCase() === (scelta || '').toLowerCase());
+            if (!trovata) {
+                alert('Razza non valida o annullata.');
+                return;
+            }
+            p.perks.push({ ...perkDati, nome: `Razzista (${trovata})` });
+        } else if (nomePerk === 'Misogino/Androfobico') {
+            const giaSelezionato = p.perks.some(pp => getPerkBaseName(perkObjectName(pp)) === 'Misogino/Androfobico');
+            if (giaSelezionato) {
+                alert('Hai già preso Misogino/Androfobico.');
+                return;
+            }
+            const scelta = prompt(`Perk "Misogino/Androfobico": ottieni svantaggio Carisma verso quale sesso?\nUomo, Donna`, "Uomo");
+            const opzioni = ['Uomo', 'Donna'];
+            const trovata = opzioni.find(o => o.toLowerCase() === (scelta || '').toLowerCase());
+            if (!trovata) {
+                alert('Scelta non valida o annullata.');
+                return;
+            }
+            p.perks.push({ ...perkDati, nome: `Misogino/Androfobico (${trovata})` });
         } else if (nomePerk === 'Obeso') {
             p.perks.push({...perkDati});
             p.pesoCorporeo = p.pesoCorporeo || {usiCuscinetto: null, benNutritoOreAccumulate: 0};
