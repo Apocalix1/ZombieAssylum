@@ -69,8 +69,8 @@ window.DATABASE_PERK = {
         { nome: "Codice Etico", desc: "Possiedi un codice morale/legale rigido. Quando compi un'azione ritenuta immorale subisci -2 ai tiri di Carisma per 24 ore.", costo: -3, skills: [] },
         { nome: "CroceRossina", desc: "Se non aiuti un compagno ferito ottieni sensi di colpa che aumentano la Follia e danno il perk Insonne. Gli effetti si possono sovrapporre fino a 4 volte.", costo: -7, skills: [] },
         { nome: "Imbarazzo", desc: "Quando fallisci una prova di Carisma su una persona, avrai svantaggio su prove di Carisma su di lei e -1 ai tiri abilità se la persona è nel raggio di vista.", costo: -4, skills: [] },
-        { nome: "Introversione", desc: "Ottieni svantaggio nelle prove di Carisma.", costo: -5, skills: [],disadvantage: ["Intimidire", "Persuasione", "Intrattenere", "Inganno"] },
-        { nome: "Misogino/Misandrica", desc: "Ottieni svantaggio nelle prove di Carisma sul sesso opposto.", costo: -3, skills: [] },
+        { nome: "Introversione", desc: "Ottieni svantaggio nelle prove di Inganno e Intrattenere", costo: -4, skills: [],disadvantage: ["Intrattenere", "Inganno"] },
+        { nome: "Misogino/Misandrico", desc: "Ottieni svantaggio nelle prove di Carisma sul sesso opposto.", costo: -3, skills: [] },
         { nome: "Panico Sociale", desc: "Se sei in presenza di più di quattro persone ottieni svantaggio nelle prove di Carisma.", costo: -2, skills: [] },
         { nome: "Paranoico", desc: "Hai una paranoia che richiede comportamenti di evitamento quotidiani; se ignorati vai in panico fino a compiere l'azione.", costo: -4, skills: [] },
         { nome: "Rancoroso", desc: "Quando qualcuno ti fa un torto subisci vari malus: +2 CD alle prove di Medicina se lo curi, -40% velocità studio/creazione lavorando con lui, +4 CD su azioni coordinate.", costo: -5, skills: [] },
@@ -80,7 +80,7 @@ window.DATABASE_PERK = {
         { nome: "Uniti siamo più forti", desc: "Se nel raggio di 3 metri ci sono almeno 2 alleati, tutti ottenete PF fortuna temporanei pari al modificatore di Carisma. Attivabile una volta a battaglia.", costo: 3, skills: [] },
         { nome: "Leader nato", desc: "Ottieni +1 al modificatore Carisma per ogni due membri del party che ti accompagnano (fino a +3).", costo: 3, skills: [] },
         { nome: "Mente ferrea", desc: "Quando vai nel panico puoi usare subito una reazione per usare Pulizia Mentale e rimuoverlo ottenendo +2. Attiva una volta per sessione.", costo: 4, skills: [] },
-        { nome: "Razzista", desc: "Ottieni svantaggio nelle prove Carisma su una razza a tua scelta. Ripetibile per più razze.", costo: -3, skills: [], repeats: true },
+       {nome: "Razzista",desc:"Ottieni svantaggi nelle prove carisma su una razza a tua scelta. Ripetibile per ogni razza disponibile.",costo:-1,skills: [],repeats:true},
         { nome: "Seduttore", desc: "Ottieni vantaggio nelle prove Carisma contro un sesso a tua scelta.", costo: 4, skills: [] },
         { nome: "Solitario", desc: "Se sei da solo ottieni +2 a tutte le prove abilità/competenze e migliori risultati nelle esplorazioni.", costo: 3, skills: [] },
         { nome: "Vendicativo", desc: "Quando un tuo alleato subisce un danno reale, ottieni vantaggio negli attacchi verso chi l'ha ferito finché non lo colpisci due volte.", costo: 4, skills: [] },
@@ -122,7 +122,7 @@ window.DATABASE_PERK = {
         { nome: "Fifone", desc: "Se entri nel raggio d’attacco di un nemico, sei spaventato una sola volta per combattimento.", costo: -4, skills: [] },
         { nome: "Gambe pesanti", desc: "Immediatamente davanti al pericolo perdi metà della velocità per un turno.", costo: -4, skills: [] },
         { nome: "Mani di burro", desc: "Quando vieni attaccato, fai TS Costituzione 10 o l’arma cade e serve un’azione per riprenderla.", costo: -4, skills: [] },
-        { nome: "Scoordinato", desc: "Muovendoti e incontrando un ostacolo hai il 50% di cadere.", costo: -4, skills: [] },
+        { nome: "Scordinato", desc: "Muovendoti e incontrando un ostacolo hai il 40% di cadere.", costo: -6, skills: [] },
         { nome: "Troppo entusiasta", desc: "-2 CA, se fallisci un attacco il nemico ottiene +2 al prossimo tiro contro di te, ma tu ottieni +2 ai tuoi tiri per colpire. Hai 1d4 danni in più sul primo attacco che compi.", costo: -7, skills: [] }
     ],
     "fisico e salute": [
@@ -140,7 +140,7 @@ window.DATABASE_PERK = {
         { nome: "Artrite", desc: "Se compi l'azione Scatto o due attacchi più di una volta, devi fare un ts su Costituzione (CD12), se lo fallisci perdi 1d6 punti fortuna e la tua velocità è ridotta di un terzo fino al prossimo riposo lungo.", costo: -7, skills: [] },
         { nome: "Asmatico", desc: "Sotto Sforzo: Quando la tua Stamina scende a 2 o meno, ottieni Svantaggio a tutte le prove di Atletica, Acrobazia e ai Tiri Salvezza su Costituzione.Crisi Respiratoria: Se esaurisci completamente la Stamina (0 tacche), entri immediatamente in uno stato di affanno grave: sei Incapacitato (non puoi compiere azioni) finché non recuperi almeno 1 tacca di Stamina tramite riposo.Recupero Lento: Durante un riposo breve, non puoi recuperare più di 2 tacche di Stamina, a meno che tu non utilizzi 10 risorse comuni mediche.", costo: -7, skills: [] },
         { nome: "Cagionevole", desc: "Ottieni -3 ai tiri contro essere avvelenato o ammalarti", costo: -5, skills: [] },
-        { nome: "Cieco", desc: "Non vedi! Fallisci automaticamente le prove riguardo lo sguardo.Ottieni maestria in Percezione. E riⁿesci a percepire le creature che si muovono e fanno rumore nel raggio di 18 metri. Ottieni -6 alla percezione passiva e il perk Scoordinato", costo: -15, skills: [] },
+        { nome: "Cieco", desc: "Non vedi! Fallisci automaticamente le prove riguardo lo sguardo.Ottieni maestria in Percezione. E riⁿesci a percepire le creature che si muovono e fanno rumore nel raggio di 18 metri. Ottieni -6 alla percezione passiva e il perk Scordinato", costo: -15, skills: [] },
         { nome: "Diabete tipo I", desc: "Ipoglicemia: Se non mangi per un giorno o esaurisci la Stamina (0 tacche), ottieni Svantaggio a tutti i tiri e sei Accecato oltre i 3 metri.Iperglicemia: Se mangi senza aver consumato almeno 2 tacche di Stamina nelle ultime 4 ore, ottieni –2 a Saggezza/Carisma e i tiri mentali/incantesimi richiedono Concetrazione CD 12.", costo: -4, skills: [] },
         { nome: "Diabete tipo II", desc: "(Include Diabete di Tipo I). Dipendenza da Insulina: Ogni 3 giorni senza insulina (5 risorse mediche) perdi 1 PF Reale al giorno (non curabile finché non ti stabilizzi).", costo: -6, skills: [] },
         { nome: "Duro d'orecchi", desc: "Hai svantaggio nelle prove inerenti l'udito e ottieni -2 alla percezione passiva.", costo: -2, skills: [] },
@@ -303,5 +303,15 @@ window.DATABASE_PERK = {
         { nome: "Traduttore", costo: 6, desc: "Conosci tutte le lingue." },
         { nome: "Vecchio modello", costo: -6, desc: "Puoi riparare 10 punti in meno." },
         { nome: "Zoom", costo: 2, desc: "Ottieni +4 a Indagare e Percezione. Hai una visuale aumentata del 300%.", skills: ["Indagare", "Percezione"] }
+    ],
+     "oktavia": [
+        { nome: "Sfida", desc: "Il modificatore di Destrezza è trattato come negativo nelle prove basate su Destrezza (Acrobazia, Rapidità di mano, Furtività). In cambio ottieni +2 alla CA e vantaggio nei tiri salvezza su Destrezza.", costo: 4, skills: [] },
+        { nome: "Armatura del tenero", desc: "Quando non indossi armatura né scudo, la tua CA è pari a 8 + modificatore di Destrezza + modificatore di Carisma.", costo: 6, skills: [] },
+        { nome: "Forza del Branco", desc: "All'inizio di un combattimento ottieni +1 Punto Ferita Temporaneo per ogni alleato del branco entro 6 metri. Attivabile una volta per riposo lungo.", costo: 6, skills: [] },
+        { nome: "Cacciatore inaspettato", desc: "Ottieni competenza in Indagare e Percezione. Su un soggetto di cui conosci informazioni generali, ottieni vantaggio su quella prova una volta al giorno per soggetto.", costo: 5, skills: ["Indagare", "Percezione"] },
+        { nome: "Scivolata+", desc: "Impari a slittare sul ghiaccio: +3 metri di velocità muovendoti sul ghiaccio, senza rischio di caduta.", costo: 6, skills: [], requires: "Scivolata(Pinguinosa)" },
+        { nome: "Slittare", desc: "(Passiva) Ottieni +3 metri di velocità muovendoti sul ghiaccio a terra, senza rischio di caduta.", costo: 2, skills: [] },
+        { nome: "Perforbecco", desc: "(Passiva) A ogni attacco puoi ridurre il tiro per colpire di 2 (max 5 volte cumulabili) per aggiungere 1d4 danni perforanti per riduzione. Se il tiro scende sotto zero subisci metà dei danni dell'attacco; un critico annulla l'accumulo.", costo: 4, skills: [] },
+        { nome: "Corpo Leggero", desc: "(Passiva) +1 metro di velocità (senza armatura pesante), salti aumentati di 1/3, danno da caduta ridotto di 1 metro (non applicabile a cadute oltre i 5 metri).", costo: 5, skills: [] }
     ]
 };

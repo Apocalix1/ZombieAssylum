@@ -729,8 +729,8 @@ export class Personaggio {
         this.isRobot = false;
         this.robotPFMax = 50;
         this.robotPF = 50;
+        this.robotPFTemp = 0;
         this.robotRepairTotalDone = 0;
-        this.robotRepairTotalLimit = 65;
         this.robotMicroRepairsUsed = 0;
         this.batteryHours = 4 * 24;
         this.batteryHoursMax = 7 * 24;
@@ -793,8 +793,8 @@ export class Personaggio {
         this.robotMicroRepairsUsed = 0;
     }
 
-    absorbMagicItem(rarity) {
-        const map = {comune: 5, non_comune: 10, raro: 25, super_raro: 55};
+        absorbMagicItem(rarity) {
+        const map = {comune: 8, non_comune: 16, raro: 32, super_raro: 64};
         const add = map[rarity] || 0;
         this.batteryHours = Math.min(this.batteryHoursMax, (this.batteryHours || 0) + add);
         return add;
@@ -840,11 +840,11 @@ export class Personaggio {
 
     onAllyStaminaLost(barsLost) {
         if (!this.isRobot) return;
-        const hours = (barsLost || 0) * 3;
+        const hours = (barsLost || 0) * 2;
         this.consumeBattery(hours);
     }
 
-    applyDamage(amount) {
+        applyDamage(amount) {
         if (this.isRobot) {
             let danno = Math.floor(amount);
             if (this.hasPerk && this.hasPerk('Corazza a piastre') && this.corazzaAPiastre > 0) {
@@ -852,34 +852,48 @@ export class Personaggio {
                 this.corazzaAPiastre -= assorbito;
                 danno -= assorbito;
             }
+            if (this.robotPFTemp > 0 && danno > 0) {
+                const assorbitoTemp = Math.min(this.robotPFTemp, danno);
+                this.robotPFTemp -= assorbitoTemp;
+                danno -= assorbitoTemp;
+            }
             this.robotPF = Math.max(0, this.robotPF - danno);
             return this.robotPF <= 0 ? 'distrutto' : 'danneggiato';
         }
-        this.puntiFeritaReali = Math.max(0, this.puntiFeritaReali - Math.floor(amount));
-        return this.puntiFeritaReali <= 0 ? 'morto' : 'ferito';
     }
 
-    repairRobot(amount) {
+        repairRobot(amount, repairer = null) {
         if (!this.isRobot) return false;
         const canRecoverLeft = Math.max(0, this.robotRepairTotalLimit - this.robotRepairTotalDone);
         if (canRecoverLeft <= 0) return false;
-        const toRecover = Math.min(amount, canRecoverLeft);
-        const maxRecoverPerFull = Math.floor(this.robotPFMax * 0.5);
-        const actual = Math.min(toRecover, maxRecoverPerFull);
+        const maxRecoverPerFull = Math.floor(this.robotPFMax * 0.85);
+        const actual = Math.min(amount, canRecoverLeft, maxRecoverPerFull);
         this.robotPF = Math.min(this.robotPFMax, this.robotPF + actual);
         this.robotRepairTotalDone += actual;
         this.robotMicroRepairsUsed = 0;
-        this.robotPFMax = Math.max(this.robotPF, this.robotPFMax);
+
+        // La riparazione affatica la struttura: riduce i PF massimi
+        const intMod = (repairer && repairer.getStatDettagliata) ? repairer.getStatDettagliata('Intelligenza').mod : 0;
+        const d6 = Math.floor(Math.random() * 6) + 1;
+        const riduzione = Math.max(1, d6 - intMod);
+        this.robotPFMax = Math.max(1, this.robotPFMax - riduzione);
+        this.robotPF = Math.min(this.robotPF, this.robotPFMax);
+
         if (this.hasPerk && this.hasPerk('Corazza a piastre')) {
             this.corazzaAPiastre = this.corazzaAPiastreMax;
         }
+
+        // PF temporanei dopo la riparazione
+        const conMod = this.getStatDettagliata('Costituzione').mod;
+        this.robotPFTemp = Math.max(this.robotPFTemp || 0, Math.max(3, conMod * 3));
+
         return true;
     }
 
-    microRepair(amount) {
+        microRepair(amount) {
         if (!this.isRobot) return false;
         const limit = Math.floor(this.robotPFMax / 3);
-        if (amount > limit) return false;
+        if (amount >= limit) return false; // deve recuperare MENO di 1/3 dei PF massimi
         if (this.robotMicroRepairsUsed >= 2) return false;
         const canRecoverLeft = Math.max(0, this.robotRepairTotalLimit - this.robotRepairTotalDone);
         if (canRecoverLeft <= 0) return false;
@@ -887,6 +901,10 @@ export class Personaggio {
         this.robotPF = Math.min(this.robotPFMax, this.robotPF + actual);
         this.robotRepairTotalDone += actual;
         this.robotMicroRepairsUsed += 1;
+
+        const conMod = this.getStatDettagliata('Costituzione').mod;
+        this.robotPFTemp = Math.max(this.robotPFTemp || 0, Math.max(3, conMod * 3));
+
         return true;
     }
 
@@ -905,6 +923,21 @@ export class Personaggio {
         return 12;
     }
 
+    get robotRepairTotalLimit() {
+    if (this._robotRepairTotalLimit !== undefined) {
+        return this._robotRepairTotalLimit;
+    }
+    if (!this.isRobot) return 0;
+    const conMod = this.getStatDettagliata ? this.getStatDettagliata('Costituzione').mod : 0;
+    let limit = 50 + conMod * 10;
+    if (this.hasPerk && this.hasPerk('Vecchio modello')) limit -= 10;
+    return Math.max(10, limit);
+}
+
+    set robotRepairTotalLimit(value) {
+    this._robotRepairTotalLimit = value;
+}
+    
     getPessimistaCDBonus() {
         if (!this.hasPerk || !this.hasPerk('Pessimista')) return 0;
         const oreTotali = window.oreTotali || 0;
@@ -1596,12 +1629,6 @@ export class Personaggio {
                 if (eAnziana) {
                     valoreBase -= 1;
                     motivi.push("Anziana (-1)");
-                }
-            }
-            if (statNome === "Destrezza") {
-                if (haPerk("Piccola taglia")) {
-                    valoreBase += 2;
-                    motivi.push("Piccola taglia (+2)");
                 }
             }
             if (statNome === "Carisma") {

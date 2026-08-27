@@ -771,7 +771,6 @@ function getPerkBaseName(nomePerk) {
     if (clean.startsWith("Lingue (")) return "Lingue";
     if (clean.startsWith("Ignorante (")) return "Ignorante";
     if (clean.startsWith("Razzista (")) return "Razzista";
-    if (clean.startsWith("Misogino/Androgeno (")) return "Misogino/Androgeno";
     return clean;
 }
 
@@ -2474,14 +2473,7 @@ function togglePerk(nomePerk, forceRemove = false) {
 
     if (shouldRemove && isSelected) {
         const index = p.perks.findIndex(pp => getPerkBaseName(perkObjectName(pp)) === getPerkBaseName(perkDati.nome));
-        if (index === -1) return;
-        const removed = p.perks[index];
-        if (getPerkBaseName(perkDati.nome) === 'Lingue'|| getPerkBaseName(perkDati.nome) === 'Razzista') {
-            const match = /\(([^)]+)\)/.exec(perkObjectName(removed));
-            if (match && p.lingue) p.lingue = p.lingue.filter(l => l !== match[1]);
-        }
-
-        p.perks.splice(index, 1);
+                p.perks.splice(index, 1);
         if (getPerkBaseName(perkDati.nome) === 'Obeso' || getPerkBaseName(perkDati.nome) === 'Sovrappeso') {
             p.pesoCorporeo = p.pesoCorporeo || {};
             p.pesoCorporeo.usiCuscinetto = null;
@@ -2491,6 +2483,14 @@ function togglePerk(nomePerk, forceRemove = false) {
         }
         if (getPerkBaseName(perkDati.nome) === 'Bimbi') {
             p.masteries = p.masteries.filter(m => m.toLowerCase() !== 'cucina');
+        }
+        if (getPerkBaseName(perkDati.nome) === 'Soldato' && p.soldatoArmiScelte) {
+            p.soldatoArmiScelte.forEach(cat => {
+                if (p.armiLivello && p.armiLivello[cat] > 0) {
+                    p.armiLivello[cat] = Math.max(0, p.armiLivello[cat] - 1);
+                }
+            });
+            p.soldatoArmiScelte = null;
         }
         p.puntiCreazione += perkDati.costo;
         renderSetupStats();
@@ -2541,7 +2541,7 @@ function togglePerk(nomePerk, forceRemove = false) {
                 'Goblin', 'Grong (Rana umanoide)', 'Huan-lei (Tassoide)', 'Ineac (Umano Iena)',
                 'Kitsune (Volpe umanoide)', 'Mezzelfo', 'Mezzorco', 'Nano', 'Orco',
                 'Sangliere (Cinghiale umanoide)', 'Sirena (umano pesce)', 'Tiefling', 'Umano',
-                'Usagi (coniglio umanoide)', 'Vespide', 'Yuan-thi (Umano serpente)'
+                'Usagi (coniglio umanoide)', 'Vespide', 'Yuanthi (Umano serpente)'
             ];
             const giaScelte = p.perks
             .filter(pp => getPerkBaseName(perkObjectName(pp)) === 'Razzista')
@@ -2625,19 +2625,54 @@ function togglePerk(nomePerk, forceRemove = false) {
                         return;
                     }
                     p.perks.push({ ...perkDati, nome: `Ignorante (${trovata})`, disadvantage: [trovata] });
-                } else if (nomePerk === 'Alchemico') {
+                } else if (nomePerk === 'Razzista') {
+                    const razze = ['Umano', 'Elfo', 'Nano', 'Rettiliano', 'Robot', 'Ibrido Animale', 'Orco', 'Insettoide'];
+                    const giaScelte = p.perks
+                        .filter(pp => getPerkBaseName(perkObjectName(pp)) === 'Razzista')
+                        .map(pp => (pp.disadvantage && pp.disadvantage[0]) || null)
+                        .filter(Boolean);
+                    const disponibili = razze.filter(r => !giaScelte.includes(r));
+                    if (disponibili.length === 0) {
+                        alert('Hai già preso Razzista su tutte le razze disponibili!');
+                        return;
+                    }
+                    const scelta = prompt(`Perk "Razzista": scegli la razza su cui ottenere svantaggio in Carisma:\n${disponibili.join(", ")}`, disponibili[0]);
+                    const trovata = disponibili.find(r => r.toLowerCase() === (scelta || '').toLowerCase());
+                    if (!trovata) {
+                        alert('Razza non valida o annullata.');
+                        return;
+                    }
+                    p.perks.push({ ...perkDati, nome: `Razzista (${trovata})`, disadvantage: [trovata] }); 
+                }
+                else if (nomePerk === 'Alchemico') {
                         p.perks.push({...perkDati});
                         if (!p.masteries.map(m => m.toLowerCase()).includes('natura')) {
                             p.masteries.push('Natura');
                         }
-        } else if (nomePerk === 'Bimbi') {
+             } else if (nomePerk === 'Bimbi') {
             p.perks.push({...perkDati});
             if (!p.masteries.map(m => m.toLowerCase()).includes('cucina')) {
                 p.masteries.push('Cucina');
             }
+        } else if (nomePerk === 'Soldato') {
+            p.perks.push({...perkDati});
+            const categorieArmi = ['Archi', 'Balestre', "Armi con l'asta", 'Lame leggere', 'Armi da fuoco', 'Rampini e fruste', 'Mazze e armi contundenti'];
+            const elenco = categorieArmi.map((c, i) => `${i + 1}) ${c}`).join('\n');
+            let sceltaStr = prompt(`Perk "Soldato": scegli DUE armi (es. "1,3") in cui ottenere competenza livello 1:\n${elenco}`, '1,2');
+            let indici = [...new Set((sceltaStr || '').split(',').map(s => parseInt(s.trim()) - 1).filter(i => !isNaN(i) && i >= 0 && i < categorieArmi.length))].slice(0, 2);
+            if (indici.length === 0) indici = [0, 1];
+            p.armiLivello = p.armiLivello || {};
+            p.soldatoArmiScelte = indici.map(i => categorieArmi[i]);
+            p.soldatoArmiScelte.forEach(cat => {
+                p.armiLivello[cat] = Math.max(1, p.armiLivello[cat] || 0);
+            });
+            if (typeof window.mostraNotificaInAlto === 'function') {
+                window.mostraNotificaInAlto(`Soldato: competenza Livello 1 registrata in ${p.soldatoArmiScelte.join(' e ')}.`, 'successo');
+            }
         } else {
                 p.perks.push({...perkDati});
             }
+        }
             p.puntiCreazione -= perkDati.costo;
 
             const existingNames = p.perks.map(pp => getPerkBaseName(perkObjectName(pp)));
@@ -2663,7 +2698,6 @@ function togglePerk(nomePerk, forceRemove = false) {
             renderSetupStats();
             renderSetupPerks();
         }
-}
 
 function renderInventarioHtml(p) {
     if (typeof p.initInventarioBase === 'function') p.initInventarioBase();

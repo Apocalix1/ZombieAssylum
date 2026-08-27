@@ -294,7 +294,7 @@ async function renderSpedizioneModal() {
             if (p.perks && p.perks.some(pp => pp.nome === "Fino all'ultimo")) {
                 extras += `<button onclick="toggleFinoAllUltimo(${idx})">${p.finoAllUltimoActive ? 'Disattiva FinoAll' : 'Usa Fino all\'ultimo'}</button>`;
             }
-            if (p.isRobot) {spedizione
+                        if (p.isRobot) {
                 const corazzatoCount = getPerkCount(p, 'Corazzato'); // 0-3
                 const nuovoMax = 40 + (corazzatoCount * 5);
                 if (p.robotPFMax !== nuovoMax) {
@@ -303,7 +303,7 @@ async function renderSpedizioneModal() {
                     if (diff > 0) p.robotPF = Math.min(p.robotPFMax, p.robotPF + diff);
                     else p.robotPF = Math.min(p.robotPF, p.robotPFMax);
                 }
-                p.robotRepairTotalLimit = hasPerk(p, 'Vecchio modello') ? 40 : 50;
+                // robotRepairTotalLimit è ora calcolato automaticamente (50 + Cos×10, -10 con Vecchio modello)
             }
             return extras;
         })()}

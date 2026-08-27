@@ -1,4 +1,5 @@
 import { aggiornaInterfaccia } from "./ui.js";
+import { party } from '../state.js';
 
 function openRisorsaModal(idx, tipo) {
     const p = party[idx];
@@ -98,7 +99,8 @@ function getAutoThreshold(tipo, livello) {
 }
 
 export function processAutomaticActions(p) {
-    if (!p || p.inSpedizione) return;
+      if (!p) return;                              // evita undefined
+    if (!p.autoRisorse) p.autoRisorse = {};  
     const inEsplorazione = p.azioneCorrente && p.azioneCorrente.tipo === 'esplora';
     const stats = inEsplorazione ? ['fame', 'sete'] : ['fame', 'sete', 'sonno'];
     stats.sort((a, b) => {
@@ -197,7 +199,7 @@ function openCucinaModal(idx) {
     if (!haCucina) {
         html += `<div style="color:#e74c3c; margin-top:8px;">Non hai passato abbastanza ore in cucina da giustificare l'uso delle risorse.</div>`;
     }
-    if (hasPerk(p, 'Conserva')) {
+    if (hasPerk(p, 'Conserva') || hasPerk(p, 'Bimbi')) {
         html += `<div style="display:grid; gap:10px; margin-top:14px;">
             <button class="btn-big" style="background:#8e44ad;" onclick="scheduleConserva(${idx})">Crea conserva 5 ore</button>
             <div style="color:#aaa; font-size:0.9rem;">5 ore, 4 materiali alchemici → 1 conserva</div>
@@ -316,7 +318,7 @@ function scheduleCucina(idx) {
 function scheduleConserva(idx) {
     const p = party[idx];
     if (!p) return;
-    if (!hasPerk(p, 'Conserva')) {
+    if (!hasPerk(p, 'Conserva') || !p.hasPerk(p,'Bimbi')) {
         alert('Questo personaggio non ha il perk Conserva.');
         return;
     }
@@ -624,25 +626,23 @@ window.attivaModalitaRiposo = function(idx) {
 };
 
 window.consumiGlobali = window.consumiGlobali || 0;
-function riduciRisorsaMaster(idx, tipo) {
+function riduciRisorsaMaster(idx, tipo, quantitaDefault = 1) {
     const p = party[idx];
     if (!p) return;
-    if (tipo === 'fame') p.fame = Math.max(0, p.fame - 1);
-    else if (tipo === 'sete') p.sete = Math.max(0, p.sete - 1);
-    else if (tipo === 'sonno') p.sonno = Math.max(0, p.sonno - 1);
-    
+    const input = prompt(`Quanto vuoi far consumare a ${p.nome} (${tipo})?`, String(quantitaDefault));
+    const quantita = parseFloat(input);
+    if (isNaN(quantita) || quantita <= 0) return;
+    if (tipo === 'fame') p.fame = Math.max(0, p.fame - quantita);
+    else if (tipo === 'sete') p.sete = Math.max(0, p.sete - quantita);
+    else if (tipo === 'sonno') p.sonno = Math.max(0, p.sonno - quantita);
+    if (typeof mostraNotificaInAlto === 'function') {
+        mostraNotificaInAlto(`${p.nome}: ${tipo} consumato manualmente di ${quantita} dal Master.`, 'avviso');
+    }
+
     // Aggiorna la modale aperta per riflettere il nuovo stato
     openRisorsaModal(idx, tipo);
-    if (typeof window.updateMagazzinoFields === 'function') {
-        window.updateMagazzinoFields({
-            cibo: magazzino.cibo,
-            acqua: magazzino.acqua,
-            ciboAvariato: magazzino.ciboAvariato,
-            piattiDeliziosi: magazzino.piattiDeliziosi
-        });
-    }
-    aggiornaInterfaccia();
 }
+
 
 window.riduciRisorsaMaster = riduciRisorsaMaster;
 window.openRisorsaModal = openRisorsaModal;
@@ -652,4 +652,6 @@ window.clearAutoRisorsa = clearAutoRisorsa;
 window.openCucinaModal = openCucinaModal;
 window.nutri = nutri;
 window.bevi = bevi;
+window.scheduleCucina = scheduleCucina;
+window.scheduleConserva = scheduleConserva;
 window.processAutomaticActions = processAutomaticActions;

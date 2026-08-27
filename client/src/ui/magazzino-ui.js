@@ -587,12 +587,11 @@ function applicaPerkArmato(p) {
     let idx = parseInt(scelta, 10) - 1;
     if (isNaN(idx) || idx < 0 || idx >= categorie.length) idx = 0;
     const categoria = categorie[idx];
-
-    p.initInventarioBase();
+        p.initInventarioBase();
     p.inventario.armi.push(categoria);
     p.armiLivello = p.armiLivello || {};
     const livelloBase = p.isRobot ? 4 : 1;
-    p.armiLivello[categoria] = Math.max(1, p.armiLivello[categoria] || 0);
+    p.armiLivello[categoria] = Math.max(livelloBase, p.armiLivello[categoria] || 0);
 
     let munText = '';
     if (categoria === 'Archi' || categoria === 'Balestre') {

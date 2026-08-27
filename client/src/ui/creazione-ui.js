@@ -105,8 +105,14 @@ function avviaCreazione(directAdd = false) {
     window.tempP.updateManaFromMagiaLevel && window.tempP.updateManaFromMagiaLevel();
 
 
-    const nomeInput = document.getElementById('crea-nome');
-    if (nomeInput) nomeInput.value = "";
+        const nomeInput = document.getElementById('crea-nome');
+    if (nomeInput) {
+        nomeInput.value = "";
+        nomeInput.oninput = function () {
+            if (window.tempP) window.tempP.nome = this.value;
+            renderSetupPerks();
+        };
+    }
     const modal = document.getElementById('modal-creazione');
     if (modal) modal.style.display = 'block';
     categoriaCorrente = "competenze base";
@@ -159,8 +165,14 @@ async function avviaModificaPersonaggio(nome, id, isLocale) {
     window._editingCharOriginalName = nome;
     window._directAdd = false;
 
-    const nomeInput = document.getElementById('crea-nome');
-    if (nomeInput) nomeInput.value = window.tempP.nome;
+        const nomeInput = document.getElementById('crea-nome');
+    if (nomeInput) {
+        nomeInput.value = window.tempP.nome;
+        nomeInput.oninput = function () {
+            if (window.tempP) window.tempP.nome = this.value;
+            renderSetupPerks();
+        };
+    }
 
     const robotCheckbox = document.getElementById('crea-robot');
     if (robotCheckbox) {
@@ -444,18 +456,6 @@ async function confermaCreazione(directAdd = window._directAdd || false) {
     window.tempP.puntiFeritaReali = window.tempP.puntiFeritaRealiMax;
     window.tempP.puntiFortunaMax = hasGlobalPerk(window.tempP, 'Guerriero') ? 20 : 15;
 
-    if (!isRobot && hasGlobalPerk(window.tempP, 'Soldato')) {
-        const categorie = ['Archi', 'Balestre', "Armi con l'asta", 'Lame leggere', 'Armi da fuoco', 'Rampini e fruste', 'Mazze e armi contundenti'];
-        const elenco = categorie.map((c, i) => `${i + 1}) ${c}`).join('\n');
-        let sceltaStr = prompt(`Perk "Soldato": scegli DUE armi (es. "1,3") in cui ottenere competenza livello 1:\n${elenco}`, '1,2');
-        let indici = [...new Set((sceltaStr || '').split(',').map(s => parseInt(s.trim()) - 1).filter(i => !isNaN(i) && i >= 0 && i < categorie.length))].slice(0, 2);
-        if (indici.length === 0) indici = [0, 1];
-        window.tempP.armiLivello = window.tempP.armiLivello || {};
-        indici.forEach(i => {
-            const cat = categorie[i];
-            window.tempP.armiLivello[cat] = Math.max(1, window.tempP.armiLivello[cat] || 0);
-        });
-    }
     if (!isRobot && hasGlobalPerk(window.tempP, 'Fuori dal mondo')) {
         const lingueDisponibili = ['Antali', 'Yakzi', 'Engenity', 'Chrimil', 'Ridulphi', 'Puleun', 'Meer', 'Eklesti'];
         let sceltaLingua = prompt(
@@ -636,11 +636,13 @@ export function renderSetupPerks() {
 
     // --- 2. CATEGORIE E MAPPE ---
     const perkDb = getPerkDatabase();
-    const categoryOrder = [
+        const categoryOrder = [
         'background', 'competenze base', 'carisma e sociale', 'combattimento',
         'fisico e salute', 'Personalità e Fobie', 'magici', 'razziali',
         'sopravvivenza', 'studio', 'medicina'
     ];
+    const isOktavia = !!(window.tempP && window.tempP.nome && window.tempP.nome.trim().toLowerCase() === 'oktavia');
+    if (isOktavia) categoryOrder.push('oktavia');
 
     const labelMap = {
         background: 'BACKGROUND',
@@ -654,7 +656,8 @@ export function renderSetupPerks() {
         sopravvivenza: 'SOPRAVVIVENZA',
         studio: 'STUDIO',
         medicina: 'MEDICINA',
-        robotici: 'ROBOTICI'
+        robotici: 'ROBOTICI',
+        oktavia: 'PERK DI OKTAVIA'
     };
 
     // --- 3. STATO GLOBALE ---
