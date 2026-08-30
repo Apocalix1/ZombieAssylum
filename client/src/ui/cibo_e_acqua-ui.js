@@ -368,7 +368,12 @@ window.consumaConsumabilePersonaggio = function(idx, itemIdx) {
 function completeCucina(p) {
     const piattiFinali = 12;
     const isOttimo = p.hasPerk && p.hasPerk('Ottimo cuoco');
-    if (isOttimo) {
+    const haMaestriaCucina = p.masteries && p.masteries.map(m => m.toLowerCase()).includes('cucina');
+    if (haMaestriaCucina) {
+        magazzino.piattiDeliziosiMaestria = (magazzino.piattiDeliziosiMaestria || 0) + piattiFinali;
+        alert(`${p.nome} (Maestria Cucina) ha completato la cucina: +${piattiFinali} piatti deliziosi speciali (donano PF Fortuna temporanei in spedizione se consumati entro 8h prima di partire).`);
+        if (typeof window.updateMagazzinoFields === 'function') window.updateMagazzinoFields({ piattiDeliziosiMaestria: magazzino.piattiDeliziosiMaestria });
+    } else if (isOttimo) {
         magazzino.piattiDeliziosiPotenziati = (magazzino.piattiDeliziosiPotenziati || 0) + piattiFinali;
         alert(`${p.nome} ha completato la cucina: +${piattiFinali} piatti deliziosi potenziati (+20% nutrimento).`);
         if (typeof window.updateMagazzinoFields === 'function') window.updateMagazzinoFields({ piattiDeliziosiPotenziati: magazzino.piattiDeliziosiPotenziati });
@@ -429,8 +434,9 @@ function bevi(idx, qty = null) {
 }
 
 function prepareNutriData(p, tipo, qty) {
-    if (tipo === 'delizioso') {
-        if ((magazzino.piattiDeliziosi + (magazzino.piattiDeliziosiPotenziati || 0)) <= 0) { alert('Nessun pasto delizioso disponibile.'); return null; }
+      if (tipo === 'delizioso') {
+        const totale = (magazzino.piattiDeliziosi || 0) + (magazzino.piattiDeliziosiPotenziati || 0) + (magazzino.piattiDeliziosiMaestria || 0);
+        if (totale <= 0) { alert('Nessun pasto delizioso disponibile.'); return null; }
         return { tipo: 'delizioso', qty: 1 };
     }
     if (tipo === 'avariato') {
@@ -467,10 +473,13 @@ window.inserisciAzioneConPriorita = inserisciAzioneConPriorita;
 function schedulaAzioneNutrizione(idx, dati, isAuto = false) {
     const p = party[idx];
     if (!p) return;
-    if (dati.tipo === 'delizioso') {
+     if (dati.tipo === 'delizioso') {
         const usaPotenziato = (magazzino.piattiDeliziosiPotenziati || 0) > 0;
+        const usaMaestria = !usaPotenziato && (magazzino.piattiDeliziosiMaestria || 0) > 0;
         dati.potenziato = usaPotenziato;
+        dati.daMaestria = usaMaestria;
         if (usaPotenziato) magazzino.piattiDeliziosiPotenziati -= dati.qty;
+        else if (usaMaestria) magazzino.piattiDeliziosiMaestria -= dati.qty;
         else magazzino.piattiDeliziosi -= dati.qty;
     }
     else if (dati.tipo === 'avariato') {
@@ -503,7 +512,7 @@ function eseguiNutrizione(p, dati) {
     const durataFameSoddisfatta = p.hasPerk && p.hasPerk('Adattamento alimentare') ? 5 : 3;
     const qty = dati.qty;
 
-    if (dati.tipo === 'delizioso') {
+        if (dati.tipo === 'delizioso') {
         recordResourceConsumption(p, 1);
         window.consumiGlobali++; checkRazionamento();
         const eff = getFoodEfficiency(p);
@@ -517,7 +526,25 @@ function eseguiNutrizione(p, dati) {
         }
         if (hasAngelo && eraGiaBenNutrito) p._angeloCasaBonus = true;
         if (gain >= 0.25) p.timers.fameSoddisfatta = durataFameSoddisfatta;
-        p.follia = Math.max(0, p.follia - 1);
+
+        // --- Overdose piatti deliziosi: 10 in 3 giorni blocca la riduzione di follia ---
+        const oraAttuale = window.oreTotali || 0;
+        p.piattiDeliziosiLog = (p.piattiDeliziosiLog || []).filter(t => (oraAttuale - t) < 72);
+        p.piattiDeliziosiLog.push(oraAttuale);
+        p._ultimoPiattoDeliziosoOra = oraAttuale;
+        if (p.piattiDeliziosiLog.length >= 10 && !p._folliaBloccataPiattiDeliziosi) {
+            p._folliaBloccataPiattiDeliziosi = true;
+            mostraNotificaInAlto(`${p.nome} ha esagerato con i piatti deliziosi: la Follia non si riduce più mangiandone, finché non si astiene per 2 giorni.`, 'pericolo');
+        }
+        if (!p._folliaBloccataPiattiDeliziosi) {
+            const riduzione = Math.random() < 0.65 ? 1 : 2;
+            p.follia = Math.max(0, p.follia - riduzione);
+        }
+
+        // --- Cucina Maestria: buff attivabile entro 8h se si parte in spedizione ---
+        if (dati.daMaestria) {
+            p.buffCucinaMaestriaOreRestanti = 8;
+        }
         if (p.masteries && p.masteries.map(m => m.toLowerCase()).includes('cucina')) {
             p.puntiFortuna = Math.min(p.puntiFortunaMax, p.puntiFortuna + 1);
         }
@@ -592,7 +619,7 @@ function checkRazionamento() {
     }
 }
 
-function puoIniziareAzione(p, tipo) {
+ export function puoIniziareAzione(p,tipo) {
     if (!p) return false;
     if (p._asmaCrisi) {
         alert(`${p.nome} è in crisi respiratoria (Incapacitato) e non può agire finché non recupera almeno 1 tacca di Stamina.`);

@@ -619,7 +619,11 @@ export class Personaggio {
         this.diabeteStaminaSpesaLog = [];             // [{ora, qty}] finestra 4h iperglicemia
         this._diabeteInstabile = false;               // blocco guarigione PF (Diabete II)
         this.pesoCorporeo = { usiCuscinetto: null, benNutritoOreAccumulate: 0 };
-
+        this.puntiFortunaTemp = 0;
+        this.buffCucinaMaestriaOreRestanti = 0;
+        this.piattiDeliziosiLog = [];
+        this._ultimoPiattoDeliziosoOra = 0;
+        this._folliaBloccataPiattiDeliziosi = false;
         this.fame = 14;
         this.sete = 4;
         this.sonno = 8;
@@ -2187,18 +2191,30 @@ export class Personaggio {
                 this.aggiungiFolliaPerEvento('avariato');
             }
         } else if (tipoCibo === 'delizioso') {
-            this.contatoreCiboDelizioso++;
-            if (this.contatoreCiboDelizioso >= 3) {
-                this.contatoreCiboDelizioso = 0;
-                const cura = Math.floor(Math.random() * 4) + 1;
+            const oraCorrente = window.oreTotali || 0;
+            this.deliziosoLog = (this.deliziosoLog || []).filter(t => (oraCorrente - t) <= 72); // ultimi 3 giorni
+            this.deliziosoLog.push(oraCorrente);
+
+            if (this.deliziosoLog.length >= 10) {
+                this.deliziosoBloccoFinoA = oraCorrente + 48; // bloccato per 2 giorni
+            }
+
+            const bloccato = oraCorrente < (this.deliziosoBloccoFinoA || 0);
+            if (!bloccato) {
+                // Probabilità 65% di ridurre di 1, 35% di ridurre di 2
+                const rand = Math.random();
+                const cura = rand < 0.65 ? 1 : 2;
                 this.follia = Math.max(0, this.follia - cura);
                 if (typeof window.mostraNotificaInAlto === 'function') {
                     window.mostraNotificaInAlto(`✨ Il morale di ${this.nome} migliora grazie ai piatti prelibati! Follia ridotta di -${cura}.`, "successo");
                 }
+            } else {
+                if (typeof window.mostraNotificaInAlto === 'function') {
+                    window.mostraNotificaInAlto(`⚠️ ${this.nome} ha mangiato troppi piatti deliziosi ultimamente: la mente è satura, la follia non scende.`, "avviso");
+                }
             }
         }
     }
-
     resetWoundTimer() {
         if (this.woundState === "Illeso") {
             this.woundTimer = 0;
@@ -2551,8 +2567,12 @@ export class Personaggio {
             }
         }
 // ==================== 6. DECREMENTO TIMER ====================
-        for (let t in this.timers) {
+          for (let t in this.timers) {
             if (this.timers[t] > 0) this.timers[t] -= 1;
+        }
+        if (this.buffCucinaMaestriaOreRestanti > 0) this.buffCucinaMaestriaOreRestanti -= 1;
+        if (this._folliaBloccataPiattiDeliziosi && (window.oreTotali || 0) - (this._ultimoPiattoDeliziosoOra || 0) >= 48) {
+            this._folliaBloccataPiattiDeliziosi = false;
         }
 
         if (this.timers.buffFame > 0 && !this.isRobot) {
@@ -2995,6 +3015,29 @@ export class Personaggio {
         }
 
         return false;
+    }
+
+        canCastSpellRobot(level) {
+        if (!this.hasPerk('Incantatore')) return { allowed: false, reason: 'Serve il perk Incantatore.' };
+        if (!this.hasSpellLevel(level)) return { allowed: false, reason: 'Incantesimo non conosciuto.' };
+        const cost = this.getSpellCost(level);
+        const hoursNeeded = cost * (20 / 60);
+        if ((this.batteryHours || 0) < hoursNeeded) return { allowed: false, reason: 'Batteria Arcana insufficiente.' };
+        return { allowed: true, cost, hoursNeeded };
+    }
+
+    castSpellRobot(level, target = null) {
+        const check = this.canCastSpellRobot(level);
+        if (!check.allowed) return { success: false, message: check.reason };
+        this.consumeBattery(check.hoursNeeded);
+        let message = `Consumate ${check.hoursNeeded.toFixed(2)}h di Batteria Arcana (${check.cost} mana equivalenti).`;
+        if (target && typeof target.applyDamage === 'function') {
+            const damage = check.cost * 2 + this.getCastingModifier();
+            target.applyDamage(damage);
+            message = `Inflitto ${damage} danni a ${target.nome}. ` + message;
+        }
+        if (typeof window.aggiornaInterfaccia === 'function') window.aggiornaInterfaccia();
+        return { success: true, message };
     }
 
     aggiornaLivelloArma(categoria) {

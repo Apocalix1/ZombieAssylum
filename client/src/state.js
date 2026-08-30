@@ -25,6 +25,7 @@ export let magazzino = {
     batterie: 0,
     cadaveriRobot: 0,
     cadaveriUmani: 0,
+    piattiDeliziosiMaestria: 0,
     stazioneRicarica: null, // { batterie: 0, robotIdOccupante: null }
     consumabili: [],
     libri: [],

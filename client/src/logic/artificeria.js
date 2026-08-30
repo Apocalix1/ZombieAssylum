@@ -1053,18 +1053,11 @@ function renderSetupArtificeria() {
     html += `</div>`;
     container.innerHTML = html;
 }
-function apriPotenziaRobotModal(leaderIdx) {
-    const robots = party.filter(p => p.isRobot);
-    if (!robots.length) return alert('Nessun robot nel party.');
-    const lista = robots.map((r, i) => `${i}: ${r.nome}`).join('\n');
-    const sceltaIdx = parseInt(prompt(`Su quale robot vuoi agire?\n${lista}`, '0'));
-    const target = robots[sceltaIdx];
-    if (!target) return;
-
+function eseguiPotenziaRobot(target, extraAddMult = 1, extraRemoveMult = 1) {
     const azione = prompt('Scrivi "aggiungi" o "rimuovi"', 'aggiungi');
     const perkRobotici = (window.DATABASE_PERK.robotici || []);
 
-     if (azione === 'aggiungi') {
+    if (azione === 'aggiungi') {
         const nomi = perkRobotici.filter(p => !target.perks.some(tp => (tp.nome||tp) === p.nome)).map(p => p.nome);
         const scelto = prompt(`Perk da aggiungere:\n${nomi.join('\n')}`);
         const perkDati = perkRobotici.find(p => p.nome === scelto);
@@ -1073,6 +1066,7 @@ function apriPotenziaRobotModal(leaderIdx) {
         const costoOre = 1;
         if (target.hasPerk && target.hasPerk('Non compatibile')) costoIng = Math.ceil(costoIng * 1.2);
         if (target.hasPerk && target.hasPerk('Compatibile')) costoIng = Math.ceil(costoIng * 0.8);
+        costoIng = Math.ceil(costoIng * extraAddMult);
         if (magazzino.ingranaggi < costoIng) return alert('Ingranaggi insufficienti.');
         magazzino.ingranaggi -= costoIng;
         target.perks.push({ ...perkDati });
@@ -1087,6 +1081,7 @@ function apriPotenziaRobotModal(leaderIdx) {
         let costoIng = Math.abs(perkRimosso.costo || 0) * 10;
         if (target.hasPerk && target.hasPerk('Non compatibile')) costoIng = Math.ceil(costoIng * 0.8);
         if (target.hasPerk && target.hasPerk('Compatibile')) costoIng = Math.ceil(costoIng * 1.2);
+        costoIng = Math.ceil(costoIng * extraRemoveMult);
         if (magazzino.ingranaggi < costoIng) return alert('Ingranaggi insufficienti.');
         magazzino.ingranaggi -= costoIng;
         target.perks.splice(idxPerk, 1);
@@ -1095,6 +1090,22 @@ function apriPotenziaRobotModal(leaderIdx) {
     aggiornaInterfaccia();
     salvaPersonaggioCloud(target);
 }
+
+function apriPotenziaRobotModal(leaderIdx) {
+    const robots = party.filter(p => p.isRobot);
+    if (!robots.length) return alert('Nessun robot nel party.');
+    const lista = robots.map((r, i) => `${i}: ${r.nome}`).join('\n');
+    const sceltaIdx = parseInt(prompt(`Su quale robot vuoi agire?\n${lista}`, '0'));
+    const target = robots[sceltaIdx];
+    if (!target) return;
+    eseguiPotenziaRobot(target, 1, 1);
+}
+
+window.apriAutopotenziamentoModal = function(idx) {
+    const p = party[idx];
+    if (!p || !p.isRobot || !p.hasPerk('Autopotenziamento')) return;
+    eseguiPotenziaRobot(p, 1.1, 0.9);
+};
 
 function risolviAzioneArtificeriaConGruppo(leader, collaboratori, ricettaId, isSmontaggio) {
     // 1. Controlli preliminari

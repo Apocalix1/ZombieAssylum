@@ -370,7 +370,10 @@ h1, h2, h3 {
 #btn-scheda, button[data-action="visualizza"], #btn-visualizza { border-color: #3f6b60; color: #5fa393; }
 #btn-scheda:hover, button[data-action="visualizza"]:hover { background: rgba(63,107,96,0.15); border-color: #5fa393; }
 
-#btn-cucina, button[data-action="cucina"] { border-color: var(--rust-light); color: #c9a876; }
+#btn-cucina, button[data-action="cucina"] { 
+    border-color: var(--rust-light); 
+    color: #9c7644; /* Reso nettamente più scuro */
+}
 #btn-cucina:hover, button[data-action="cucina"]:hover { background: rgba(107,76,52,0.2); border-color: #c9a876; }
 
 #btn-medicina, #btn-medica, button[data-action="medicina"], button[data-action="medica"] { border-color: var(--toxic); color: var(--toxic-bright); }

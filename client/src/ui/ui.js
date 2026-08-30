@@ -1,5 +1,6 @@
 export {party };
 import { magazzino, party as stateParty } from "../state.js";
+import{puoIniziareAzione} from "./cibo_e_acqua-ui.js";
 import "../logic/studio.js";
 import { Personaggio, syncPartyFromServer, salvaPersonaggioCloud,fetchUserCharacters, apiUrl, buildAuthHeaders, refreshPartyListeners } from "../logic/logic.js";
 import { processAutomaticActions} from "./cibo_e_acqua-ui.js";
@@ -1502,8 +1503,8 @@ export function aggiornaInterfaccia() {
                     ${canManage ? `<span class="fatica-badge">Fatic. ${p.faticaTotale}</span>` : ''}
                     ${isMaster ? `<button onclick="masterEliminaPersonaggio(${idx})" title="Elimina personaggio"
                         style="position:absolute; top:0; right:0; background:#c0392b !important; border:1px solid #c0392b !important; padding:4px 8px; font-size:0.75rem;">🗑️</button>` : ''}
-                    ${isMaster ? `<button onclick="masterAggiungiOggetto(${idx})" title="Aggiungi oggetto"
-    style="position:absolute; top:0; right:34px; background:#27ae60 !important; border:1px solid #27ae60 !important; padding:4px 8px; font-size:0.75rem;">🎁</button>` : ''}
+                         ${isMaster ? `<button onclick="masterAggiungiOggetto(${idx})" title="Aggiungi oggetto"
+                        style="position:absolute; top:-26px; right:2.2rem; background:#27ae60 !important; border:1px solid #27ae60 !important; padding:4px 8px; font-size:0.75rem;">🎁</button>` : ''}                
                 </div>
             `;
 
@@ -1582,11 +1583,13 @@ export function aggiornaInterfaccia() {
                                 </div>
                             </details>
                             <details class="action-dropdown">
+                                   <details class="action-dropdown">
                                 <summary>CREA</summary>
                                 <div class="dropdown-buttons">
                                     <button onclick="openCucinaModal(${idx})">Cucina</button>
                                     <button onclick="alchimiaPersonaggio(${idx})">Alchimia</button>
                                     <button onclick="artificeriaPersonaggio(${idx})">Artificeria</button>
+                                    ${(p.isRobot && hasPerk(p, 'Autopotenziamento')) ? `<button onclick="apriAutopotenziamentoModal(${idx})">🔧 Autopotenziamento</button>` : ''}
                                 </div>
                             </details>
                             <details class="action-dropdown">

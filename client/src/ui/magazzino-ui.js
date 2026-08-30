@@ -116,17 +116,120 @@ window.apriInventario = function(idx) {
         modal.className = 'modal';
         document.body.appendChild(modal);
     }
+    const pulsanteMagazzinoOLascia = p.inSpedizione
+        ? `<button class="btn-big" style="background:#c0392b;" onclick="apriLasciaIndietroModal(${idx})">🗑️ Lascia indietro</button>`
+        : `<button class="btn-big" style="background:#8e44ad;" onclick="chiudiModal('modal-inventario'); apriGestioneRitorno(${idx});">📦 MAGAZZINO</button>`;
     modal.innerHTML = `
         <div class="modal-content" style="max-width:520px;">
             <h2 style="color:#16a085; letter-spacing:2px; margin-bottom:15px;">🎒 INVENTARIO DI ${p.nome.toUpperCase()}</h2>
             ${hasPerk(p, 'Stazione mobile') ? `<div style="margin-top:10px; color:#9b59b6;">🔧 Stazione mobile: ${p.stazioneMobileTotale}/${p.stazioneMobileCapacita}</div>` : ''}
             <div style="text-align:left; max-height:60vh; overflow-y:auto;">${renderInventarioHtml(p)}</div>
             <div class="modal-footer">
-                <button class="btn-big" style="background:#8e44ad;" onclick="chiudiModal('modal-inventario'); apriGestioneRitorno(${idx});">📦 MAGAZZINO</button>
+                <button class="btn-big" style="background:#2980b9;" onclick="apriDaiOggettoModal(${idx})">🤝 Dai</button>
+                ${pulsanteMagazzinoOLascia}
                 <button class="btn-big btn-cancel" onclick="chiudiModal('modal-inventario')">CHIUDI</button>
             </div>
         </div>`;
     modal.style.display = 'block';
+};
+
+const CHIAVI_TRASFERIBILI = {
+    cibo: 'Cibo', acqua: 'Acqua', ingranaggi: 'Ingranaggi', alchemici: 'Materiali Alchemici',
+    medBase: 'Medici Base', medAvanzati: 'Medici Avanzati', medCritici: 'Medici Critici',
+    batterie: 'Batterie', proiettiliFrammentazione: 'Proiettili Frammentazione'
+};
+
+window.apriDaiOggettoModal = function(idx) {
+    const p = party[idx];
+    if (!p) return;
+    p.initInventarioBase();
+    const candidati = party.filter((q, i) => i !== idx && !!q.inSpedizione === !!p.inSpedizione);
+    if (candidati.length === 0) {
+        alert('Nessun personaggio disponibile: puoi dare oggetti solo a chi si trova nella tua stessa posizione (base o spedizione).');
+        return;
+    }
+    const listaDest = candidati.map((c, i) => `${i}) ${c.nome}`).join('\n');
+    const sceltaDest = parseInt(prompt(`A chi vuoi dare qualcosa?\n${listaDest}`, '0'));
+    const target = candidati[sceltaDest];
+    if (!target) return;
+    target.initInventarioBase();
+
+    const chiaviDisponibili = Object.entries(CHIAVI_TRASFERIBILI).filter(([k]) => (p.inventario[k] || 0) > 0);
+    const armiDisponibili = (p.inventario.armi || []);
+    let listaOggetti = chiaviDisponibili.map(([k, label], i) => `${i}) ${label} (hai ${p.inventario[k]})`).join('\n');
+    if (armiDisponibili.length) {
+        listaOggetti += (listaOggetti ? '\n' : '') + armiDisponibili.map((a, i) => `arma${i}) ${a}`).join('\n');
+    }
+    if (!listaOggetti) { alert('Non hai nulla da dare.'); return; }
+
+    const scelta = prompt(`Cosa vuoi dare a ${target.nome}?\n${listaOggetti}\n(scrivi il numero, oppure "armaN" per un'arma)`, '0');
+    if (scelta === null) return;
+
+    if (scelta.startsWith('arma')) {
+        const armaIdx = parseInt(scelta.replace('arma', ''));
+        const arma = p.inventario.armi[armaIdx];
+        if (!arma) return alert('Arma non trovata.');
+        p.inventario.armi.splice(armaIdx, 1);
+        target.inventario.armi.push(arma);
+        mostraNotificaInAlto(`${p.nome} ha dato "${arma}" a ${target.nome}.`, 'successo');
+    } else {
+        const i = parseInt(scelta);
+        const entry = chiaviDisponibili[i];
+        if (!entry) return alert('Scelta non valida.');
+        const [chiave, label] = entry;
+        const qtaStr = prompt(`Quanto ${label} vuoi dare? (max ${p.inventario[chiave]})`, '1');
+        const qta = parseFloat(qtaStr);
+        if (isNaN(qta) || qta <= 0 || qta > p.inventario[chiave]) return alert('Quantità non valida.');
+        p.inventario[chiave] -= qta;
+        target.inventario[chiave] = (target.inventario[chiave] || 0) + qta;
+        mostraNotificaInAlto(`${p.nome} ha dato ${qta} ${label} a ${target.nome}.`, 'successo');
+    }
+
+    salvaPersonaggioCloud(p);
+    salvaPersonaggioCloud(target);
+    aggiornaInterfaccia();
+    window.apriInventario(idx);
+};
+
+window.apriLasciaIndietroModal = function(idx) {
+    const p = party[idx];
+    if (!p || !p.inSpedizione) return;
+    p.initInventarioBase();
+
+    const chiaviDisponibili = Object.entries(CHIAVI_TRASFERIBILI).filter(([k]) => (p.inventario[k] || 0) > 0);
+    const armiDisponibili = (p.inventario.armi || []);
+    let lista = chiaviDisponibili.map(([k, label], i) => `${i}) ${label} (hai ${p.inventario[k]})`).join('\n');
+    if (armiDisponibili.length) {
+        lista += (lista ? '\n' : '') + armiDisponibili.map((a, i) => `arma${i}) ${a}`).join('\n');
+    }
+    if (!lista) { alert('Non hai nulla da lasciare indietro.'); return; }
+
+    const scelta = prompt(`⚠️ Gli oggetti lasciati indietro andranno persi per sempre.\nCosa vuoi abbandonare?\n${lista}`, '0');
+    if (scelta === null) return;
+
+    if (scelta.startsWith('arma')) {
+        const armaIdx = parseInt(scelta.replace('arma', ''));
+        const arma = p.inventario.armi[armaIdx];
+        if (!arma) return alert('Arma non trovata.');
+        if (!confirm(`Abbandonare definitivamente "${arma}"?`)) return;
+        p.inventario.armi.splice(armaIdx, 1);
+        mostraNotificaInAlto(`${p.nome} ha abbandonato: ${arma}.`, 'avviso');
+    } else {
+        const i = parseInt(scelta);
+        const entry = chiaviDisponibili[i];
+        if (!entry) return alert('Scelta non valida.');
+        const [chiave, label] = entry;
+        const qtaStr = prompt(`Quanto ${label} vuoi abbandonare? (max ${p.inventario[chiave]})`, '1');
+        const qta = parseFloat(qtaStr);
+        if (isNaN(qta) || qta <= 0 || qta > p.inventario[chiave]) return alert('Quantità non valida.');
+        if (!confirm(`Abbandonare definitivamente ${qta} ${label}?`)) return;
+        p.inventario[chiave] -= qta;
+        mostraNotificaInAlto(`${p.nome} ha abbandonato ${qta} ${label}.`, 'avviso');
+    }
+
+    salvaPersonaggioCloud(p);
+    aggiornaInterfaccia();
+    window.apriInventario(idx);
 };
 
 function openMagazzino() {

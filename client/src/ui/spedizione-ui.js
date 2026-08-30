@@ -3,6 +3,7 @@ import { party } from '../state.js';
 import { magazzino, setMagazzino } from '../state.js'; // oppure importa da dove viene esportato
 import { apiUrl, buildAuthHeaders, salvaPersonaggioCloud } from '../logic/logic.js';
 import { mostraNotificaInAlto } from '../ui/ui.js';
+import{puoIniziareAzione} from "./cibo_e_acqua-ui.js";
 
 function chiudiSpedizione() {
     const panel = document.getElementById('side-spedizione');
@@ -14,10 +15,47 @@ function chiudiSpedizione() {
 function spedisciPersonaggio(idx) {
     const p = party[idx];
     p.inSpedizione = true;
+    applyCucinaMaestriaBuffSeAttivo(p);
     salvaPersonaggioCloud(p);
     if (typeof window.aggiornaInterfaccia === 'function') window.aggiornaInterfaccia();
     openSpedizioneModal();
 }
+
+window.eseguiScambioDai = function(fromId, toId, itemId) {
+    let pgFrom = getCharacter(fromId);
+    let pgTo = getCharacter(toId);
+
+    // Entrambi devono esistere e trovarsi nello stesso stato (base o spedizione)
+    if (pgFrom && pgTo && pgFrom.stato === pgTo.stato) {
+        let itemIndex = pgFrom.inventario.findIndex(i => i.id === itemId);
+        if (itemIndex !== -1) {
+            let [item] = pgFrom.inventario.splice(itemIndex, 1);
+            pgTo.inventario.push(item);
+            saveAndRefresh(pgFrom);
+            saveAndRefresh(pgTo);
+        }
+    } else {
+        alert("Scambio non valido: i personaggi devono trovarsi entrambi in base o in spedizione.");
+    }
+};
+
+function applicaDannoRealeConReattivita(p, colpi) {
+    for (let i = 0; i < colpi; i++) {
+        p.puntiFeritaReali = Math.max(0, p.puntiFeritaReali - 1);
+        if (p.hasPerk && p.hasPerk('Reattività')) {
+            const modDex = p.getStatDettagliata('Destrezza').mod;
+            const temp = Math.max(0, rollDice(1, 6) + modDex);
+            p.puntiFortunaTemp = (p.puntiFortunaTemp || 0) + temp;
+            mostraNotificaInAlto(`${p.nome} (Reattività): +${temp} PF Fortuna temporanei.`, 'successo');
+        }
+    }
+}
+
+window.lasciaIndietro = function(pgId, itemId) {
+    let pg = getCharacter(pgId);
+    pg.inventario = pg.inventario.filter(i => i.id !== itemId);
+    saveAndRefresh(pg);
+};
 
 function mandaTuttiInSpedizione() {
     const user = getCurrentUser();
@@ -25,6 +63,7 @@ function mandaTuttiInSpedizione() {
     party.forEach(p => {
         if (user.role === 'master' || p.user_id === user.id) {
             p.inSpedizione = true;
+            applyCucinaMaestriaBuffSeAttivo(p);
         }
     });
     if (typeof window.aggiornaInterfaccia === 'function') window.aggiornaInterfaccia();
@@ -54,6 +93,7 @@ function ritiraTutti() {
             p.finoAllUltimoActive = false;
         }
         p.puntiFortuna = p.puntiFortunaMax;
+        p.puntiFortunaTemp = 0;
         salvaPersonaggioCloud(p); // Salva sul server
     });
     chiudiSpedizione();
@@ -73,9 +113,18 @@ function ritiraPersonaggio(idx) {
         p.finoAllUltimoActive = false;
     }
     p.puntiFortuna = p.puntiFortunaMax;
+    p.puntiFortunaTemp = 0;
     salvaPersonaggioCloud(p); // Salva sul server
     renderSpedizioneModal();
     if (typeof window.aggiornaInterfaccia === 'function') window.aggiornaInterfaccia();
+}
+
+function applyCucinaMaestriaBuffSeAttivo(p) {
+    if ((p.buffCucinaMaestriaOreRestanti || 0) > 0) {
+        p.puntiFortunaTemp = (p.puntiFortunaTemp || 0) + 4;
+        p.buffCucinaMaestriaOreRestanti = 0;
+        mostraNotificaInAlto(`${p.nome} entra in spedizione ancora saziato dal piatto speciale: +4 PF Fortuna temporanei.`, 'successo');
+    }
 }
 
 
@@ -119,9 +168,8 @@ function useGuerrieroRigenera(idx) {
 
 function degradaInCombat(idx) {
     const p = party[idx];
-    p.puntiFeritaReali = Math.max(0, p.puntiFeritaReali - 1);
+    applicaDannoRealeConReattivita(p, 1);
     if (p.puntiFeritaReali <= 0) {
-        // Morte
         alert(`Condoglianze ${p.nome} è morto in combattimento`);
         // Salva come morto sul server
         const giorniSopravvissuto = Math.floor(oreTotali / 24) - (p.giornoInizio || 0);
@@ -148,12 +196,19 @@ function ferisciInCombat(idx) {
     let input = prompt(`Quanti danni vuoi infliggere a ${p.nome}?`, '1');
     let danno = parseInt(input);
     if (isNaN(danno) || danno <= 0) return;
-    const assorbito = Math.min(p.puntiFortuna, danno);
+
+    let residuo = danno;
+    const assorbitoTemp = Math.min(p.puntiFortunaTemp || 0, residuo);
+    p.puntiFortunaTemp = (p.puntiFortunaTemp || 0) - assorbitoTemp;
+    residuo -= assorbitoTemp;
+
+    const assorbito = Math.min(p.puntiFortuna, residuo);
     p.puntiFortuna -= assorbito;
-    let residuo = danno - assorbito;
+    residuo -= assorbito;
+
     if (residuo > 0) {
         const colpiReali = Math.ceil(residuo / 5);
-        p.puntiFeritaReali = Math.max(0, p.puntiFeritaReali - colpiReali);
+        applicaDannoRealeConReattivita(p, colpiReali);
     }
     if (p.puntiFeritaReali <= 0) {
         // Morte
@@ -248,112 +303,162 @@ function getPerkCategory(nomePerk) {
     return null;
 }
 
+window.toggleCombattimento = function() {
+    window.combattimentoAttivo = !window.combattimentoAttivo;
+    mostraNotificaInAlto(window.combattimentoAttivo ? '⚔️ Combattimento iniziato!' : '🏳️ Combattimento terminato.', window.combattimentoAttivo ? 'pericolo' : 'info');
+    renderSpedizioneModal();
+};
+
+const EXTRA_PERK_COMBATTIMENTO = ['Stress fisico', "Fino all'ultimo", 'Guerriero', 'Nato per combattere','Flusso magico','Incantesimo preferito','Trasmettitore magico','Voce calma','Vendicativo', 'Mente ferrea', 'Vicinanza', 'Carapace/Esoscheletro duro', 'Sensibilità alle temperature', 'Guida', 'Lingua prensile', 'Produrre veleni', 'Termoregolazione', 'Scivolata(Pinguinosa)', 'Volo', 'Uniti siamo più forti', 'Protocollo Overclock', 'Scudo Energetico'];
+
 async function renderSpedizioneModal() {
     const container = document.getElementById('spedizione-content');
     if (!container) return;
 
     const personaggiInSpedizione = party.filter(p => p.inSpedizione === true);
+    const user = getCurrentUser();
+    const isMaster = user && user.role === 'master';
 
     if (personaggiInSpedizione.length === 0) {
         container.innerHTML = `<p style="color:#aaa; text-align:center;">Nessun personaggio in spedizione.</p>`;
         return;
     }
 
-    container.innerHTML = personaggiInSpedizione.map(p => {
-        const idx = party.indexOf(p);
-        // Definisci una lista di perk extra da mostrare (anche se non sono di combattimento)
-        const extraPerks = ['Stress fisico', 'Fino all\'ultimo', 'Guerriero', 'Nato per combattere','Flusso magico','Incantesimo preferito','Trasmettitore magico','Voce calma','Vendicativo', 'Mente ferrea', 'Vicinanza', 'Carapace/Esoscheletro duro', 'Sensibilità alle temperature', 'Guida', 'Lingua prensile', 'Produrre veleni', 'Termoregolazione', 'Scivolata(Pinguinosa)', 'Volo', 'Uniti siamo più forti','Ammortizzatori','Attacco roteante','Scudo energetico','Protocollo Overclock','Auto riparazione', 'Autodistruzione','Chassis Rinforzato','Connessione','Cigolante','Legittima difesa','Metallo duro','Incantatore','Pronto soccorso','Propulsione','Rafforzamento','Segnalatore','Stazione mobile','Zoom'];
-        const perkList = p.perks && p.perks.length > 0
-            ? p.perks
-                .filter(perk => {
-                    const nome = typeof perk === 'string' ? perk : perk.nome;
-                    const cat = getPerkCategory(nome);
-                    return cat === 'combattimento' || extraPerks.includes(nome);
-                })
-                .map(perk => typeof perk === 'string' ? perk : perk.nome)
-                .join(' • ')
-            : 'Nessuno';
+    let toggleHtml = '';
+    if (isMaster) {
+        toggleHtml = `<div style="margin-bottom:12px; text-align:center;">
+            <button class="btn-big" style="background:${window.combattimentoAttivo ? '#c0392b' : '#27ae60'};" onclick="toggleCombattimento()">
+                ${window.combattimentoAttivo ? '🏳️ TERMINA COMBATTIMENTO' : '⚔️ INIZIA COMBATTIMENTO'}
+            </button>
+        </div>`;
+    }
 
-        return `
-            <div class="combat-card">
-                <div class="combat-card-header" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-                    <strong>${p.nome}</strong>
-                    <button class="combat-retreat" onclick="ritiraPersonaggio(${idx})">RITIRA</button>
-                </div>
-                <div style="margin:10px 0; font-size:0.9rem;">
+    const cardsHtml = personaggiInSpedizione.map(p => {
+        const idx = party.indexOf(p);
+        if (isMaster && window.combattimentoAttivo) return renderSchedaCombattimentoMaster(p, idx);
+        return renderSchedaSpedizioneRidotta(p, idx);
+    }).join('');
+
+    container.innerHTML = toggleHtml + cardsHtml;
+}
+
+function renderSchedaCombattimentoMaster(p, idx) {
+    const perkList = (p.perks || [])
+        .filter(perk => {
+            const nome = typeof perk === 'string' ? perk : perk.nome;
+            const cat = getPerkCategory(nome);
+            return cat === 'combattimento' || EXTRA_PERK_COMBATTIMENTO.includes(nome);
+        })
+        .map(perk => typeof perk === 'string' ? perk : perk.nome)
+        .join(' • ') || 'Nessuno';
+
+    if (p.isRobot) {
+        const corazzatoCount = getPerkCount(p, 'Corazzato');
+        const nuovoMax = 40 + (corazzatoCount * 5);
+        if (p.robotPFMax !== nuovoMax) {
+            const diff = nuovoMax - p.robotPFMax;
+            p.robotPFMax = nuovoMax;
+            if (diff > 0) p.robotPF = Math.min(p.robotPFMax, p.robotPF + diff);
+            else p.robotPF = Math.min(p.robotPF, p.robotPFMax);
+        }
+    }
+
+    return `
+        <div class="combat-card">
+            <div class="combat-card-header" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                <strong>${p.nome}</strong>
+                <button class="combat-retreat" onclick="ritiraPersonaggio(${idx})">RITIRA</button>
+            </div>
+            <div style="margin:10px 0; font-size:0.9rem;">
+                ${p.isRobot ? `
+                    <div>🤖 PF Robotici: ${p.robotPF} / ${p.robotPFMax}</div>
+                    ${typeof getBarra === 'function' ? getBarra(p.robotPF, p.robotPFMax, '#c0392b') : ''}
+                ` : `
                     <div>❤️ PF Reali: ${p.puntiFeritaReali} / ${p.puntiFeritaRealiMax}</div>
                     ${typeof getBarra === 'function' ? getBarra(p.puntiFeritaReali, p.puntiFeritaRealiMax, '#c0392b') : ''}
-                    <div>✨ PF Fortuna: ${p.puntiFortuna} / ${p.puntiFortunaMax}</div>
+                    <div>✨ PF Fortuna: ${p.puntiFortuna} / ${p.puntiFortunaMax} ${p.puntiFortunaTemp > 0 ? `<span style="color:#3498db;">(+${p.puntiFortunaTemp} temp.)</span>` : ''}</div>
                     ${typeof getBarra === 'function' ? getBarra(p.puntiFortuna, p.puntiFortunaMax, '#f1c40f') : ''}
-                    <div style="margin-top:8px; font-size:0.85rem; color:#aaa;">Vittorie comb.: ${p.vittorieCombattimento || 0}</div>
-                    <div style="margin-top:8px; font-size:0.85rem; color:#ddd;">
-                        <strong>PCA:</strong> 
-                        ${Object.entries(p.pca || {}).filter(([, v]) => v > 0).map(([cat, val]) => `${cat.split(' ')[0]} ${val.toFixed(1)}`).join(' • ') || 'Nessuno'}
-                    </div>
-                </div>
-                <div class="combat-buttons" style="display:grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap:8px; margin-bottom:12px;">
-                    <button onclick="degradaInCombat(${idx})">Degrada</button>
-                    <button onclick="ferisciInCombat(${idx})">Ferisci</button>
-                    <button onclick="registraAttaccoModal(${idx})">📈 Reg. Attacco</button>
-                    <button onclick="useRigeneraCombattimento(${idx})">Rigenera</button>
-                    <button onclick="segnaVittoria(${idx})">Segna vittoria</button>
-                   ${(p.livelloMagia > 0 && Object.values(p.spellsKnown || {}).some(v => v > 0)) ? `<button onclick="apriConsumaIncantesimi(${idx})">🪄 Magia</button>` : ''}
-                    ${(p.inventario && p.inventario.composti && p.inventario.composti.length > 0) ? `<button onclick="apriConsumaComposti(${idx})">🧪 Composti</button>` : ''}
-                    ${(() => {
-            let extras = '';
-            if (p.hasPerk && p.hasPerk('Stress fisico') && p.faticaTotale > 0) {
-                extras += `<button style="background:#8e44ad;" onclick="useStressFisico(${idx})">⚡ Stress Fisico (-1 PF / -2 Fatica)</button>`;
-            }
-            if (typeof hasPerk === 'function' && hasPerk(p, 'Nato per combattere')) {
-                extras += `<button onclick="useInizioCombattimento(${idx})">Rigenera inizio</button>`;
-            }
-            if (typeof hasPerk === 'function' && hasPerk(p, 'Guerriero')) {
-                extras += `<button onclick="useGuerrieroRigenera(${idx})">Rigenera Guerriero</button>`;
-            }
-            if (p.inventario?.armi?.includes('Taser')) {
-                extras += p.taserCaricato
-                    ? `<button onclick="useTaser(${idx})">⚡ Usa Taser</button>`
-                    : `<button onclick="ricaricaTaser(${idx})" ${((p.inventario?.batterie||0) > 0) ? '' : 'disabled'}>🔋 Ricarica Taser</button>`;
-            }
-            if (p.inventario?.proiettiliFrammentazione > 0) {
-                extras += `<button onclick="consumaProiettileFrammentazione(${idx})">💥 Consuma Proiettile Frammentazione (${p.inventario.proiettiliFrammentazione})</button>`;
-            }
-            if (p.inventario?.armi?.includes('Stivali a Molla') && p.stivaliCariche > 0) {
-                extras += `<button onclick="useStivaliMolla(${idx})">🦵 Usa Stivali (${p.stivaliCariche}/3)</button>`;
-            } else if (p.inventario?.armi?.includes('Stivali a Molla')) {
-                extras += `<button onclick="ricaricaStivali(${idx})" ${((p.inventario?.batterie||0) > 0) ? '' : 'disabled'}>🔋 Ricarica Stivali</button>`;
-            }
-            if (p.perks && p.perks.some(pp => pp.nome === "Fino all'ultimo")) {
-                extras += `<button onclick="toggleFinoAllUltimo(${idx})">${p.finoAllUltimoActive ? 'Disattiva FinoAll' : 'Usa Fino all\'ultimo'}</button>`;
-            }
-                        if (p.isRobot) {
-                const corazzatoCount = getPerkCount(p, 'Corazzato'); // 0-3
-                const nuovoMax = 40 + (corazzatoCount * 5);
-                if (p.robotPFMax !== nuovoMax) {
-                    const diff = nuovoMax - p.robotPFMax;
-                    p.robotPFMax = nuovoMax;
-                    if (diff > 0) p.robotPF = Math.min(p.robotPFMax, p.robotPF + diff);
-                    else p.robotPF = Math.min(p.robotPF, p.robotPFMax);
-                }
-                // robotRepairTotalLimit è ora calcolato automaticamente (50 + Cos×10, -10 con Vecchio modello)
-            }
-            return extras;
-        })()}
-                </div>
-                <details style="background:#111; border:1px solid #333; padding:10px; border-radius:6px;">
-                    <summary style="cursor:pointer; font-weight:bold;">Mostra perks di combattimento</summary>
-                    <div style="margin-top:8px; color:#eee; font-size:0.9rem;">${perkList}</div>
-                    <div style="margin-top:8px; color:#ddd; font-size:0.85rem; border-top:1px dashed #333; padding-top:8px;">
-                        <strong>Maestrie combattimento:</strong>
-                        <div style="margin-top:6px;">${(() => {
-            const candidates = ["Giochi di carte","Intrattenere","Persuasione","Rapidità di mano","Intimidire"];
-            const found = candidates.filter(s => p.getSkillRating && p.getSkillRating(s) === 2);
-            return found.length ? found.join(' • ') : 'Nessuna';
-        })()}</div>
-                    </div>
-                </details>
+                `}
+                <div style="margin-top:8px; font-size:0.85rem; color:#aaa;">Vittorie comb.: ${p.vittorieCombattimento || 0}</div>
+            </div>
+            <div class="combat-buttons" style="display:grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap:8px; margin-bottom:12px;">
+                <button onclick="degradaInCombat(${idx})">Degrada</button>
+                <button onclick="ferisciInCombat(${idx})">Ferisci</button>
+                <button onclick="registraAttaccoModal(${idx})">📈 Reg. Attacco</button>
+                <button onclick="useRigeneraCombattimento(${idx})">Rigenera</button>
+                <button onclick="segnaVittoria(${idx})">Segna vittoria</button>
+                <button onclick="masterAggiungiOggetto(${idx})" style="background:#8e44ad;">🎁 Dai loot</button>
+                ${(p.livelloMagia > 0 && Object.values(p.spellsKnown || {}).some(v => v > 0)) ? `<button onclick="apriConsumaIncantesimi(${idx})">🪄 Magia</button>` : ''}
+                ${(p.inventario && p.inventario.composti && p.inventario.composti.length > 0) ? `<button onclick="apriConsumaComposti(${idx})">🧪 Composti</button>` : ''}
+                ${(() => {
+                    let extras = '';
+                    if (p.hasPerk && p.hasPerk('Stress fisico') && p.faticaTotale > 0) extras += `<button style="background:#8e44ad;" onclick="useStressFisico(${idx})">⚡ Stress Fisico</button>`;
+                    if (typeof hasPerk === 'function' && hasPerk(p, 'Nato per combattere')) extras += `<button onclick="useInizioCombattimento(${idx})">Rigenera inizio</button>`;
+                    if (typeof hasPerk === 'function' && hasPerk(p, 'Guerriero')) extras += `<button onclick="useGuerrieroRigenera(${idx})">Rigenera Guerriero</button>`;
+                    if (p.perks && p.perks.some(pp => (pp.nome||pp) === "Fino all'ultimo")) extras += `<button onclick="toggleFinoAllUltimo(${idx})">${p.finoAllUltimoActive ? 'Disattiva FinoAll' : "Usa Fino all'ultimo"}</button>`;
+                    if (p.isRobot && hasPerk(p, 'Protocollo Overclock')) extras += `<button onclick="attivaOverclock(${idx})">⚡ Overclock (-5h batt.)</button>`;
+                    if (p.isRobot && hasPerk(p, 'Scudo Energetico')) extras += `<button onclick="attivaScudoEnergetico(${idx})">🛡️ Scudo Energetico (-5h batt.)</button>`;
+                    if (p.inventario?.armi?.includes('Taser')) {
+                        extras += p.taserCaricato ? `<button onclick="useTaser(${idx})">⚡ Usa Taser</button>` : `<button onclick="ricaricaTaser(${idx})" ${((p.inventario?.batterie||0) > 0) ? '' : 'disabled'}>🔋 Ricarica Taser</button>`;
+                    }
+                    if (p.inventario?.proiettiliFrammentazione > 0) extras += `<button onclick="consumaProiettileFrammentazione(${idx})">💥 Proiettile Framment. (${p.inventario.proiettiliFrammentazione})</button>`;
+                    if (p.inventario?.armi?.includes('Stivali a Molla') && p.stivaliCariche > 0) extras += `<button onclick="useStivaliMolla(${idx})">🦵 Usa Stivali (${p.stivaliCariche}/3)</button>`;
+                    else if (p.inventario?.armi?.includes('Stivali a Molla')) extras += `<button onclick="ricaricaStivali(${idx})" ${((p.inventario?.batterie||0) > 0) ? '' : 'disabled'}>🔋 Ricarica Stivali</button>`;
+                    return extras;
+                })()}
+            </div>
+            <details style="background:#111; border:1px solid #333; padding:10px; border-radius:6px;">
+                <summary style="cursor:pointer; font-weight:bold;">Mostra perks di combattimento</summary>
+                <div style="margin-top:8px; color:#eee; font-size:0.9rem;">${perkList}</div>
+            </details>
+        </div>`;
+}
+
+function renderSchedaSpedizioneRidotta(p, idx) {
+    const statiPerTS = ["Forza", "Destrezza", "Costituzione", "Intelligenza", "Saggezza", "Carisma"];
+    const statsHtml = statiPerTS.map(s => {
+        const mod = p.getStatDettagliata(s).mod;
+        return `<span style="display:inline-block; min-width:60px; color:${mod>=0?'#2ecc71':'#e74c3c'};">${s.slice(0,3).toUpperCase()} ${mod>=0?'+':''}${mod}</span>`;
+    }).join(' ');
+
+    const perkConDesc = (p.perks || [])
+        .filter(perk => {
+            const nome = typeof perk === 'string' ? perk : perk.nome;
+            const cat = getPerkCategory(nome);
+            return cat === 'combattimento' || EXTRA_PERK_COMBATTIMENTO.includes(nome);
+        })
+        .map(perk => {
+            const nome = typeof perk === 'string' ? perk : perk.nome;
+            const dati = typeof window.findPerkData === 'function' ? window.findPerkData(nome) : null;
+            return `<div style="margin-bottom:6px; padding-bottom:6px; border-bottom:1px solid #222;">
+                <strong style="color:#e74c3c;">${nome}</strong><br>
+                <span style="color:#aaa; font-size:0.82rem;">${dati?.desc || 'Nessuna descrizione.'}</span>
             </div>`;
-    }).join('');
+        }).join('') || '<div style="color:#888;">Nessuno.</div>';
+
+    return `
+        <div class="combat-card">
+            <div class="combat-card-header" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                <strong>${p.nome}</strong>
+                <button class="combat-retreat" onclick="ritiraPersonaggio(${idx})">RITIRA</button>
+            </div>
+            <div style="margin:10px 0; font-size:0.85rem; color:#ddd;">
+                <div>🏃 Velocità: ${p.velocitaAttuale}m</div>
+                ${p.isRobot ? `<div>🤖 PF: ${p.robotPF}/${p.robotPFMax}</div>` : `
+                    <div>❤️ PF Reali: ${p.puntiFeritaReali}/${p.puntiFeritaRealiMax}</div>
+                    <div>✨ PF Fortuna: ${p.puntiFortuna}/${p.puntiFortunaMax}${p.puntiFortunaTemp > 0 ? ` <span style="color:#3498db;">(+${p.puntiFortunaTemp} temp.)</span>` : ''}</div>
+                `}
+                <div style="margin-top:6px;">${statsHtml}</div>
+            </div>
+            <div style="display:flex; gap:6px; margin-bottom:10px;">
+                <button class="btn-big" style="flex:1;" onclick="apriScheda(${idx})">📋 Scheda</button>
+                <button class="btn-big" style="flex:1; background:#16a085;" onclick="apriInventario(${idx})">🎒 Inventario</button>
+            </div>
+            <details style="background:#111; border:1px solid #333; padding:10px; border-radius:6px;">
+                <summary style="cursor:pointer; font-weight:bold;">Perk di combattimento</summary>
+                <div style="margin-top:8px;">${perkConDesc}</div>
+            </details>
+        </div>`;
 }
 
 // AGGIUNGI dopo window.consumaIncantesimo
@@ -1123,7 +1228,6 @@ window.avviaEsplorazioneGruppo = avviaEsplorazioneGruppo;
 window.esplora = esplora;
 window.rollArmiTrovate = rollArmiTrovate;
 window.rollZainoTrovato = rollZainoTrovato;
-window.renderSpedizioneModal = renderSpedizioneModal;
 window.segnaVittoria = segnaVittoria;
 window.getExplorationBonus = getExplorationBonus;
 window.terminaEsplorazione = terminaEsplorazione;
