@@ -99,6 +99,78 @@ async function eliminaDefinitivamenteCaduto(id, nome) {
     }
 }
 
+function applicaFolliaMortePersonaggio(morto) {
+    party.forEach(p => {
+        if (p === morto || p.isRobot) return;
+        let tiro = rollDice(1, 8);
+        if (p.hasPerk && p.hasPerk('Nichilista')) tiro = Math.floor(tiro / 2);
+        if (tiro <= 0) return;
+        p.follia = Math.min(20, p.follia + tiro);
+        if (typeof p.aggiornaSintomiFollia === 'function') p.aggiornaSintomiFollia();
+        salvaPersonaggioCloud(p);
+    });
+    mostraNotificaInAlto(`💀 La morte di ${morto.nome} scuote il gruppo: Follia +1d8 per tutti i non-robot.`, 'pericolo');
+}
+window.applicaFolliaMortePersonaggio = applicaFolliaMortePersonaggio;
+
+function applicaFolliaSbarazzoCadavere(p) {
+    if (!p || p.isRobot) return;
+    if (p.hasPerk && p.hasPerk('Becchino')) {
+        avviaCerimoniaBecchino(p);
+        return;
+    }
+    let follia = rollDice(1, 4);
+    if (p.hasPerk && p.hasPerk('Nichilista')) follia = Math.floor(follia / 2);
+    if (follia > 0) {
+        p.follia = Math.min(20, p.follia + follia);
+        if (typeof p.aggiornaSintomiFollia === 'function') p.aggiornaSintomiFollia();
+        mostraNotificaInAlto(`${p.nome} si sbarazza di un cadavere: Follia +${follia}.`, 'avviso');
+    }
+    salvaPersonaggioCloud(p);
+}
+window.applicaFolliaSbarazzoCadavere = applicaFolliaSbarazzoCadavere;
+
+function avviaCerimoniaBecchino(becchino) {
+    const altri = party.filter(p => p !== becchino);
+    const idCerimonia = `cerimonia-${Date.now()}-${becchino.id}`;
+    window._cerimonieBecchino = window._cerimonieBecchino || {};
+    window._cerimonieBecchino[idCerimonia] = { becchinoId: becchino.id, partecipanti: new Set() };
+
+    altri.forEach(dest => {
+        window.inviaProposta(becchino.id, dest.id, 'cerimonia-becchino', { idCerimonia });
+    });
+
+    const azione = {
+        tipo: 'cerimonia_becchino',
+        oreTotali: 0.5,
+        oreRimanenti: 0.5,
+        onComplete: () => completaCerimoniaBecchino(idCerimonia)
+    };
+    if (becchino.azioneCorrente) becchino.codaAzioni.push(azione);
+    else becchino.azioneCorrente = azione;
+    salvaPersonaggioCloud(becchino);
+    mostraNotificaInAlto(`${becchino.nome} indice una cerimonia funebre (30 min). Gli altri possono partecipare per ridurgli la Follia.`, 'info');
+    aggiornaInterfaccia();
+}
+
+function completaCerimoniaBecchino(idCerimonia) {
+    const cerimonia = window._cerimonieBecchino && window._cerimonieBecchino[idCerimonia];
+    if (!cerimonia) return;
+    const becchino = party.find(p => p.id === cerimonia.becchinoId);
+    if (becchino && cerimonia.partecipanti.size > 0) {
+        const modCar = becchino.getStatDettagliata('Carisma').mod;
+        const riduzione = Math.max(0, rollDice(1, 4) + modCar);
+        becchino.follia = Math.max(0, becchino.follia - riduzione);
+        if (typeof becchino.aggiornaSintomiFollia === 'function') becchino.aggiornaSintomiFollia();
+        mostraNotificaInAlto(`La cerimonia di ${becchino.nome} si conclude: Follia -${riduzione} (${cerimonia.partecipanti.size} partecipanti).`, 'successo');
+        salvaPersonaggioCloud(becchino);
+    } else if (becchino) {
+        mostraNotificaInAlto(`La cerimonia di ${becchino.nome} si conclude senza partecipanti.`, 'info');
+    }
+    delete window._cerimonieBecchino[idCerimonia];
+    aggiornaInterfaccia();
+}
+
 window.eliminaDefinitivamenteCaduto = eliminaDefinitivamenteCaduto;
 window.toggleCimitero = toggleCimitero;
 window.chiudiCimitero = chiudiCimitero;

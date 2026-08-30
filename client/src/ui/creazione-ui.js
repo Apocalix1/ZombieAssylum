@@ -43,23 +43,29 @@ function getPerkSelectionCost(perks) {
 
 function bindRobotCheckboxHandler(robotCheckbox) {
     if (!robotCheckbox) return;
-    robotCheckbox.onchange = function () {
-        const p = window.tempP;
-        if (!p) return;
+   robotCheckbox.onchange = function () {
+            const p = window.tempP;
+            if (!p) return;
+            const COSTO_ROBOT = 6;
 
-        if (this.checked) {
-            p._savedHumanPerks = (p.perks || []).map(perk => typeof perk === 'string' ? perk : { ...perk });
-            p._savedHumanPerkCost = getPerkSelectionCost(p._savedHumanPerks);
-            refundAndClearNonRobotPerks();
-            p.isRobot = true;
-            categoriaCorrente = 'robotici';
-        } else {
-            const robotPerksCost = getPerkSelectionCost(p.perks);
-            const restoredPerks = (p._savedHumanPerks || []).map(perk => typeof perk === 'string' ? perk : { ...perk });
-            const restoredCost = getPerkSelectionCost(restoredPerks);
-            const puntiDopoRimborso = (p.puntiCreazione || 0) + robotPerksCost;
-
-            if (restoredCost > 0 && puntiDopoRimborso < restoredCost) {
+            if (this.checked) {
+                if (p.puntiCreazione < COSTO_ROBOT) {
+                    alert('Punti insufficienti per diventare Robot (costa 6 punti).');
+                    this.checked = false;
+                    return;
+                }
+                p._savedHumanPerks = (p.perks || []).map(perk => typeof perk === 'string' ? perk : { ...perk });
+                p._savedHumanPerkCost = getPerkSelectionCost(p._savedHumanPerks);
+                refundAndClearNonRobotPerks();
+                p.puntiCreazione -= COSTO_ROBOT;
+                p.isRobot = true;
+                categoriaCorrente = 'robotici';
+            } else {
+                const robotPerksCost = getPerkSelectionCost(p.perks);
+                const restoredPerks = (p._savedHumanPerks || []).map(perk => typeof perk === 'string' ? perk : { ...perk });
+                const restoredCost = getPerkSelectionCost(restoredPerks);
+                const puntiDopoRimborso = (p.puntiCreazione || 0) + robotPerksCost + COSTO_ROBOT;
+                    if (restoredCost > 0 && puntiDopoRimborso < restoredCost) {
                 alert('Non hai abbastanza punti per ripristinare i perk umani.');
                 this.checked = true;
                 p.isRobot = true;
@@ -216,6 +222,10 @@ window.modificaPersonaggioConControllo = function(nome, id, isLocale, isCaricato
 
 function modificaMagicLevel(delta) {
     if (!window.tempP) return;
+    if (window.tempP.isRobot && !hasGlobalPerk(window.tempP, 'Incantatore')) {
+        alert('I robot possono lanciare incantesimi solo con il perk "Incantatore".');
+        return;
+    }
     const current = window.tempP.livelloMagia || 0;
 
     if (delta > 0) {
@@ -315,6 +325,10 @@ const SPELL_KNOWLEDGE_COST = { 0: 1, 1: 2, 2: 3, 3: 4, 4: 5 };
 function modificaIncantesimiConosciuti(livello, delta) {
     const p = window.tempP;
     if (!p || typeof p.spellsKnown !== 'object') return;
+    if (p.isRobot && !hasGlobalPerk(p, 'Incantatore')) {
+        alert('I robot possono conoscere incantesimi solo con il perk "Incantatore".');
+        return;
+    }
     const massimo = p.getMaxKnownSpells ? p.getMaxKnownSpells(livello) : 0;
     let attuale = p.spellsKnown[livello] || 0;
     const costo = SPELL_KNOWLEDGE_COST[livello] || 0;

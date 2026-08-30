@@ -1078,7 +1078,8 @@ window.selezionaAssistente = function(idx, tipo) {
 function personaggioConosceLingua(p, lingua) {
     if (!lingua) return true;
     const l = lingua.toLowerCase();
-    if (l === 'comune' || l === 'verbum') return true;   // 👈 era 'verdum'
+    if (l === 'comune' || l === 'verbum') return true;
+    if (p && p.hasPerk && p.hasPerk('Traduttore')) return true;
     return !!(p && p.lingue && p.lingue.map(x => x.toLowerCase()).includes(l));
 }
 

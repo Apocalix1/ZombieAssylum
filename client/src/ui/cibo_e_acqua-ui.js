@@ -4,6 +4,7 @@ import { party } from '../state.js';
 function openRisorsaModal(idx, tipo) {
     const p = party[idx];
     if (!p) return;
+     if (!p.autoRisorse) p.autoRisorse = {};
     const modal = document.getElementById('modal-risorse');
     const title = tipo === 'fame' ? 'NUTRI' : tipo === 'sete' ? 'BEVI' : 'DORMI';
     const content = document.getElementById('risorse-content');
@@ -318,10 +319,10 @@ function scheduleCucina(idx) {
 function scheduleConserva(idx) {
     const p = party[idx];
     if (!p) return;
-    if (!hasPerk(p, 'Conserva') || !p.hasPerk(p,'Bimbi')) {
-        alert('Questo personaggio non ha il perk Conserva.');
-        return;
-    }
+   if (!hasPerk(p, 'Conserva') && !hasPerk(p, 'Bimbi')) {
+    alert('Questo personaggio non ha il perk Conserva.');
+    return;
+}
     if (magazzino.materialiAlchemici < 4) {
         alert('Non hai abbastanza materiali alchemici per creare una conserva. Servono 4 materiali.');
         return;
@@ -642,6 +643,17 @@ function riduciRisorsaMaster(idx, tipo, quantitaDefault = 1) {
     // Aggiorna la modale aperta per riflettere il nuovo stato
     openRisorsaModal(idx, tipo);
 }
+
+window.nutriBiocarburante = function(idx) {
+    const p = party[idx];
+    if (!p || !hasPerk(p, 'Biocarburante')) return;
+    const ok = p.consumaBiocarburante(magazzino);
+    if (!ok) return alert('Non ci sono risorse alimentari (né normali, né deliziose, né avariate) nel magazzino.');
+    mostraNotificaInAlto(`${p.nome} ha consumato biocarburante: nessuna penalità attiva.`, 'successo');
+    window.updateMagazzinoFields({ cibo: magazzino.cibo, piattiDeliziosi: magazzino.piattiDeliziosi, ciboAvariato: magazzino.ciboAvariato });
+    salvaPersonaggioCloud(p);
+    aggiornaInterfaccia();
+};
 
 
 window.riduciRisorsaMaster = riduciRisorsaMaster;

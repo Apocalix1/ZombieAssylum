@@ -50,6 +50,17 @@ export const ARTIFICER_RECIPES = [
         specialization: { Elettronica: 5, Meccanica: 2 }
     },
     {
+    id: 'dinamo',
+    name: 'Dinamo',
+    category: 'Sopravvivenza & Conservazione',
+    difficulty: 'Media',
+    outputType: 'fisso_base',
+    description: 'Stazione che converte l\'allenamento fisico in energia. Durante l\'Allenamento si può scegliere di generare batterie invece di guadagnare PCA.',
+    cost: { ingranaggi: 40 },
+    time: { hours: 5 },
+    specialization: { Elettronica: 3, Meccanica: 1 }
+    },
+    {
         id: 'ripetitore_segnale',
         name: 'Ripetitore di Segnale',
         category: 'Comunicazione, Sensori & Sorveglianza',
@@ -78,8 +89,8 @@ export const ARTIFICER_RECIPES = [
         category: 'Comunicazione, Sensori & Sorveglianza',
         difficulty: 'Difficile',
         outputType: 'equipaggiamento',
-        description: 'Trasmettitore + ricevitore. Segnale 36m, suono percepibile 5m.',
-        cost: { ingranaggi: 25 },
+        description: 'Coppia: trasmettitore + ricevitore. \n Trasmettitore: un piccolo aggeggio adattabile a superfici o creature. \n Ricevitore: un oggetto quadrato che emette suono in base alla vicinanza del bersaglio, suono disattivabile.\n Il ricevitore emette suono quando il trasmettitore è nel raggio di 80 metri diventando sempre più forte finché non smette a due metri di vicinanza.Quando il trasmettitore è tra i 80-800 metri invece chi ha il ricevitore in mano può usare un’azione bonus per concentrarsi e percepire la direzione del trasmettitore.',
+        cost: { ingranaggi: 35 },
         time: { hours: 6 },
         specialization: { Elettronica: 3 }
     },
@@ -288,6 +299,17 @@ export const ARTIFICER_RECIPES = [
         specialization: { Elettronica: 4 }
     },
     {
+    id: 'stazione_ricarica',
+    name: 'Stazione di Ricarica',
+    category: 'Sopravvivenza & Conservazione',
+    difficulty: 'Difficile',
+    outputType: 'fisso_base',
+    description: "Piattaforma per ricaricare robot. Contiene fino a 30 batterie; un robot che vi resta sopra recupera 5h di batteria/ora consumando 5 batterie/ora, e non si scarica nel frattempo. Un solo robot alla volta, nessun'altra azione possibile mentre ricarica.",
+    cost: { ingranaggi: 20 },
+    time: { hours: 6 },
+    specialization: { Meccanica: 3 }
+},
+    {
         id: 'postazione_alchimista',
         name: 'Postazione da Alchimista',
         category: 'Sopravvivenza & Conservazione',
@@ -343,7 +365,7 @@ function aggiungiPuntiArtificeria(p, specRichieste, puntiPS, isLeader, numAssist
     }
 
     // PAG (0.25 per PS) – anche qui il raddoppio è già incluso in psOttenuti
-    const pagOttenuti = psOttenuti * 0.25;
+    const pagOttenuti = psOttenuti * 0.15;
     p.artificeria.generale.pag += pagOttenuti;
 
     // Level Up AG
@@ -372,7 +394,7 @@ function calcolaCrafting(leader, collaboratori, ricetta, isSmontaggio = false) {
     if (senzaCompetenza) {
         cdFinale = diff.cdBase + 6 - (lvAG_Leader * 1) - (lvSpec_Leader * 2);
     } else {
-        cdFinale = diff.cdBase - lvAG_Leader - lvSpec_Leader;
+        cdFinale = diff.cdBase - lvAG_Leader - (lvSpec_Leader * 2);
     }
     collaboratori.forEach(collab => {
         if (leader.rancoreTargetId === collab.id || collab.rancoreTargetId === leader.id) {
@@ -416,31 +438,96 @@ function getRecipeBaseCost(ricetta) {
 
 function risolviAzioneArtificeria(leaderIdx, collaboratoriIdxs, ricettaId, isSmontaggio = false) {
     const leader = window.party[leaderIdx];
-    const ricetta = Object.assign({}, getArtificerRecipeById(ricettaId));
-    if (!leader || !ricetta) return;
+    const ricettaBase = getArtificerRecipeById(ricettaId);
+    if (!leader || !ricettaBase) return;
+
+    // Potenzia/Depotenzia Robot: flusso immediato dedicato, non passa dalla coda azioni
+    if (ricettaId === 'potenzia_robot' && !isSmontaggio) {
+        apriPotenziaRobotModal(leaderIdx);
+        return;
+    }
+    // Smantellamento Robot: richiede consenso (o cadavere già disponibile)
+    if (ricettaId === 'smantellamento_robot' && !isSmontaggio) {
+        avviaSmantellamentoRobot(leader);
+        return;
+    }
+    // Riparazione Robot: chiede subito il bersaglio, poi prosegue nel flusso normale
+    let robotTargetId = null;
+    if (ricettaId === 'riparazione_robot' && !isSmontaggio) {
+        const robots = window.party.filter(p => p.isRobot);
+        if (!robots.length) { alert('Nessun robot nel party da riparare.'); return; }
+        let target = robots[0];
+        if (robots.length > 1) {
+            const lista = robots.map((r, i) => `${i}: ${r.nome} (${r.robotPF}/${r.robotPFMax} PF)`).join('\n');
+            const scelta = parseInt(prompt(`Quale robot vuoi riparare?\n${lista}`, '0'));
+            target = robots[scelta];
+            if (!target) return;
+        }
+        robotTargetId = target.id;
+    }
+    // Estrazione Energia dai Robot: chiede robot sorgente + quantità batterie desiderate
+    if (ricettaId === 'estrazione_energia_robot' && !isSmontaggio) {
+        const robots = window.party.filter(p => p.isRobot);
+        if (!robots.length) { alert('Nessun robot nel party.'); return; }
+        let sorgente = robots[0];
+        if (robots.length > 1) {
+            const lista = robots.map((r, i) => `${i}: ${r.nome} (${r.batteryHours.toFixed(1)}h batteria)`).join('\n');
+            const scelta = parseInt(prompt(`Da quale robot vuoi estrarre energia?\n${lista}`, '0'));
+            sorgente = robots[scelta];
+            if (!sorgente) return;
+        }
+        const maxOre = Math.floor(sorgente.batteryHours);
+        if (maxOre <= 0) { alert(`${sorgente.nome} non ha batteria sufficiente.`); return; }
+        const qtaStr = prompt(`Quante batterie vuoi estrarre? (1 ora di batteria del robot = 1 batteria estratta, max ${maxOre})`, Math.min(5, maxOre).toString());
+        const qta = parseInt(qtaStr);
+        if (isNaN(qta) || qta <= 0 || qta > maxOre) return;
+        if (window.magazzino.ingranaggi < qta * 2) { alert(`Servono ${qta * 2} ingranaggi, ne hai ${window.magazzino.ingranaggi}.`); return; }
+        window.magazzino.ingranaggi -= qta * 2;
+        sorgente.consumeBattery(qta);
+        // Crea una ricetta fittizia per l'estrazione
+        const ricettaEstrazione = { ...ricettaBase, time: { hours: qta * (10/60) } };
+        eseguiCreazioneArtificeria(leader, collaboratoriIdxs.map(i => window.party[i]), ricettaEstrazione, 0, false, { tipo: 'estrazione_robot', qta, sorgenteId: sorgente.id }, 0);
+        salvaPersonaggioCloud(sorgente);
+        return;
+    }
+
+    // Clona la ricetta per modifiche successive
+    const ricetta = Object.assign({}, ricettaBase);
+    if (robotTargetId) ricetta._robotTargetId = robotTargetId;
 
     const costoBase = getRecipeBaseCost(ricetta);
     let costoIngranaggi = costoBase;
     let dettagliExtra = "";
 
     if (!isSmontaggio) {
-        if (ricetta.outputType === 'fabbisogno_magico') {
-            const raritaScelta = prompt(
-                "Quale rarità di oggetto magico vuoi assorbire?\n(comune, non_comune, raro, super_raro)"
-            );
-            if (!raritaScelta || !window.magazzino.oggettiMagici[raritaScelta] || window.magazzino.oggettiMagici[raritaScelta] <= 0) {
-                alert(`Non possiedi un oggetto magico di rarità '${raritaScelta}'!`);
+                if (ricetta.outputType === 'fabbisogno_magico') {
+            leader.initInventarioBase();
+            const mapKey = { comune: 'comuni', non_comune: 'nonComuni', raro: 'rari', super_raro: 'superRari' };
+            const raritaScelta = prompt("Quale rarità di oggetto magico vuoi usare?\n(comune, non_comune, raro, super_raro)");
+            const key = mapKey[raritaScelta];
+            const inMagazzino = key ? (window.magazzino.oggettiMagici[key] || 0) : 0;
+            const inPersonale = key ? (leader.inventario.oggettiMagici[key] || 0) : 0;
+            if (!key || (inMagazzino + inPersonale) <= 0) {
+                alert(`Non hai un oggetto magico di rarità '${raritaScelta}' (base o personale)!`);
                 return;
             }
-            window.magazzino.oggettiMagici[raritaScelta]--;
+            let fonte = 'base';
+            if (inMagazzino > 0 && inPersonale > 0) {
+                fonte = prompt(`Da dove prendere l'oggetto? "base" (${inMagazzino}) o "personale" (${inPersonale})`, 'base');
+            } else if (inPersonale > 0) {
+                fonte = 'personale';
+            }
+            if (fonte === 'personale') leader.inventario.oggettiMagici[key]--;
+            else window.magazzino.oggettiMagici[key]--;
             dettagliExtra = raritaScelta;
         } else if (ricetta.id === 'creazione_proiettili') {
-            const tipoMunProm = dettagliExtra || 'Freccia';
+            const tipoMunProm = prompt('Che tipo di munizioni vuoi creare? (Freccia, Dardo balestra, Proiettile pistola)', 'Freccia') || 'Freccia';
             const mappaMun = { Freccia: 'frecce', 'Dardo balestra': 'quadrelli', 'Proiettile pistola': 'proiettili' };
             const chiave = mappaMun[tipoMunProm] || 'frecce';
-            window.magazzino.munizioni = window.magazzino.munizioni || { frecce: 0, quadrelli: 0, proiettili: 0 };
-            window.magazzino.munizioni[chiave] = (window.magazzino.munizioni[chiave] || 0) + 10;
-            alert(`+10 ${tipoMunProm} aggiunte al magazzino.`);
+            leader.initInventarioBase();
+            leader.inventario.munizioni[chiave] = (leader.inventario.munizioni[chiave] || 0) + 10;
+            alert(`${leader.nome} ha creato +10 ${tipoMunProm} (nel proprio inventario).`);
+            salvaPersonaggioCloud(leader);
             return;
         } else if (ricetta.outputType === 'fabbisogno_robot') {
             const robotId = prompt("Scrivi il nome o l'ID del robot che vuoi utilizzare per questa azione:");
@@ -604,7 +691,33 @@ function risolviEsitoArtificeria(leader, collaboratori, ricetta, costoIngranaggi
                 });
             }
 
-            const PORTABILI_SPEDIZIONE = ['localizzatore','orologio_timer','torcia_direzionale','cassa_amplificata','innesco','taser','proiettile_frammentazione','pistola_rampino','stivali_molla'];
+            const PORTABILI_SPEDIZIONE = ['localizzatore','orologio_timer','torcia_direzionale','cassa_amplificata','innesco','trappola_orsi','taser','pistola_rampino','stivali_molla'];
+                        // --- Casi specifici per ricetta ---
+            if (ricetta.id === 'batterie_creazione') {
+                const resa = { comune: 5, non_comune: 10, raro: 25, super_raro: 55 };
+                const battTrovate = resa[dettagliExtra] || 0;
+                leader.initInventarioBase();
+                leader.inventario.batterie = (leader.inventario.batterie || 0) + battTrovate;
+                alert(`Hai generato ${battTrovate} Batterie (nel tuo inventario)!`);
+            } else if (ricetta.id === 'riparazione_robot') {
+                const target = window.party.find(p => p.id === ricetta._robotTargetId) || leader;
+                target.repairRobot(Math.floor(target.robotPFMax * 0.5), leader);
+                alert(`${target.nome} è stato riparato.`);
+                salvaPersonaggioCloud(target);
+            } else if (ricetta.id === 'stazione_ricarica') {
+                window.magazzino.congegniFissi.push({ nome: 'Stazione di Ricarica', dettagli: '' });
+                window.magazzino.stazioneRicarica = { batterie: 0, robotIdOccupante: null };
+                if (typeof window.updateMagazzinoFields === 'function') {
+                    window.updateMagazzinoFields({ stazioneRicarica: window.magazzino.stazioneRicarica });
+                }
+                alert('Stazione di Ricarica costruita!');
+            } else if (ricetta.id === 'taser') {
+                leader.inventario.armi.push('Taser');
+                leader.taserCaricato = true;
+            } else if (ricetta.id === 'stivali_molla') {
+                leader.inventario.armi.push('Stivali a Molla');
+                leader.stivaliCariche = 3;
+            } else {
             switch (ricetta.outputType) {
                 case 'fisso_base':
                     window.magazzino.congegniFissi.push({ nome: ricetta.name, dettagli: dettagliExtra });
@@ -620,7 +733,11 @@ function risolviEsitoArtificeria(leader, collaboratori, ricetta, costoIngranaggi
                     break;
                 case 'equipaggiamento':
                     if (ricetta.id === 'creazione_proiettili') {
-                        // già gestito a monte
+                        // gestito a monte in eseguiCreazioneArtificeria/dettagliExtra
+                    } else if (ricetta.id === 'proiettile_frammentazione') {
+                        leader.initInventarioBase();
+                        leader.inventario.proiettiliFrammentazione = (leader.inventario.proiettiliFrammentazione || 0) + 1;
+                        alert(`${leader.nome} ha creato 1 Proiettile a Frammentazione.`);
                     } else if (PORTABILI_SPEDIZIONE.includes(ricetta.id)) {
                         leader.inventario.armi.push(ricetta.name);
                     } else {
@@ -629,22 +746,16 @@ function risolviEsitoArtificeria(leader, collaboratori, ricetta, costoIngranaggi
                     }
                     break;
                 case 'potenziamento_arma': {
-                    const indiceArma = leader.inventario.findIndex(item => item.includes(dettagliExtra));
+                    const indiceArma = leader.inventario.armi.findIndex(item => item.includes(dettagliExtra));
                     if (indiceArma !== -1) {
-                        let nomeAttuale = leader.inventario[indiceArma];
-                        if (nomeAttuale.includes("+1")) leader.inventario[indiceArma] = nomeAttuale.replace("+1", "+2");
-                        else if (nomeAttuale.includes("+2")) leader.inventario[indiceArma] = nomeAttuale.replace("+2", "+3");
-                        else leader.inventario[indiceArma] = `${nomeAttuale} +1`;
-                        alert(`Arma potenziata! Ora hai: ${leader.inventario[indiceArma]}`);
+                        let nomeAttuale = leader.inventario.armi[indiceArma];
+                        if (nomeAttuale.includes("+1")) leader.inventario.armi[indiceArma] = nomeAttuale.replace("+1", "+2");
+                        else if (nomeAttuale.includes("+2")) leader.inventario.armi[indiceArma] = nomeAttuale.replace("+2", "+3");
+                        else leader.inventario.armi[indiceArma] = `${nomeAttuale} (+1)`;
+                        alert(`Arma potenziata! Ora hai: ${leader.inventario.armi[indiceArma]}`);
                     } else {
-                        alert(`Arma '${dettagliExtra}' non trovata nell'inventario. Il potenziamento è pronto per essere applicato manualmente.`);
+                        alert(`Arma '${dettagliExtra}' non trovata nell'inventario.`);
                     }
-                    break;
-                }
-                case 'fabbisogno_magico': {
-                    const resa = { comune: 5, non_comune: 10, raro: 25, super_raro: 55 };
-                    const battTrovate = resa[dettagliExtra] || 0;
-                    alert(`Hai generato ${battTrovate} Batterie!`);
                     break;
                 }
                 case 'fabbisogno_robot':
@@ -652,6 +763,7 @@ function risolviEsitoArtificeria(leader, collaboratori, ricetta, costoIngranaggi
                     break;
                 default:
                     alert(`Oggetto ${ricetta.name} creato, ma senza logica di smistamento definita.`);
+            }
             }
             salvaPersonaggio(leader);
             collaboratori.forEach(c => salvaPersonaggio(c));
@@ -831,7 +943,7 @@ const DIFFICOLTA_CRAFTING = {
     'Facile': { cdBase: 14, psBase: 1 },
     'Media': { cdBase: 20, psBase: 3 },
     'Difficile': { cdBase: 24, psBase: 7 },
-    'Molto difficile': { cdBase: 36, psBase: 15 }
+    'Molto difficile': { cdBase: 32, psBase: 15 }
 };
 
 // --- INIZIALIZZAZIONE STATISTICHE ---
@@ -952,24 +1064,29 @@ function apriPotenziaRobotModal(leaderIdx) {
     const azione = prompt('Scrivi "aggiungi" o "rimuovi"', 'aggiungi');
     const perkRobotici = (window.DATABASE_PERK.robotici || []);
 
-    if (azione === 'aggiungi') {
+     if (azione === 'aggiungi') {
         const nomi = perkRobotici.filter(p => !target.perks.some(tp => (tp.nome||tp) === p.nome)).map(p => p.nome);
         const scelto = prompt(`Perk da aggiungere:\n${nomi.join('\n')}`);
         const perkDati = perkRobotici.find(p => p.nome === scelto);
         if (!perkDati) return alert('Perk non trovato.');
-        const costoIng = 15, costoOre = 1; // 15 ing + 1h a punto perk (manuale)
+        let costoIng = 15;
+        const costoOre = 1;
+        if (target.hasPerk && target.hasPerk('Non compatibile')) costoIng = Math.ceil(costoIng * 1.2);
+        if (target.hasPerk && target.hasPerk('Compatibile')) costoIng = Math.ceil(costoIng * 0.8);
         if (magazzino.ingranaggi < costoIng) return alert('Ingranaggi insufficienti.');
         magazzino.ingranaggi -= costoIng;
         target.perks.push({ ...perkDati });
         alert(`${target.nome} ha ottenuto: ${perkDati.nome} (-${costoIng} ingranaggi, ${costoOre}h).`);
     } else {
-        const rimovibili = target.perks.filter(p => (p.costo || 0) > 0); // solo perk positivi (bonus)
+        const rimovibili = target.perks.filter(p => (p.costo || 0) > 0);
         const nomi = rimovibili.map(p => p.nome || p);
         const scelto = prompt(`Perk positivo da rimuovere (costa 10 ing/punto + 0.5h/punto):\n${nomi.join('\n')}`);
         const idxPerk = target.perks.findIndex(p => (p.nome || p) === scelto);
         if (idxPerk === -1) return alert('Perk non trovato o non rimovibile.');
         const perkRimosso = target.perks[idxPerk];
-        const costoIng = Math.abs(perkRimosso.costo || 0) * 10;
+        let costoIng = Math.abs(perkRimosso.costo || 0) * 10;
+        if (target.hasPerk && target.hasPerk('Non compatibile')) costoIng = Math.ceil(costoIng * 0.8);
+        if (target.hasPerk && target.hasPerk('Compatibile')) costoIng = Math.ceil(costoIng * 1.2);
         if (magazzino.ingranaggi < costoIng) return alert('Ingranaggi insufficienti.');
         magazzino.ingranaggi -= costoIng;
         target.perks.splice(idxPerk, 1);
@@ -1015,6 +1132,48 @@ function risolviAzioneArtificeriaConGruppo(leader, collaboratori, ricettaId, isS
     risolviAzioneArtificeria(leaderIdx, finalCollaborators, ricettaId, isSmontaggio);
 }
 
+function avviaSmantellamentoRobot(leader) {
+    const robots = window.party.filter(p => p.isRobot);
+    const opzioni = ['🪦 Smonta un cadavere robot dalla base'].concat(robots.map(r => `🤖 ${r.nome} (vivo, richiede consenso)`));
+    if (window.magazzino.cadaveriRobot <= 0 && robots.length === 0) {
+        alert('Nessun robot (vivo o cadavere) disponibile da smantellare.');
+        return;
+    }
+    const listaStr = opzioni.map((o, i) => `${i}) ${o}`).join('\n');
+    const scelta = parseInt(prompt(`Cosa vuoi smantellare?\n${listaStr}`, '0'));
+    if (isNaN(scelta)) return;
+
+    if (scelta === 0) {
+        if (window.magazzino.cadaveriRobot <= 0) { alert('Nessun cadavere robot disponibile.'); return; }
+        eseguiSmantellamentoRobot(leader, null, true);
+        return;
+    }
+    const target = robots[scelta - 1];
+    if (!target) return;
+    inviaProposta(leader.id, target.id, 'smantellamento-robot', { leaderId: leader.id });
+    mostraNotificaInAlto(`Richiesta di smantellamento inviata a ${target.nome}. In attesa di consenso...`, 'info');
+}
+
+function eseguiSmantellamentoRobot(leader, targetRobot, daCadavere) {
+    const ricompensa = rollDice(4, 12) + (daCadavere ? 0 : Math.max(0, (targetRobot.robotRepairTotalLimit || 0) - (targetRobot.robotRepairTotalDone || 0)));
+    window.magazzino.ingranaggi += ricompensa;
+    if (typeof window.updateMagazzinoFields === 'function') window.updateMagazzinoFields({ ingranaggi: window.magazzino.ingranaggi });
+
+    if (daCadavere) {
+        window.magazzino.cadaveriRobot = Math.max(0, window.magazzino.cadaveriRobot - 1);
+        if (typeof window.updateMagazzinoFields === 'function') window.updateMagazzinoFields({ cadaveriRobot: window.magazzino.cadaveriRobot });
+        alert(`Cadavere robot smantellato: +${ricompensa} ingranaggi.`);
+        if (typeof window.applicaFolliaSbarazzoCadavere === 'function') window.applicaFolliaSbarazzoCadavere(leader);
+    } else {
+        const idx = window.party.indexOf(targetRobot);
+        if (idx !== -1) window.party.splice(idx, 1);
+        alert(`${targetRobot.nome} è stato smantellato definitivamente: +${ricompensa} ingranaggi.`);
+    }
+    if (typeof window.aggiornaInterfaccia === 'function') window.aggiornaInterfaccia();
+}
+
+window.eseguiSmantellamentoRobot = eseguiSmantellamentoRobot;
+window.avviaSmantellamentoRobot = avviaSmantellamentoRobot;
 window.apriPotenziaRobotModal = apriPotenziaRobotModal;
 window.ARTIFICERIA_AG_COST = ARTIFICERIA_AG_COST;
 window.ARTIFICERIA_SPEC_COST = ARTIFICERIA_SPEC_COST;

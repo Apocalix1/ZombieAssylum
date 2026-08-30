@@ -158,6 +158,58 @@ window.masterAbilitaSmembramento = async function() {
 	aggiornaInterfaccia();
 };
 
+window.masterAggiungiOggetto = function(idx) {
+    const user = getCurrentUser();
+    if (!user || user.role !== 'master') return;
+    const p = party[idx];
+    if (!p) return;
+    p.initInventarioBase();
+
+    const opzioni = ['cibo', 'acqua', 'ingranaggi', 'alchemici', 'medBase', 'medAvanzati', 'medCritici', 'arma_libera'];
+    const scelta = prompt(`Cosa vuoi aggiungere a ${p.nome}?\n${opzioni.join(', ')}`, 'cibo');
+    if (!scelta) return;
+
+    if (scelta === 'arma_libera') {
+        const nomeArma = prompt('Nome dell\'oggetto/arma da aggiungere:');
+        if (!nomeArma) return;
+        p.inventario.armi.push(nomeArma);
+        mostraNotificaInAlto(`${p.nome} ha ricevuto: ${nomeArma}.`, 'successo');
+    } else if (opzioni.includes(scelta)) {
+        const qta = parseFloat(prompt(`Quantità di ${scelta} da aggiungere?`, '1'));
+        if (isNaN(qta) || qta <= 0) return;
+        p.inventario[scelta] = (p.inventario[scelta] || 0) + qta;
+        mostraNotificaInAlto(`${p.nome} ha ricevuto ${qta} ${scelta}.`, 'successo');
+    } else {
+        alert('Voce non riconosciuta.');
+        return;
+    }
+    salvaPersonaggioCloud(p);
+    aggiornaInterfaccia();
+};
+
+window.masterConsumaBatteria = function(idx) {
+    const p = party[idx];
+    if (!p || !p.isRobot) return;
+    const ore = parseFloat(prompt(`Ore di batteria da consumare a ${p.nome}? (attuale: ${p.batteryHours.toFixed(1)}h)`, '1'));
+    if (isNaN(ore) || ore <= 0) return;
+    p.consumeBattery(ore);
+    mostraNotificaInAlto(`${p.nome}: batteria consumata manualmente di ${ore}h dal Master.`, 'avviso');
+    salvaPersonaggioCloud(p);
+    aggiornaInterfaccia();
+};
+
+window.masterAggiungiCadavereRobot = function() {
+    magazzino.cadaveriRobot = (magazzino.cadaveriRobot || 0) + 1;
+    window.updateMagazzinoFields({ cadaveriRobot: magazzino.cadaveriRobot });
+    mostraNotificaInAlto('Cadavere robot aggiunto alla base.', 'avviso');
+    aggiornaInterfaccia();
+};
+window.masterAggiungiCadavereUmano = function() {
+    magazzino.cadaveriUmani = (magazzino.cadaveriUmani || 0) + 1;
+    window.updateMagazzinoFields({ cadaveriUmani: magazzino.cadaveriUmani });
+    mostraNotificaInAlto('Cadavere aggiunto alla base.', 'avviso');
+    aggiornaInterfaccia();
+};
 
 window.gestisciCroceRossina = function(idx) {
 	const p = party[idx];

@@ -411,10 +411,6 @@ function salvaPersonaggio(p) {
     if (p && typeof salvaPersonaggioCloud === 'function') {
         salvaPersonaggioCloud(p);
     }
-    if (error.message.includes('403')) {
-        console.warn('Permesso negato. Salvataggio solo locale.');
-        return; // non riprovare
-    }
 }
 
 export async function fetchUserCharacters() {
@@ -712,6 +708,7 @@ export class Personaggio {
         this.rancoreTargetId = null;
         this.senseDiColpaStack = 0;
         this.pulizieBloccate = false;
+        this.autoRisorse = {};
         this._ultimoGiornoPulizia = -1;
         this.masteries = [];
         this.staminaRegenTimer = 0;
@@ -735,7 +732,12 @@ export class Personaggio {
         this.batteryHours = 4 * 24;
         this.batteryHoursMax = 7 * 24;
         this.statiAlterati = [];
+        this.biocarburanteTimer = 0;
+        this.biocarburanteDeficit = false;
         this.zainoEquipaggiato = null;
+        this.taserCaricato = false;
+        this.stivaliCariche = 0; // presente solo se possiede il perk/oggetto stivali a molla
+        this.inRicaricaFinoA = null;
         this.inventario = null; // sarà inizializzato da initInventarioBase
         this.initInventarioBase();
     }
@@ -757,7 +759,8 @@ export class Personaggio {
                 medAvanzati: 0,
                 medCritici: 0,
                 alchemici: 0,
-                munizioni: 0,
+                munizioni: { frecce: 0, quadrelli: 0, proiettili: 0 },
+                proiettiliFrammentazione: 0,
                 batterie:0,
                 oggettiMagici: {comuni: 0, nonComuni: 0, rari: 0, superRari: 0},
                 documenti: []
@@ -781,17 +784,16 @@ export class Personaggio {
 
     // ---- Robot methods ----
     becomeRobot() {
-        if (this._robotInitialized) return;
-        this._robotInitialized = true;
-        this.isRobot = true;
-        this.fame = 0;
-        this.sete = 0;
-        this.sonno = 0;
-        this.puntiCreazione = Math.max(0, this.puntiCreazione - 6);
-        this.robotPF = this.robotPFMax;
-        this.robotRepairTotalDone = 0;
-        this.robotMicroRepairsUsed = 0;
-    }
+    if (this._robotInitialized) return;
+    this._robotInitialized = true;
+    this.isRobot = true;
+    this.fame = 0;
+    this.sete = 0;
+    this.sonno = 0;
+    this.robotPF = this.robotPFMax;
+    this.robotRepairTotalDone = 0;
+    this.robotMicroRepairsUsed = 0;
+}
 
         absorbMagicItem(rarity) {
         const map = {comune: 8, non_comune: 16, raro: 32, super_raro: 64};
@@ -922,7 +924,7 @@ export class Personaggio {
     get stazioneMobileCapacita() {
         return 12;
     }
-
+    
     get robotRepairTotalLimit() {
     if (this._robotRepairTotalLimit !== undefined) {
         return this._robotRepairTotalLimit;
@@ -931,11 +933,9 @@ export class Personaggio {
     const conMod = this.getStatDettagliata ? this.getStatDettagliata('Costituzione').mod : 0;
     let limit = 50 + conMod * 10;
     if (this.hasPerk && this.hasPerk('Vecchio modello')) limit -= 10;
+    const corazzatoCount = (this.perks || []).filter(p => (typeof p === 'string' ? p : p.nome) === 'Corazzato').length;
+    limit += corazzatoCount * 10;
     return Math.max(10, limit);
-}
-
-    set robotRepairTotalLimit(value) {
-    this._robotRepairTotalLimit = value;
 }
     
     getPessimistaCDBonus() {
@@ -1073,6 +1073,18 @@ export class Personaggio {
         this._manaSpentLastMinute = 0;
         this._lastManaSpentReset = null;
     }
+
+    consumaBiocarburante(magazzinoRif) {
+    if (!this.hasPerk || !this.hasPerk('Biocarburante')) return false;
+    const mag = magazzinoRif || window.magazzino;
+    if (mag.cibo >= 0.25) mag.cibo -= 0.25;
+    else if ((mag.piattiDeliziosi || 0) > 0) mag.piattiDeliziosi -= 1;
+    else if (mag.ciboAvariato >= 0.25) mag.ciboAvariato -= 0.25;
+    else return false;
+    this.biocarburanteTimer = 0;
+    this.biocarburanteDeficit = false;
+    return true;
+}
 
     canCastSpell(level) {
         if (!this.hasSpellLevel(level)) return {allowed: false, reason: 'Incantesimo non conosciuto.'};
@@ -1698,6 +1710,10 @@ export class Personaggio {
         if (malTuttiMod !== 0) {
             modFinale += malTuttiMod;
             motivi.push(`Malattia (${malTuttiMod >= 0 ? '+' : ''}${malTuttiMod})`);
+        }
+         if (this.isRobot && this.biocarburanteDeficit) {
+            modFinale -= 1;
+            motivi.push("Carenza di Biocarburante (-1)");
         }
         if (this.timers && this.timers.overdose > 0) {
             modFinale -= 2;
@@ -2402,10 +2418,20 @@ export class Personaggio {
 
             this.sete = Math.max(0, this.sete - calo);
             this.sonno = Math.max(0, this.sonno - calo);
-        } else {
+           } else {
+            const inRicarica = this.azioneCorrente && this.azioneCorrente.tipo === 'ricarica_robot';
             const inRiposo = this.azioneCorrente && this.azioneCorrente.tipo === 'modalita_riposo';
-            const consumoOra = inRiposo ? 0.1 : 1;
+            const consumoOra = inRicarica ? 0 : (inRiposo ? 0.1 : 1);
             this.batteryHours = Math.max(0, (this.batteryHours || 0) - consumoOra);
+            if (this.hasPerk && this.hasPerk('Biocarburante')) {
+                this.biocarburanteTimer = (this.biocarburanteTimer || 0) + 1;
+                if (this.biocarburanteTimer >= 12 && !this.biocarburanteDeficit) {
+                    this.biocarburanteDeficit = true;
+                    if (typeof window.mostraNotificaInAlto === 'function') {
+                        window.mostraNotificaInAlto(`${this.nome} necessita di biocarburante! -25% velocità azioni, -1 a tutte le statistiche.`, 'pericolo');
+                    }
+                }
+            }
             if (this.batteryHours <= 0) {
                 return "batteria esaurita";
             }
@@ -2582,7 +2608,7 @@ export class Personaggio {
         }
 
         // ==================== 9. AUTO‑SOPRAVVIVENZA (emergenza) ====================
-        if (!this.inSpedizione && typeof magazzino !== 'undefined') {
+        if (!this.isRobot && !this.inSpedizione && typeof magazzino !== 'undefined'){
             if (this.fame <= 0 && magazzino.cibo >= 0.5) {
                 magazzino.cibo -= 0.5;
                 this.fame = Math.min(16, this.fame + 0.5);
@@ -3130,9 +3156,12 @@ Personaggio.prototype.getModificatoreTempoAzione = function (tipoAzione, materia
         mult *= 0.8;
     }
 
+    if (this.isRobot && this.biocarburanteDeficit) {
+        mult *= 1.25;
+    }
+
     return mult;
 };
-
 window.Personaggio = Personaggio;
 window.buildAuthHeaders = buildAuthHeaders;
 window.caricaDatiDaLocalStorage = caricaDatiDaLocalStorage;

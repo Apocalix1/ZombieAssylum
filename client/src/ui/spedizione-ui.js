@@ -177,6 +177,25 @@ function ferisciInCombat(idx) {
     aggiornaInterfaccia();
 }
 
+window.attivaOverclock = function(idx) {
+    const p = party[idx];
+    if (!p || !hasPerk(p, 'Protocollo Overclock')) return;
+    if ((p.batteryHours || 0) < 5) return alert('Batteria Arcana insufficiente (servono 5h).');
+    p.consumeBattery(5);
+    mostraNotificaInAlto(`${p.nome} attiva il Protocollo Overclock: agisce di nuovo, poi entra in Paralisi per 1 turno.`, 'avviso');
+    salvaPersonaggioCloud(p);
+    aggiornaInterfaccia();
+};
+window.attivaScudoEnergetico = function(idx) {
+    const p = party[idx];
+    if (!p || !hasPerk(p, 'Scudo Energetico')) return;
+    if ((p.batteryHours || 0) < 5) return alert('Batteria Arcana insufficiente (servono 5h).');
+    p.consumeBattery(5);
+    mostraNotificaInAlto(`${p.nome} attiva lo Scudo Energetico: -2d8 danno al prossimo colpo subito.`, 'successo');
+    salvaPersonaggioCloud(p);
+    aggiornaInterfaccia();
+};
+
 function useStressFisico(idx) {
     const p = party[idx];
     if (!p || !(window.hasPerk && window.hasPerk(p, 'Stress fisico'))) return;
@@ -243,7 +262,7 @@ async function renderSpedizioneModal() {
     container.innerHTML = personaggiInSpedizione.map(p => {
         const idx = party.indexOf(p);
         // Definisci una lista di perk extra da mostrare (anche se non sono di combattimento)
-        const extraPerks = ['Stress fisico', 'Fino all\'ultimo', 'Guerriero', 'Nato per combattere','Flusso magico','Incantesimo preferito','Trasmettitore magico','Voce calma','Vendicativo', 'Mente ferrea', 'Vicinanza', 'Carapace/Esoscheletro duro', 'Sensibilità alle temperature', 'Guida', 'Lingua prensile', 'Produrre veleni', 'Termoregolazione', 'Scivolata(Pinguinosa)', 'Volo', 'Uniti siamo più forti'];
+        const extraPerks = ['Stress fisico', 'Fino all\'ultimo', 'Guerriero', 'Nato per combattere','Flusso magico','Incantesimo preferito','Trasmettitore magico','Voce calma','Vendicativo', 'Mente ferrea', 'Vicinanza', 'Carapace/Esoscheletro duro', 'Sensibilità alle temperature', 'Guida', 'Lingua prensile', 'Produrre veleni', 'Termoregolazione', 'Scivolata(Pinguinosa)', 'Volo', 'Uniti siamo più forti','Ammortizzatori','Attacco roteante','Scudo energetico','Protocollo Overclock','Auto riparazione', 'Autodistruzione','Chassis Rinforzato','Connessione','Cigolante','Legittima difesa','Metallo duro','Incantatore','Pronto soccorso','Propulsione','Rafforzamento','Segnalatore','Stazione mobile','Zoom'];
         const perkList = p.perks && p.perks.length > 0
             ? p.perks
                 .filter(perk => {
@@ -290,6 +309,19 @@ async function renderSpedizioneModal() {
             }
             if (typeof hasPerk === 'function' && hasPerk(p, 'Guerriero')) {
                 extras += `<button onclick="useGuerrieroRigenera(${idx})">Rigenera Guerriero</button>`;
+            }
+            if (p.inventario?.armi?.includes('Taser')) {
+                extras += p.taserCaricato
+                    ? `<button onclick="useTaser(${idx})">⚡ Usa Taser</button>`
+                    : `<button onclick="ricaricaTaser(${idx})" ${((p.inventario?.batterie||0) > 0) ? '' : 'disabled'}>🔋 Ricarica Taser</button>`;
+            }
+            if (p.inventario?.proiettiliFrammentazione > 0) {
+                extras += `<button onclick="consumaProiettileFrammentazione(${idx})">💥 Consuma Proiettile Frammentazione (${p.inventario.proiettiliFrammentazione})</button>`;
+            }
+            if (p.inventario?.armi?.includes('Stivali a Molla') && p.stivaliCariche > 0) {
+                extras += `<button onclick="useStivaliMolla(${idx})">🦵 Usa Stivali (${p.stivaliCariche}/3)</button>`;
+            } else if (p.inventario?.armi?.includes('Stivali a Molla')) {
+                extras += `<button onclick="ricaricaStivali(${idx})" ${((p.inventario?.batterie||0) > 0) ? '' : 'disabled'}>🔋 Ricarica Stivali</button>`;
             }
             if (p.perks && p.perks.some(pp => pp.nome === "Fino all'ultimo")) {
                 extras += `<button onclick="toggleFinoAllUltimo(${idx})">${p.finoAllUltimoActive ? 'Disattiva FinoAll' : 'Usa Fino all\'ultimo'}</button>`;
@@ -963,6 +995,54 @@ function renderEccedenzaModal(idx) {
         </div>`;
 }
 
+window.useTaser = function(idx) {
+    const p = party[idx];
+    if (!p || !p.taserCaricato) return;
+    p.taserCaricato = false;
+    mostraNotificaInAlto(`${p.nome} usa il Taser: si è scaricato.`, 'info');
+    salvaPersonaggioCloud(p);
+    renderSpedizioneModal();
+    aggiornaInterfaccia();
+};
+window.ricaricaTaser = function(idx) {
+    const p = party[idx];
+    if (!p || (p.inventario?.batterie || 0) <= 0) return alert('Nessuna batteria disponibile.');
+    p.inventario.batterie -= 1;
+    p.taserCaricato = true;
+    mostraNotificaInAlto(`${p.nome} ha ricaricato il Taser.`, 'successo');
+    salvaPersonaggioCloud(p);
+    renderSpedizioneModal();
+    aggiornaInterfaccia();
+};
+window.consumaProiettileFrammentazione = function(idx) {
+    const p = party[idx];
+    if (!p || (p.inventario?.proiettiliFrammentazione || 0) <= 0) return;
+    p.inventario.proiettiliFrammentazione -= 1;
+    mostraNotificaInAlto(`${p.nome} usa un Proiettile a Frammentazione.`, 'info');
+    salvaPersonaggioCloud(p);
+    renderSpedizioneModal();
+    aggiornaInterfaccia();
+};
+window.useStivaliMolla = function(idx) {
+    const p = party[idx];
+    if (!p || p.stivaliCariche <= 0) return;
+    p.stivaliCariche -= 1;
+    mostraNotificaInAlto(`${p.nome} usa gli Stivali a Molla (${p.stivaliCariche}/3 cariche).`, 'info');
+    salvaPersonaggioCloud(p);
+    renderSpedizioneModal();
+    aggiornaInterfaccia();
+};
+window.ricaricaStivali = function(idx) {
+    const p = party[idx];
+    if (!p || (p.inventario?.batterie || 0) <= 0) return alert('Nessuna batteria disponibile.');
+    p.inventario.batterie -= 1;
+    p.stivaliCariche = 3;
+    mostraNotificaInAlto(`${p.nome} ha ricaricato gli Stivali a Molla.`, 'successo');
+    salvaPersonaggioCloud(p);
+    renderSpedizioneModal();
+    aggiornaInterfaccia();
+};
+
 function confermaEccedenza(idx) {
     const p = party[idx];
     const campi = ['cibo', 'acqua', 'ingranaggi', 'alchemici', 'medBase', 'medAvanzati', 'medCritici'];
@@ -1046,4 +1126,4 @@ window.rollZainoTrovato = rollZainoTrovato;
 window.renderSpedizioneModal = renderSpedizioneModal;
 window.segnaVittoria = segnaVittoria;
 window.getExplorationBonus = getExplorationBonus;
-
+window.terminaEsplorazione = terminaEsplorazione;

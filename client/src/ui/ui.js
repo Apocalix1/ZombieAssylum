@@ -530,9 +530,8 @@ window.apriPannelloMaster = async function apriPannelloMaster() {
             <div id="master-magazzino-editor" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(200px,1fr)); gap:10px;"></div>
         </div>
         <div style="margin-top:12px; display:flex; align-items:center; gap:10px;">
-    <span style="color:#ccc;">☠️ Smembramento cadaveri:</span>
-    <span style="color:${magazzino.smembramentoAbilitato ? '#2ecc71' : '#888'};">${magazzino.smembramentoAbilitato ? 'Abilitato' : 'Disabilitato'}</span>
-    <button class="btn-hero" onclick="masterAbilitaSmembramento()" style="padding:4px 10px; font-size:0.8rem;">Abilita un uso</button>
+        <button class="btn-hero" onclick="masterAggiungiCadavereRobot()">🤖🪦 +1 Cadavere Robot (${magazzino.cadaveriRobot||0})</button>
+<button class="btn-hero" onclick="masterAggiungiCadavereUmano()">💀 +1 Cadavere (${magazzino.cadaveriUmani||0})</button>
 </div>
          <div style="margin-top:20px; border-top:1px solid #333; padding-top:10px;">
             <h3 style="color:#f1c40f;">📋 Log Transazioni Magazzino</h3>
@@ -1127,10 +1126,45 @@ function eseguiAzioneProposta(prop) {
             }
             break;
         }
+             case 'smantellamento-robot': {
+            destinatario.azioneCorrente = null;
+            destinatario.codaAzioni = [];
+            destinatario._inSmantellamento = true;
+            mostraNotificaInAlto(`${destinatario.nome} ha accettato: smantellamento in corso...`, 'avviso');
+            window.eseguiSmantellamentoRobot(mittente, destinatario, false);
+            break;
+        }
+         case 'cerimonia-becchino': {
+            const cerimonia = window._cerimonieBecchino && window._cerimonieBecchino[prop.dati.idCerimonia];
+            if (cerimonia) {
+                cerimonia.partecipanti.add(destinatario.id);
+                mostraNotificaInAlto(`${destinatario.nome} parteciperà alla cerimonia.`, 'info');
+            }
+            break;
+        }
+                case 'musicista': {
+            if (!destinatario.azioneCorrente) {
+                const modCar = mittente.getStatDettagliata('Carisma').mod;
+                destinatario.azioneCorrente = {
+                    tipo: 'intrattenuto_musica', oreTotali: 1, oreRimanenti: 1,
+                    onComplete: () => {
+                        const riduzione = Math.max(0, rollDice(1, 6) + modCar);
+                        destinatario.follia = Math.max(0, destinatario.follia - riduzione);
+                        mostraNotificaInAlto(`${destinatario.nome} si distrae con la musica di ${mittente.nome}: Follia -${riduzione}.`, 'successo');
+                        salvaPersonaggioCloud(destinatario);
+                        aggiornaInterfaccia();
+                    }
+                };
+                salvaPersonaggioCloud(destinatario);
+                aggiornaInterfaccia();
+            }
+            break;
+        }
 
         default:
             console.warn('Tipo di proposta non riconosciuto:', prop.tipo);
     }
+    
 }
 
 function verificaProposteInSospeso() {
@@ -1200,13 +1234,29 @@ async function passaTempoGlobale() {
     let ore = parseInt(oreInput);
     if (isNaN(ore) || ore <= 0) return;
 
-    const giornoPrecedente = Math.floor(oreTotali / 24);
+       const giornoPrecedente = Math.floor(oreTotali / 24);
+    const oreTotaliPrima = oreTotali;
     oreTotali += ore;
     window.oreTotali = oreTotali;
     if (typeof window.updateMagazzinoFields === 'function') {
         window.updateMagazzinoFields({ oreTotali });
     }
     const giornoAttuale = Math.floor(oreTotali / 24);
+
+    const cicliPrima = Math.floor(oreTotaliPrima / 3);
+    const cicliDopo = Math.floor(oreTotali / 3);
+    const numCicli3h = cicliDopo - cicliPrima;
+    if (numCicli3h > 0 && ((magazzino.cadaveriUmani || 0) > 0 || (magazzino.cadaveriRobot || 0) > 0)) {
+        for (let c = 0; c < numCicli3h; c++) {
+            party.forEach(p => {
+                if (p.isRobot || p.inSpedizione) return;
+                const tiro = rollDice(1, 4);
+                p.follia = Math.min(20, p.follia + tiro);
+                if (typeof p.aggiornaSintomiFollia === 'function') p.aggiornaSintomiFollia();
+            });
+        }
+        mostraNotificaInAlto(`⚰️ La presenza di cadaveri nella base turba i sopravvissuti: +1d4 Follia ogni 3 ore (x${numCicli3h}).`, 'pericolo');
+    }
 
     // Frigorifero
     const haFrigo = magazzino.congegniFissi.some(c => c.nome === 'Frigorifero');
@@ -1256,14 +1306,13 @@ async function passaTempoGlobale() {
         const p = party[i];
         if (typeof p.resetDailyStudy === 'function') p.resetDailyStudy(oreTotali);
         const causaMorte = (typeof p.tickOre === 'function') ? p.tickOre(ore) : null;
-        if (causaMorte) {
+           if (causaMorte) {
             annullaEsplorazionePerMorte(p);
             const giorniSopravvissuto = giornoAttuale - (p.giornoInizio || 0);
             p.causaMorte = causaMorte;
             p.giorniSopravvissuto = giorniSopravvissuto;
             p.giornoMorte = giornoAttuale;
 
-            // Accoda il comando di morte invece di fare fetch diretto
             queueCommand({
                 type: 'markDead',
                 personaggioId: p.id,
@@ -1271,6 +1320,10 @@ async function passaTempoGlobale() {
             });
 
             alert(`CONDOGLIANZE: ${p.nome} è morto per ${causaMorte}.`);
+            if (p.isRobot) magazzino.cadaveriRobot = (magazzino.cadaveriRobot || 0) + 1;
+            else magazzino.cadaveriUmani = (magazzino.cadaveriUmani || 0) + 1;
+            window.updateMagazzinoFields({ cadaveriRobot: magazzino.cadaveriRobot, cadaveriUmani: magazzino.cadaveriUmani });
+            applicaFolliaMortePersonaggio(p);
             party.splice(i, 1);
             if (typeof chiudiScheda === 'function') chiudiScheda();
         }else {
@@ -1311,7 +1364,10 @@ export function aggiornaInterfaccia() {
                     body: JSON.stringify({ data: JSON.stringify(p), status: 'morto' })
                 }).catch(err => console.warn('Errore salvataggio morte automatica:', err));
 
-                alert(`NOTIZIA ESALATA: ${p.nome} è deceduto per ${p.causaMorte}.`);
+                  alert(`NOTIZIA ESALATA: ${p.nome} è deceduto per ${p.causaMorte}.`);
+                magazzino.cadaveriUmani = (magazzino.cadaveriUmani || 0) + 1;
+                window.updateMagazzinoFields({ cadaveriUmani: magazzino.cadaveriUmani });
+                applicaFolliaMortePersonaggio(p);
                 party.splice(i, 1);
                 try {
                     const modal = document.getElementById('modal-scheda');
@@ -1446,6 +1502,8 @@ export function aggiornaInterfaccia() {
                     ${canManage ? `<span class="fatica-badge">Fatic. ${p.faticaTotale}</span>` : ''}
                     ${isMaster ? `<button onclick="masterEliminaPersonaggio(${idx})" title="Elimina personaggio"
                         style="position:absolute; top:0; right:0; background:#c0392b !important; border:1px solid #c0392b !important; padding:4px 8px; font-size:0.75rem;">🗑️</button>` : ''}
+                    ${isMaster ? `<button onclick="masterAggiungiOggetto(${idx})" title="Aggiungi oggetto"
+    style="position:absolute; top:0; right:34px; background:#27ae60 !important; border:1px solid #27ae60 !important; padding:4px 8px; font-size:0.75rem;">🎁</button>` : ''}
                 </div>
             `;
 
@@ -1500,12 +1558,15 @@ export function aggiornaInterfaccia() {
                                 <div class="dropdown-buttons">
                                     ${p.isRobot ? `
                                             <button onclick="assorbiMagia(${idx})">Assorbi</button>
+                                                ${user && user.role === 'master' ? `<button onclick="masterConsumaBatteria(${idx})" style="background:#d35400; color:white;">🔋 Consuma Batteria</button>` : ''}
+                                                ${hasPerk(p, 'Biocarburante') ? `<button onclick="nutriBiocarburante(${idx})" style="background:${p.biocarburanteDeficit ? '#c0392b' : '#27ae60'}; color:white;">${p.biocarburanteDeficit ? '⚠️ Nutri (URGENTE)' : '🍽️ Nutri (Biocarburante)'}</button>` : ''}
                                         ` : `
                                             ${hasPerk(p, 'Modalità riposo') ? `<button onclick="attivaModalitaRiposo(${idx})">💤 Modalità Riposo</button>` : ''}
                                             <button onclick="openRisorsaModal(${idx}, 'fame')">Nutri</button>
                                             <button onclick="openRisorsaModal(${idx}, 'sete')">Bevi</button>
                                             <button onclick="openRisorsaModal(${idx}, 'sonno')">Dormi</button>
                                             ${hasPerk(p, 'Artista') ? `<button onclick="apriIntrattieniModal(${idx})">🎭 Intrattieni</button>` : ''}
+                                            ${hasPerk(p, 'Musicista') ? `<button onclick="apriMusicistaModal(${idx})">🎵 Suona</button>` : ''}
                                             ${user && user.role === 'master' ? `<button onclick="apriAumentaFollia(${idx})" style="background:#c0392b; color:white;">🧠 Aumenta Follia</button>` : ''}
                                             ${user && user.role === 'master' && hasPerk(p, 'Pessimista') ? `<button onclick="gestisciPessimista(${idx})" style="background:#7f8c8d; color:white;">😔 Pessimista</button>` : ''}
                                             ${user && user.role === 'master' && hasPerk(p, 'Ossessione del Pulito') ? `<button onclick="bloccaPulizia(${idx})" style="background:#c0392b; color:white;">🧹 Blocca Pulizia</button>` : ''}
@@ -1528,14 +1589,17 @@ export function aggiornaInterfaccia() {
                                     <button onclick="artificeriaPersonaggio(${idx})">Artificeria</button>
                                 </div>
                             </details>
-                                                        <details class="action-dropdown">
-                                    <summary>MIGLIORA</summary>
-                                    <div class="dropdown-buttons">
-                                        <button onclick="allenamento(${idx})">Allenamento</button>
-                                        <button onclick="studio(${idx})">Studio</button>
-                                        <button onclick="apriDecifra(${idx})">🔤 Decifra</button>
-                                    </div>
-                                </details>
+                            <details class="action-dropdown">
+                                <summary>MIGLIORA</summary>
+                                <div class="dropdown-buttons">
+                                    <button onclick="allenamento(${idx})">Allenamento</button>
+                                    <button onclick="studio(${idx})">Studio</button>
+                                    <button onclick="apriDecifra(${idx})">🔤 Decifra</button>
+                                   ${magazzino.cadaveriUmani > 0 ? `<button onclick="rimuoviCadaverePersonaggio(${idx})">🪦 Sbarazzati del cadavere (${magazzino.cadaveriUmani})</button>` : ''}
+                                    ${(magazzino.stazioneRicarica && p.isRobot) ? `<button onclick="apriRicaricaRobot(${idx})">🔌 Ricarica</button>` : ''}
+                                    ${(!p.isRobot && (magazzino.batterie > 0 || (p.inventario?.batterie > 0)) && magazzino.stazioneRicarica) ? `<button onclick="inserisciBatterieStazione(${idx})">🔋 Inserisci batterie in stazione</button>` : ''}
+                                </div>
+                            </details>
                             <details class="action-dropdown">
                                 <summary>ESPLORA</summary>
                                 <div class="dropdown-buttons">
@@ -1566,7 +1630,14 @@ export function aggiornaInterfaccia() {
             card.innerHTML = headerHtml + detailsHtml;
             container.appendChild(card);
         });
-
+                container.querySelectorAll('details.action-dropdown').forEach(d => {
+            const card = d.closest('.card-personaggio');
+            const nome = card?.dataset?.nome;
+            const summary = d.querySelector('summary')?.textContent?.trim();
+            if (nome && summary && openDetailsKeys.has(`${nome}::${summary}`)) {
+                d.open = true;
+            }
+        });
         if (typeof window.renderCimitero === 'function') window.renderCimitero();
         autoSaveParty();
     } finally {
@@ -1679,15 +1750,80 @@ function renderAiutoModal() {
     content.innerHTML = html;
 }
 
-function puoIniziareAzione(p, tipo) {
-    if (!p) return false;
-    const azioniConsentite = ['dormi', 'nutri', 'disseta'];
-    if (p.staminaAttuale <= 0 && !azioniConsentite.includes(tipo)) {
-        alert(`${p.nome} è troppo esausto per farlo. Deve riposare, bere o mangiare prima.`);
-        return false;
+window.rimuoviCadaverePersonaggio = function(idx) {
+    if (magazzino.cadaveriUmani <= 0) return;
+    const p = party[idx];
+    magazzino.cadaveriUmani -= 1;
+    window.updateMagazzinoFields({ cadaveriUmani: magazzino.cadaveriUmani });
+    mostraNotificaInAlto(`${p.nome} si è sbarazzato di un cadavere dalla base.`, 'successo');
+    applicaFolliaSbarazzoCadavere(p);
+    aggiornaInterfaccia();
+};
+
+window.rimuoviCadaverePersonaggio = function(idx) {
+    if (magazzino.cadaveriUmani <= 0) return;
+    magazzino.cadaveriUmani -= 1;
+    window.updateMagazzinoFields({ cadaveriUmani: magazzino.cadaveriUmani });
+    mostraNotificaInAlto(`${party[idx].nome} ha rimosso un cadavere dalla base.`, 'successo');
+    aggiornaInterfaccia();
+};
+
+window.inserisciBatterieStazione = function(idx) {
+    const p = party[idx];
+    if (!p || !magazzino.stazioneRicarica) return;
+    const disponibiliBase = magazzino.batterie || 0;
+    const disponibiliPers = p.inventario?.batterie || 0;
+    const spazioLibero = 30 - (magazzino.stazioneRicarica.batterie || 0);
+    if (spazioLibero <= 0) return alert('La stazione è già piena (30/30).');
+    const qta = parseInt(prompt(`Quante batterie vuoi inserire? (Base: ${disponibiliBase}, Tue: ${disponibiliPers}, spazio libero: ${spazioLibero})`, '1'));
+    if (isNaN(qta) || qta <= 0) return;
+    let daBase = Math.min(qta, disponibiliBase);
+    let daPersonale = Math.min(qta - daBase, disponibiliPers);
+    if (daBase + daPersonale < qta) return alert('Non hai abbastanza batterie.');
+    if (daBase + daPersonale > spazioLibero) return alert('Non c\'è abbastanza spazio nella stazione.');
+    magazzino.batterie -= daBase;
+    p.inventario.batterie -= daPersonale;
+    magazzino.stazioneRicarica.batterie += (daBase + daPersonale);
+    window.updateMagazzinoFields({ batterie: magazzino.batterie, stazioneRicarica: magazzino.stazioneRicarica });
+    salvaPersonaggioCloud(p);
+    mostraNotificaInAlto(`Inserite ${daBase + daPersonale} batterie nella stazione (${magazzino.stazioneRicarica.batterie}/30).`, 'successo');
+    aggiornaInterfaccia();
+};
+
+window.apriRicaricaRobot = function(idx) {
+    const p = party[idx];
+    if (!p || !p.isRobot || !magazzino.stazioneRicarica) return;
+    if (magazzino.stazioneRicarica.robotIdOccupante && magazzino.stazioneRicarica.robotIdOccupante !== p.id) {
+        return alert('La piattaforma è già occupata da un altro robot.');
     }
-    return true;
-}
+    const disponibili = magazzino.stazioneRicarica.batterie || 0;
+    if (disponibili < 5) return alert('Servono almeno 5 batterie nella stazione per un\'ora di ricarica.');
+    const oreMax = Math.floor(disponibili / 5);
+    const oreStr = prompt(`Per quante ore vuoi ricaricarti? (max ${oreMax}, consuma 5 batterie/ora, recupera 5h di batteria/ora)`, '1');
+    const ore = parseInt(oreStr);
+    if (isNaN(ore) || ore <= 0 || ore > oreMax) return;
+
+    magazzino.stazioneRicarica.batterie -= ore * 5;
+    magazzino.stazioneRicarica.robotIdOccupante = p.id;
+    window.updateMagazzinoFields({ stazioneRicarica: magazzino.stazioneRicarica });
+
+    p.azioneCorrente = {
+        tipo: 'ricarica_robot',
+        oreTotali: ore,
+        oreRimanenti: ore,
+        onComplete: () => {
+            p.batteryHours = Math.min(p.batteryHoursMax, p.batteryHours + ore * 5);
+            magazzino.stazioneRicarica.robotIdOccupante = null;
+            window.updateMagazzinoFields({ stazioneRicarica: magazzino.stazioneRicarica });
+            mostraNotificaInAlto(`${p.nome} ha finito di ricaricarsi (+${ore * 5}h batteria).`, 'successo');
+            salvaPersonaggioCloud(p);
+            aggiornaInterfaccia();
+        }
+    };
+    salvaPersonaggioCloud(p);
+    mostraNotificaInAlto(`${p.nome} sale sulla piattaforma di ricarica per ${ore}h. Non può fare altre azioni nel frattempo.`, 'info');
+    aggiornaInterfaccia();
+};
 
 function assorbiMagia(idx) {
     const p = party[idx];
@@ -1734,11 +1870,102 @@ window.mostraInvitoEsplorazione = function(invito, personaggio) {
     }).catch(e => console.warn('Errore risposta invito:', e));
 };
 
+function apriDinamoModal(idx) {
+    const p = party[idx];
+    if (!puoIniziareAzione(p, 'allenamento')) return;
+    const oreInput = prompt(`Per quante ore vuoi generare energia con la Dinamo?`, '1');
+    const ore = parseInt(oreInput);
+    if (isNaN(ore) || ore <= 0) return;
+    scheduleDinamo(idx, ore);
+}
+
+function scheduleDinamo(idx, ore) {
+    const p = party[idx];
+    const nuovaAzione = {
+        tipo: 'dinamo',
+        oreTotali: ore,
+        oreRimanenti: ore,
+        onComplete: () => completeDinamo(p, ore)
+    };
+    if (p.azioneCorrente) {
+        if (confirm(`${p.nome} sta già facendo un'altra azione. Metterla in coda?`)) {
+            p.codaAzioni.push(nuovaAzione);
+        }
+    } else {
+        p.azioneCorrente = nuovaAzione;
+    }
+    salvaPersonaggio(p);
+    aggiornaInterfaccia();
+}
+
+function completeDinamo(p, ore) {
+    let totBatterie = 0;
+    for (let i = 0; i < ore; i++) totBatterie += rollDice(1, 4);
+    p.initInventarioBase();
+    p.inventario.batterie = (p.inventario.batterie || 0) + totBatterie;
+    const staminaDaConsumare = Math.ceil(ore / 2);
+    p.consumaStamina(staminaDaConsumare);
+    alert(`${p.nome} ha generato ${totBatterie} batterie con la Dinamo in ${ore} ore!`);
+    salvaPersonaggioCloud(p);
+    aggiornaInterfaccia();
+}
+
+window.apriDinamoModal = apriDinamoModal;
+window.scheduleDinamo = scheduleDinamo;
+
+window.apriMusicistaModal = function(idx) {
+    const leader = party[idx];
+    if (!leader || !leader.hasPerk('Musicista')) return;
+    leader.initInventarioBase();
+    const disponibiliBase = (magazzino.oggettiMagici && magazzino.oggettiMagici.comuni) || 0;
+    const disponibiliPersonali = (leader.inventario.oggettiMagici && leader.inventario.oggettiMagici.comuni) || 0;
+    if (disponibiliBase + disponibiliPersonali <= 0) {
+        alert('Serve un oggetto comune da consumare per suonare.');
+        return;
+    }
+    let fonte = 'base';
+    if (disponibiliBase > 0 && disponibiliPersonali > 0) {
+        fonte = prompt('Da dove consumare l\'oggetto comune? "base" o "personale"', 'base');
+    } else if (disponibiliPersonali > 0) {
+        fonte = 'personale';
+    }
+    if (fonte === 'personale') leader.inventario.oggettiMagici.comuni--;
+    else {
+        magazzino.oggettiMagici.comuni--;
+        window.updateMagazzinoFields({ oggettiMagici: magazzino.oggettiMagici });
+    }
+
+    const candidati = party.filter((p, i) => i !== idx && !p.inSpedizione && !p.azioneCorrente);
+    if (candidati.length === 0) alert('Nessuno è libero per ascoltare la musica ora.');
+
+    leader.azioneCorrente = {
+        tipo: 'musicista', oreTotali: 1, oreRimanenti: 1,
+        onComplete: () => {
+            mostraNotificaInAlto(`${leader.nome} smette di suonare.`, 'info');
+            salvaPersonaggioCloud(leader);
+        }
+    };
+    salvaPersonaggioCloud(leader);
+
+    candidati.forEach(dest => window.inviaProposta(leader.id, dest.id, 'musicista', {}));
+    mostraNotificaInAlto(`${leader.nome} inizia a suonare per il gruppo...`, 'info');
+    aggiornaInterfaccia();
+};
+
 function allenamento(idx) {
     const modal = document.getElementById('modal-allenamento');
     const content = document.getElementById('allenamento-content');
     const p = party[idx];
     if (!puoIniziareAzione(p, 'allenamento')) return;
+
+    const haDinamo = magazzino.congegniFissi && magazzino.congegniFissi.some(c => c.nome === 'Dinamo');
+    if (haDinamo) {
+        const scelta = prompt(`${p.nome}: vuoi allenarti su un'arma o generare energia con la Dinamo?\nScrivi "arma" o "dinamo"`, 'arma');
+        if (scelta && scelta.trim().toLowerCase() === 'dinamo') {
+            apriDinamoModal(idx);
+            return;
+        }
+    }
 
     const categorie = ['Archi', 'Balestre', 'Armi con l\'asta', 'Lame leggere', 'Armi da fuoco', 'Rampini e fruste', 'Mazze e armi contundenti'];
     const giornoAttuale = Math.floor(oreTotali / 24);
@@ -2492,6 +2719,9 @@ function togglePerk(nomePerk, forceRemove = false) {
             });
             p.soldatoArmiScelte = null;
         }
+        if (getPerkBaseName(perkDati.nome) === 'Autoctono') {
+    p.lingue = (p.lingue || []).filter(l => l !== 'Eklesti');
+}
         p.puntiCreazione += perkDati.costo;
         renderSetupStats();
         p.sincronizzaLivelloMedicina();
@@ -2584,7 +2814,14 @@ function togglePerk(nomePerk, forceRemove = false) {
             p.perks.push({...perkDati});
             p.pesoCorporeo = p.pesoCorporeo || {usiCuscinetto: null, benNutritoOreAccumulate: 0};
             p.pesoCorporeo.usiCuscinetto = 20;
-        } else if (nomePerk === 'Artista') {
+        }else if (nomePerk === 'Autoctono') {
+    p.perks.push({...perkDati});
+    const giaConosciute = p.lingue || ['Verbum'];
+    if (!giaConosciute.includes('Eklesti')) {
+        p.lingue = [...giaConosciute, 'Eklesti'];
+    }
+}
+         else if (nomePerk === 'Artista') {
                 const scelta = prompt(
                     `Perk "Artista": scegli specializzazione:\n1. Musicista (Orecchio fino)\n2. Scrittore (comp. Manodopera)\n3. Danzatore (+2 Acrobazia)\n4. Narratore (studio accelerato 25%)\n5. Pittore (narrativo)`, "1");
                 const mappaSpec = {
