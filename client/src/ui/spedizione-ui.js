@@ -387,7 +387,7 @@ function renderSchedaCombattimentoMaster(p, idx) {
                 <button onclick="registraAttaccoModal(${idx})">📈 Reg. Attacco</button>
                 <button onclick="useRigeneraCombattimento(${idx})">Rigenera</button>
                 <button onclick="segnaVittoria(${idx})">Segna vittoria</button>
-                <button onclick="masterAggiungiOggetto(${idx})" style="background:#8e44ad;">🎁 Dai loot</button>
+              ${isMaster ? `<button onclick="masterAggiungiOggetto(${idx})" style="background:#8e44ad;">🎁 Dai loot</button>` : ''}
                 ${(p.livelloMagia > 0 && Object.values(p.spellsKnown || {}).some(v => v > 0)) ? `<button onclick="apriConsumaIncantesimi(${idx})">🪄 Magia</button>` : ''}
                 ${(p.inventario && p.inventario.composti && p.inventario.composti.length > 0) ? `<button onclick="apriConsumaComposti(${idx})">🧪 Composti</button>` : ''}
                 ${(() => {
@@ -652,7 +652,7 @@ function lootOggettiMagici(diffLevel = 0) {
     if (roll() <= (32 + bonusBase))               trovati.comuni = 1;
     if (roll() <= (16 + (bonusBase * 0.5)))       trovati.nonComuni = 1;
     if (roll() <= (8  + (bonusBase * 0.25)))      trovati.rari = 1;
-    if (roll() <= (2.5 + (bonusBase * 0.1)))      trovati.superRari = 1;
+    if (roll() <= (1.25 + (bonusBase * 0.05)))    trovati.superRari = 1;
 
     return trovati;
 }
@@ -976,6 +976,23 @@ function terminaEsplorazione(p) {
         magazzino.oggettiMagici.nonComuni += oggMagiciTrovati.nonComuni;
         magazzino.oggettiMagici.rari += oggMagiciTrovati.rari;
         magazzino.oggettiMagici.superRari += oggMagiciTrovati.superRari;
+
+        // Crea istanze concrete (con def, cariche, effetto specifico) per ogni oggetto trovato
+        if (typeof window.creaIstanzaOggettoMagico === 'function') {
+            magazzino.oggettiMagiciIstanze = magazzino.oggettiMagiciIstanze || [];
+            const mapRarita = [
+                ['comune', oggMagiciTrovati.comuni],
+                ['non_comune', oggMagiciTrovati.nonComuni],
+                ['raro', oggMagiciTrovati.rari],
+                ['super_raro', oggMagiciTrovati.superRari]
+            ];
+            mapRarita.forEach(([rarita, count]) => {
+                for (let i = 0; i < count; i++) {
+                    const istanza = window.creaIstanzaOggettoMagico(rarita);
+                    if (istanza) magazzino.oggettiMagiciIstanze.push(istanza);
+                }
+            });
+        }
 
         if (!magazzino.armiTrovate) magazzino.armiTrovate = [];
         let infoArmiStr = "";

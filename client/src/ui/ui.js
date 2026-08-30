@@ -1582,35 +1582,24 @@ export function aggiornaInterfaccia() {
                                         `}
                                 </div>
                             </details>
-                            <details class="action-dropdown">
-                                   <details class="action-dropdown">
-                                <summary>CREA</summary>
-                                <div class="dropdown-buttons">
-                                    <button onclick="openCucinaModal(${idx})">Cucina</button>
-                                    <button onclick="alchimiaPersonaggio(${idx})">Alchimia</button>
-                                    <button onclick="artificeriaPersonaggio(${idx})">Artificeria</button>
-                                    ${(p.isRobot && hasPerk(p, 'Autopotenziamento')) ? `<button onclick="apriAutopotenziamentoModal(${idx})">🔧 Autopotenziamento</button>` : ''}
-                                </div>
-                            </details>
-                            <details class="action-dropdown">
-                                <summary>MIGLIORA</summary>
-                                <div class="dropdown-buttons">
-                                    <button onclick="allenamento(${idx})">Allenamento</button>
-                                    <button onclick="studio(${idx})">Studio</button>
-                                    <button onclick="apriDecifra(${idx})">🔤 Decifra</button>
-                                   ${magazzino.cadaveriUmani > 0 ? `<button onclick="rimuoviCadaverePersonaggio(${idx})">🪦 Sbarazzati del cadavere (${magazzino.cadaveriUmani})</button>` : ''}
-                                    ${(magazzino.stazioneRicarica && p.isRobot) ? `<button onclick="apriRicaricaRobot(${idx})">🔌 Ricarica</button>` : ''}
-                                    ${(!p.isRobot && (magazzino.batterie > 0 || (p.inventario?.batterie > 0)) && magazzino.stazioneRicarica) ? `<button onclick="inserisciBatterieStazione(${idx})">🔋 Inserisci batterie in stazione</button>` : ''}
-                                </div>
-                            </details>
-                            <details class="action-dropdown">
-                                <summary>ESPLORA</summary>
-                                <div class="dropdown-buttons">
-                                    <button onclick="spedisciPersonaggio(${idx})">Spedisci</button>
-                                    <button onclick="esplora(${idx})">🔎 Esplora</button>
-                                </div>
-                            </details>
-                        </div>
+                                            <div class="dropdown-buttons">
+                        <button onclick="openCucinaModal(${idx})">Cucina</button>
+                        <button onclick="alchimiaPersonaggio(${idx})">Alchimia</button>
+                        <button onclick="artificeriaPersonaggio(${idx})">Artificeria</button>
+                        ${(p.isRobot && hasPerk(p, 'Autopotenziamento')) ? `<button onclick="apriAutopotenziamentoModal(${idx})">🔧 Autopotenziamento</button>` : ''}
+                    </div>
+                    <div class="dropdown-buttons">
+                        <button onclick="allenamento(${idx})">Allenamento</button>
+                        <button onclick="studio(${idx})">Studio</button>
+                        <button onclick="apriDecifra(${idx})">🔤 Decifra</button>
+                        ${magazzino.cadaveriUmani > 0 ? `<button onclick="rimuoviCadaverePersonaggio(${idx})">🪦 Sbarazzati del cadavere (${magazzino.cadaveriUmani})</button>` : ''}
+                        ${(magazzino.stazioneRicarica && p.isRobot) ? `<button onclick="apriRicaricaRobot(${idx})">🔌 Ricarica</button>` : ''}
+                        ${(!p.isRobot && (magazzino.batterie > 0 || (p.inventario?.batterie > 0)) && magazzino.stazioneRicarica) ? `<button onclick="inserisciBatterieStazione(${idx})">🔋 Inserisci batterie in stazione</button>` : ''}
+                    </div>
+                    <div class="dropdown-buttons">
+                        <button onclick="spedisciPersonaggio(${idx})">Spedisci</button>
+                        <button onclick="esplora(${idx})">🔎 Esplora</button>
+                    </div>
                     `;
                 } else {
                     // --- Visualizzazione ospite: solo lettura ---
@@ -1831,11 +1820,33 @@ window.apriRicaricaRobot = function(idx) {
 function assorbiMagia(idx) {
     const p = party[idx];
     if (!p || !p.isRobot) return;
-    if (typeof p.absorbMagicItem !== 'function') {
-        alert('Questo personaggio non supporta l’assorbimento energetico.');
+
+    p.initInventarioBase();
+    const candidati = [
+        ...(p.inventario.oggettiMagiciPersonali || []).map(i => ({ ...i, luogo: 'personale' })),
+        ...((magazzino.oggettiMagiciIstanze || [])).map(i => ({ ...i, luogo: 'base' }))
+    ];
+
+    if (candidati.length > 0) {
+        let scelta = candidati[0];
+        if (candidati.length > 1) {
+            const lista = candidati.map((c, i) => {
+                const def = window.getOggettoMagicoDef(c.defId);
+                return `${i}) ${def?.nome || c.defId} (${c.cariche}/${c.caricheMax} cariche, ${c.luogo})`;
+            }).join('\n');
+            const idxScelta = parseInt(prompt(`Cosa vuoi far assorbire a ${p.nome}?\n${lista}`, '0'));
+            scelta = candidati[idxScelta] || candidati[0];
+        } else if (!confirm(`Assorbire "${window.getOggettoMagicoDef(scelta.defId)?.nome}" (${scelta.cariche}/${scelta.caricheMax} cariche)?`)) {
+            return;
+        }
+        const guadagno = window.assorbiOggettoMagicoRobot(p, scelta.uid);
+        alert(`${p.nome} ha assorbito l'oggetto e guadagnato ${guadagno} ore di batteria.`);
+        salvaPersonaggioCloud(p);
+        aggiornaInterfaccia();
         return;
     }
 
+    // Fallback legacy: nessuna istanza concreta, usa i vecchi contatori generici
     const stock = magazzino.oggettiMagici || {};
     const opzioni = [
         { key: 'comuni', label: 'Comune', rarity: 'comune' },
@@ -1848,15 +1859,10 @@ function assorbiMagia(idx) {
         alert('Nessun oggetto magico disponibile da assorbire.');
         return;
     }
-
     const promptText = `Scegli cosa assorbire per ${p.nome}:\n${opzioni.map(opt => `${opt.label} (${stock[opt.key] || 0})`).join('\n')}`;
     const scelta = prompt(promptText, opzioni[0].label);
     const sceltaValida = opzioni.find(opt => opt.label.toLowerCase() === (scelta || '').toLowerCase() || opt.rarity.toLowerCase() === (scelta || '').toLowerCase());
-    if (!sceltaValida) {
-        alert('Scelta non valida.');
-        return;
-    }
-
+    if (!sceltaValida) { alert('Scelta non valida.'); return; }
     stock[sceltaValida.key] = Math.max(0, (stock[sceltaValida.key] || 0) - 1);
     const guadagno = p.absorbMagicItem(sceltaValida.rarity);
     alert(`${p.nome} ha assorbito ${sceltaValida.label.toLowerCase()} e ha guadagnato ${guadagno} ore di batteria.`);
@@ -2976,6 +2982,25 @@ function renderInventarioHtml(p) {
                 </div>
             ` : 'Nessuno'}
 i        </div>
+                <div style="margin-top:6px; font-size:0.85rem; color:#eee;">
+            <strong>Oggetti Magici:</strong>
+            ${(inv.oggettiMagiciPersonali && inv.oggettiMagiciPersonali.length) ? `
+                <div style="display:grid; gap:4px; margin-top:4px;">
+                    ${inv.oggettiMagiciPersonali.map(istanza => {
+                        const def = window.getOggettoMagicoDef ? window.getOggettoMagicoDef(istanza.defId) : null;
+                        if (!def) return '';
+                        return `
+                        <div style="display:flex; justify-content:space-between; align-items:center; background:#111; padding:4px 8px; border:1px solid #333;">
+                            <span>${def.nome} <small style="color:#aaa;">(${istanza.cariche}/${istanza.caricheMax} cariche)</small></span>
+                            <div style="display:flex; gap:4px;">
+                                <button class="btn-hero" style="padding:3px 8px; font-size:0.7rem;" onclick="window.usaOggettoMagicoDaInventario(${party.indexOf(p)}, '${istanza.uid}')">Usa</button>
+                                <button class="btn-hero" style="padding:3px 8px; font-size:0.7rem;" onclick="window.depositaOggettoMagicoInMagazzino(${party.indexOf(p)}, '${istanza.uid}')">Deposita</button>
+                            </div>
+                        </div>`;
+                    }).join('')}
+                </div>
+            ` : ' Nessuno'}
+        </div>
         <div style="margin-top:6px; font-size:0.85rem; color:#eee;">
             <strong>Documenti posseduti:</strong> ${(p.documenti && p.documenti.length) || 0}
         </div>

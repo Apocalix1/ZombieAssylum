@@ -537,7 +537,11 @@ function eseguiNutrizione(p, dati) {
             mostraNotificaInAlto(`${p.nome} ha esagerato con i piatti deliziosi: la Follia non si riduce più mangiandone, finché non si astiene per 2 giorni.`, 'pericolo');
         }
         if (!p._folliaBloccataPiattiDeliziosi) {
-            const riduzione = Math.random() < 0.65 ? 1 : 2;
+            let riduzione = Math.random() < 0.65 ? 1 : 2;
+            if (typeof window.chiediUsoOggettoMagico === 'function') {
+                const effetto = window.chiediUsoOggettoMagico(p, 'bonus_follia_deliziosi', `${p.nome} sta mangiando un piatto delizioso`);
+                if (effetto) riduzione = Math.ceil(riduzione * (1 + effetto.percentuale));
+            }
             p.follia = Math.max(0, p.follia - riduzione);
         }
 

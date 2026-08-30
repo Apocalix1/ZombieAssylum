@@ -500,26 +500,37 @@ function risolviAzioneArtificeria(leaderIdx, collaboratoriIdxs, ricettaId, isSmo
     let dettagliExtra = "";
 
     if (!isSmontaggio) {
-                if (ricetta.outputType === 'fabbisogno_magico') {
+                    if (ricetta.outputType === 'fabbisogno_magico') {
             leader.initInventarioBase();
-            const mapKey = { comune: 'comuni', non_comune: 'nonComuni', raro: 'rari', super_raro: 'superRari' };
             const raritaScelta = prompt("Quale rarità di oggetto magico vuoi usare?\n(comune, non_comune, raro, super_raro)");
-            const key = mapKey[raritaScelta];
-            const inMagazzino = key ? (window.magazzino.oggettiMagici[key] || 0) : 0;
-            const inPersonale = key ? (leader.inventario.oggettiMagici[key] || 0) : 0;
-            if (!key || (inMagazzino + inPersonale) <= 0) {
-                alert(`Non hai un oggetto magico di rarità '${raritaScelta}' (base o personale)!`);
-                return;
+            const candidati = [
+                ...(leader.inventario.oggettiMagiciPersonali || []).map(i => ({ ...i, luogo: 'personale' })),
+                ...((window.magazzino.oggettiMagiciIstanze || [])).map(i => ({ ...i, luogo: 'base' }))
+            ].filter(i => i.rarita === raritaScelta);
+
+            if (candidati.length > 0) {
+                let scelta = candidati[0];
+                if (candidati.length > 1) {
+                    const lista = candidati.map((c, i) => {
+                        const def = window.getOggettoMagicoDef(c.defId);
+                        return `${i}) ${def?.nome || c.defId} (${c.cariche}/${c.caricheMax} cariche, ${c.luogo})`;
+                    }).join('\n');
+                    const idx = parseInt(prompt(`Quale oggetto vuoi assorbire?\n${lista}`, '0'));
+                    scelta = candidati[idx] || candidati[0];
+                }
+                dettagliExtra = 'instance:' + scelta.uid;
+            } else {
+                // Fallback legacy: nessuna istanza concreta trovata, usa i vecchi contatori generici
+                const mapKey = { comune: 'comuni', non_comune: 'nonComuni', raro: 'rari', super_raro: 'superRari' };
+                const key = mapKey[raritaScelta];
+                const inMagazzino = key ? (window.magazzino.oggettiMagici[key] || 0) : 0;
+                if (!key || inMagazzino <= 0) {
+                    alert(`Non hai un oggetto magico di rarità '${raritaScelta}'!`);
+                    return;
+                }
+                window.magazzino.oggettiMagici[key]--;
+                dettagliExtra = raritaScelta;
             }
-            let fonte = 'base';
-            if (inMagazzino > 0 && inPersonale > 0) {
-                fonte = prompt(`Da dove prendere l'oggetto? "base" (${inMagazzino}) o "personale" (${inPersonale})`, 'base');
-            } else if (inPersonale > 0) {
-                fonte = 'personale';
-            }
-            if (fonte === 'personale') leader.inventario.oggettiMagici[key]--;
-            else window.magazzino.oggettiMagici[key]--;
-            dettagliExtra = raritaScelta;
         } else if (ricetta.id === 'creazione_proiettili') {
             const tipoMunProm = prompt('Che tipo di munizioni vuoi creare? (Freccia, Dardo balestra, Proiettile pistola)', 'Freccia') || 'Freccia';
             const mappaMun = { Freccia: 'frecce', 'Dardo balestra': 'quadrelli', 'Proiettile pistola': 'proiettili' };
@@ -693,9 +704,16 @@ function risolviEsitoArtificeria(leader, collaboratori, ricetta, costoIngranaggi
 
             const PORTABILI_SPEDIZIONE = ['localizzatore','orologio_timer','torcia_direzionale','cassa_amplificata','innesco','trappola_orsi','taser','pistola_rampino','stivali_molla'];
                         // --- Casi specifici per ricetta ---
-            if (ricetta.id === 'batterie_creazione') {
-                const resa = { comune: 5, non_comune: 10, raro: 25, super_raro: 55 };
-                const battTrovate = resa[dettagliExtra] || 0;
+                        if (ricetta.id === 'batterie_creazione') {
+                let battTrovate = 0;
+                if (typeof dettagliExtra === 'string' && dettagliExtra.startsWith('instance:')) {
+                    const uid = dettagliExtra.replace('instance:', '');
+                    const risultato = window.assorbiEnergiaIstanzaOggetto ? window.assorbiEnergiaIstanzaOggetto(uid, 'batteria') : null;
+                    battTrovate = risultato ? risultato.batterie : 0;
+                } else {
+                    const resa = { comune: 5, non_comune: 10, raro: 25, super_raro: 55 };
+                    battTrovate = resa[dettagliExtra] || 0;
+                }
                 leader.initInventarioBase();
                 leader.inventario.batterie = (leader.inventario.batterie || 0) + battTrovate;
                 alert(`Hai generato ${battTrovate} Batterie (nel tuo inventario)!`);

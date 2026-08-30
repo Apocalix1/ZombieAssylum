@@ -2225,9 +2225,10 @@ export class Personaggio {
         this.woundTreated = false;
     }
 
-    applyRealDamage(danno) {
+        applyRealDamage(danno) {
         const dannoReale = Math.max(1, Math.ceil(danno / 4));
         this.puntiFeritaReali = Math.max(0, this.puntiFeritaReali - dannoReale);
+        if (typeof window.checkAutoStabilizzatore === 'function') window.checkAutoStabilizzatore(this);
         if (dannoReale > 0) {
             const constitutionBonus = this.constitutionModifier || 0;
             const fortunaRitrovata = Math.max(1, Math.floor(Math.random() * 4) + 1 + constitutionBonus);
@@ -2419,7 +2420,8 @@ export class Personaggio {
         // ==================== 1. DECADIMENTO RISORSE ====================
         if (!this.isRobot) {
             this._ensurePesoCorporeoInit();
-            const calo = 1 / 24;
+            const bendaAttiva = this._bendaAccellerataFinoA && (window.oreTotali || 0) < this._bendaAccellerataFinoA;
+            const calo = (1 / 24) * (bendaAttiva ? 1.10 : 1);
             const fameStadioPrima = this.stadioFame;
             const salta = this.timers.buffFame > 0 && this.hasPerk && this.hasPerk('Adattamento alimentare');
             this.fame = salta ? this.fame : Math.max(0, this.fame - calo);
@@ -2501,8 +2503,10 @@ export class Personaggio {
             }
         }
 
-        if (this.woundState !== "Illeso" && this.woundState !== "Morto") {
-            if (this.woundTreated) {
+         if (this.woundState !== "Illeso" && this.woundState !== "Morto") {
+            if (this._stabilizzatoFinoA && (window.oreTotali || 0) < this._stabilizzatoFinoA) {
+                // Stabilizzatore Automatico attivo: la ferita non degenera.
+            } else if (this.woundTreated) {
                 this.woundTimer -= 1;
                 if (this.woundTimer <= 0) {
                     if (this.medicalHealPending) {

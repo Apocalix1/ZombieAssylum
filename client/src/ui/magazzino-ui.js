@@ -232,6 +232,34 @@ window.apriLasciaIndietroModal = function(idx) {
     window.apriInventario(idx);
 };
 
+window.prendiOggettoMagicoDaMagazzino = function(idx, uid) {
+    const p = party[idx];
+    if (!p) return;
+    const ctx = window.trovaIstanzaOggettoMagico(uid);
+    if (!ctx || ctx.owner) return alert('Oggetto non trovato in magazzino.');
+    p.initInventarioBase();
+    ctx.collection.splice(ctx.index, 1);
+    p.inventario.oggettiMagiciPersonali.push(ctx.istanza);
+    mostraNotificaInAlto(`${p.nome} ha preso "${window.getOggettoMagicoDef(ctx.istanza.defId)?.nome}" dal magazzino.`, 'successo');
+    salvaPersonaggioCloud(p);
+    renderMagazzinoModal();
+    aggiornaInterfaccia();
+};
+
+window.depositaOggettoMagicoInMagazzino = function(idx, uid) {
+    const p = party[idx];
+    if (!p) return;
+    const ctx = window.trovaIstanzaOggettoMagico(uid);
+    if (!ctx || !ctx.owner || ctx.owner !== p) return alert('Oggetto non trovato nel tuo inventario.');
+    ctx.collection.splice(ctx.index, 1);
+    window.magazzino.oggettiMagiciIstanze = window.magazzino.oggettiMagiciIstanze || [];
+    window.magazzino.oggettiMagiciIstanze.push(ctx.istanza);
+    mostraNotificaInAlto(`${p.nome} ha depositato "${window.getOggettoMagicoDef(ctx.istanza.defId)?.nome}" in magazzino.`, 'successo');
+    salvaPersonaggioCloud(p);
+    renderMagazzinoModal();
+    aggiornaInterfaccia();
+};
+
 function openMagazzino() {
     const modal = document.getElementById('modal-magazzino');
     if (!modal) return;
@@ -370,6 +398,24 @@ function renderMagazzinoModal() {
         </div>
     </div>`;
     // Dispositivi della Base
+        html += `
+    <div style="margin-top:16px;">
+        <h4 style="color:#8e44ad;">🔮 Oggetti Magici (Magazzino)</h4>
+        <div style="display:grid; gap:6px;">
+            ${(window.magazzino.oggettiMagiciIstanze || []).map((istanza, ii) => {
+                const def = window.getOggettoMagicoDef(istanza.defId);
+                if (!def) return '';
+                return `
+                    <div style="display:flex; justify-content:space-between; align-items:center; background:#111; padding:6px; border:1px solid #333;">
+                        <div>
+                            <strong>${def.nome}</strong>
+                            <span style="color:#aaa; font-size:0.8rem;"> (${window.RARITY_LABELS[def.rarita]}, ${istanza.cariche}/${istanza.caricheMax} cariche)</span>
+                        </div>
+                        <button class="btn-hero" onclick="window.prendiOggettoMagicoDaMagazzino(${idx}, '${istanza.uid}')">Prendi</button>
+                    </div>`;
+            }).join('') || '<div style="color:#888;">Nessun oggetto magico in magazzino.</div>'}
+        </div>
+    </div>`;
     html += `
     <div style="margin-top:16px;">
         <h4 style="color:#9b59b6;">🏗️ Dispositivi della Base</h4>

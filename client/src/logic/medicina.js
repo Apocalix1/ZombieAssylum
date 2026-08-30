@@ -166,6 +166,7 @@ export function getRestMultiplier() {
     if (this.azioneCorrente && halfRestActions.includes(this.azioneCorrente.tipo)) multiplier *= 0.5;
     if (this.azioneCorrente && this.azioneCorrente.tipo === 'dormi') multiplier *= 1.5;
     if (this.hasPerk && this.hasPerk('Rigenerazione molto veloce')) multiplier += 0.25;
+     if (this._bendaAccellerataFinoA && (window.oreTotali || 0) < this._bendaAccellerataFinoA) ore *= 0.85;
     if (this._angeloCasaBonus) {
         multiplier += 0.1;
         this._angeloCasaBonus = false;
@@ -316,6 +317,12 @@ window.curaTarget = function(targetIdx, tipo = 'cura') {
         return;
     }
 
+    let bonusOggettoMagico = 0;
+    if (['Funzionalità a rischio', 'Rischio di morte'].includes(target.woundState) && typeof window.chiediUsoOggettoMagico === 'function') {
+        const effetto = window.chiediUsoOggettoMagico(medico, 'bonus_medicina', `Curare ${target.nome} (${target.woundState})`);
+        if (effetto) bonusOggettoMagico = effetto.bonus || 0;
+    }
+
     // PERFEZIONISTA: tira PRIMA, poi il tempo dipende dal risultato
     let oreAzione = 0.5;
     let rollPrecalcolato = null;
@@ -336,7 +343,7 @@ window.curaTarget = function(targetIdx, tipo = 'cura') {
         tipo: 'medicina',
         oreTotali: oreAzione,
         oreRimanenti: oreAzione,
-        onComplete: () => eseguiCuraTarget(medicoCorrente, targetIdx, tipo, rollPrecalcolato)
+        onComplete: () => eseguiCuraTarget(medicoCorrente, targetIdx, tipo, rollPrecalcolato, bonusOggettoMagico)
     };
     if (!medico.azioneCorrente) medico.azioneCorrente = azione;
     else medico.codaAzioni.unshift(azione);
@@ -345,8 +352,7 @@ window.curaTarget = function(targetIdx, tipo = 'cura') {
     renderMedicaModal();
     window.aggiornaInterfaccia();
 };
-
-function eseguiCuraTarget(medicoIdx, targetIdx, tipo, rollPrecalcolato = null) {
+function eseguiCuraTarget(medicoIdx, targetIdx, tipo, rollPrecalcolato = null, bonusOggettoMagico = 0) {
     const medico = window.party[medicoIdx];
     const target = window.party[targetIdx];
     if (!medico || !target) return;
@@ -374,6 +380,9 @@ function eseguiCuraTarget(medicoIdx, targetIdx, tipo, rollPrecalcolato = null) {
     if (medico.hasPerk && medico.hasPerk('Medico sprovveduto') && medico.livelloMedicina >= 2) {
         dcFinale += 2;
         dimezzaBase = true;
+    }
+        if (bonusOggettoMagico > 0) {
+        dcFinale = Math.max(1, dcFinale - bonusOggettoMagico);
     }
     if (medico.hasPerk('Nessuno muore sotto le mie mani') && medico.livelloMedicina >= 2 && target.woundState === 'Rischio di morte') {
         const criticiBase = window.magazzino.materialiMedici.critici || 0;

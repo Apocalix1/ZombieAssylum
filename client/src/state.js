@@ -21,6 +21,7 @@ export let magazzino = {
     congegniFissi: [],
     congegniConteggio: {},
     oggettiMagici: { comuni: 0, nonComuni: 0, rari: 0, superRari: 0 },
+        oggettiMagiciIstanze: [], 
     munizioni: { gomma: 0, reale: 0 },
     batterie: 0,
     cadaveriRobot: 0,
