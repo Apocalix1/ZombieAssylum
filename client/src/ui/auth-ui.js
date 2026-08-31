@@ -392,7 +392,8 @@ function showGameScreen(role) {
     updateRoleIndicator(role);
 
     // Attiviamo il polling per tutti i ruoli così da vedere gli aggiornamenti degli altri giocatori
-    avviaSincronizzazioneCompleta();
+      avviaSincronizzazioneCompleta();
+    if (typeof window.renderProposte === 'function') window.renderProposte();
 
     // RECLUTA ora è identico per Master e Giocatore: crea sempre un personaggio
     const reclutaBtn = document.getElementById('btn-recluta');

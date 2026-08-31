@@ -821,7 +821,7 @@ export class Personaggio {
         return Math.max(2, cap);
     }
 // Ricalcola pesoAttuale includendo batterie e oggetti magici
-    get pesoAttuale() {
+        get pesoAttuale() {
         this.initInventarioBase();
         let peso = 0;
         peso += this.inventario.armi.length * 1;
@@ -831,12 +831,28 @@ export class Personaggio {
         peso += this.inventario.alchemici / 6;
         peso += (this.inventario.medBase * 1 + this.inventario.medAvanzati * 2 + this.inventario.medCritici * 3) / 10;
         peso += this.inventario.consumabili.length * 0.2;
-        peso += this.inventario.batterie * 0.05;            // ✔ aggiunto
+        peso += this.inventario.batterie * 0.05;
         const om = this.inventario.oggettiMagici;
-        peso += (om.comuni + om.nonComuni + om.rari + om.superRari) * 0.7; // ✔
-        peso += this.inventario.munizioni * 0.05;
+        peso += (om.comuni + om.nonComuni + om.rari + om.superRari) * 0.7;
+        const mun = this.inventario.munizioni;
+        const totMun = typeof mun === 'number' ? mun : ((mun?.frecce || 0) + (mun?.quadrelli || 0) + (mun?.proiettili || 0));
+        peso += totMun * 0.05;
         this.inventario.zaini.forEach(z => peso += z.pesoUnEquipped);
-        return parseFloat((peso || 0).toFixed(2));
+
+        // Perk robotici: alcuni oggetti non contano ai fini del peso, fino a una soglia
+        if (this.isRobot) {
+            if (this.hasPerk && this.hasPerk('Armato')) {
+                peso -= Math.min(20, totMun) * 0.05;
+            }
+            if (this.hasPerk && this.hasPerk('Bimbi')) {
+                peso -= Math.min(2, this.inventario.cibo || 0) * 1;
+            }
+            if (this.hasPerk && this.hasPerk('Primo soccorso')) {
+                peso -= Math.min(10, this.inventario.medBase || 0) * 0.1;
+            }
+        }
+
+        return parseFloat((Math.max(0, peso) || 0).toFixed(2));
     }
 
     consumeBattery(hours) {
@@ -926,7 +942,7 @@ export class Personaggio {
     }
 
     get stazioneMobileCapacita() {
-        return 12;
+        return (this.hasPerk && this.hasPerk('Stazione mobile')) ? 17 : 12;
     }
     
     get robotRepairTotalLimit() {
@@ -1757,6 +1773,11 @@ export class Personaggio {
         if ((statNome === "Intelligenza" || statNome === "Destrezza") && seteEffettiva >= 1) modFinale -= 2;
         if ((statNome === "Carisma" || statNome === "Saggezza") && sonnoEffettivo >= 1) modFinale -= 2;
 
+        if (this.capacitaMax > 0 && !(this.hasPerk && this.hasPerk('Facchino esperto')) && (this.pesoAttuale / this.capacitaMax) > 0.91) {
+            modFinale -= 1;
+            motivi.push("Zaino quasi pieno (-1)");
+        }
+        
         if (this.statiAlterati) {
             this.statiAlterati.forEach(s => {
                 const mods = Array.isArray(s.modificatori) && s.modificatori.length ? s.modificatori : (s.nome ? [{ stat: s.nome, valore: s.valore }] : []);
@@ -2067,8 +2088,9 @@ export class Personaggio {
         if (this.hasPerk && this.hasPerk('Solitario') && this.isEsploraSolo) {
             modifier += 2;
         }
+        const modulareDisadvantage = !!(this.hasPerk && this.hasPerk('Modulare') && rating < 1);
         if (!advantage) {
-            disadvantage = svantaggioMeccanico || disadvantageFromFlags || overloadDisadvantage || fatigueDisadvantage || ipoglicemiaDisadvantage;
+            disadvantage = svantaggioMeccanico || disadvantageFromFlags || overloadDisadvantage || fatigueDisadvantage || ipoglicemiaDisadvantage || modulareDisadvantage;
         }
 
         return {
@@ -2811,6 +2833,7 @@ export class Personaggio {
         if (this.hasPerk('Sovrappeso')) v -= 1;
         if(this.hasPerk('Pesante')) v-=3;
         if (this.hasPerk('Carapace/Esoscheletro duro')) v -= 3;
+        if (this.capacitaMax > 0 && !(this.hasPerk && this.hasPerk('Facchino esperto')) && (this.pesoAttuale / this.capacitaMax) > 0.70) v -= 2;
         v = Math.max(0, v);
         if (this.hasPerk('Zoppo')) v = v / 2;
         return v;

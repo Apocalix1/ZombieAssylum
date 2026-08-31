@@ -195,6 +195,7 @@ function ferisciInCombat(idx) {
     const p = party[idx];
     let input = prompt(`Quanti danni vuoi infliggere a ${p.nome}?`, '1');
     let danno = parseInt(input);
+    if (p.hasPerk && p.hasPerk('Degradato')) danno += 1;
     if (isNaN(danno) || danno <= 0) return;
 
     let residuo = danno;
@@ -1077,6 +1078,7 @@ function apriSceltaEccedenza(idx) {
 
 function getExplorationBonus(p) {
     const skill = p.getSkillModifierForCheck ? p.getSkillModifierForCheck('Sopravvivenza') : { modifier: 0, advantage: false, disadvantage: false };
+       if (p.hasPerk && p.hasPerk('Ricercatore')) bonus += 1;
     return skill.modifier || 0;
 }
 

@@ -191,8 +191,10 @@ function avviaCreazione_Alchimia(idx, nomeRicetta, grado) {
         const sceltaIdx = parseInt(scelta);
         if (!isNaN(sceltaIdx) && sceltaIdx >= 1 && sceltaIdx <= candidatiCollab.length) {
             collaboratore = candidatiCollab[sceltaIdx - 1];
-            cdRiduzione = 3;
-            tempoBase = Math.max(1, gradoInfo.tempo - Math.floor(gradoInfo.tempo * 0.35));
+            const scienziatoPazzo = p.hasPerk && p.hasPerk('Scienziato Pazzo');
+            cdRiduzione = scienziatoPazzo ? 2 : 3;
+            const percentualeTempo = scienziatoPazzo ? 0.22 : 0.35;
+            tempoBase = Math.max(1, gradoInfo.tempo - Math.floor(gradoInfo.tempo * percentualeTempo));
         }
     }
 
@@ -296,6 +298,14 @@ function completaAlchimia(p, nomeRicetta, grado, cdEffettiva, collaboratore, rol
 
     if (scarto <= 0) {
         // SUCCESSO (Tiro >= CD)
+        if (p.hasPerk && p.hasPerk('Scienziato Pazzo') && totale < 12) {
+            esito = `⚗️ SUCCESSO ma Scienziato Pazzo lo butta via! Tiro: ${tiroDado} + ${modInt} + ${bonusComp} = ${totale} (< 12)\n"${nomeRicetta}" viene distrutto e la creazione ricomincia automaticamente.`;
+            alert(esito);
+            mostraNotificaInAlto(`${p.nome} (Scienziato Pazzo) butta via "${nomeRicetta}" nonostante il successo: ricomincia da capo.`, 'avviso');
+            const idxRestart = window.party.indexOf(p);
+            if (idxRestart !== -1) avviaCreazione_Alchimia(idxRestart, nomeRicetta, grado);
+            return;
+        }
         aggiungiComposto(nomeRicetta, ricettaDati, 'normale');
         esito = `✅ SUCCESSO! Tiro: ${tiroDado} + ${modInt} + ${bonusComp} = ${totale} vs CD ${cdEffettiva}\n"${nomeRicetta}" creato perfettamente!`;
     } else if (scarto <= 2) {

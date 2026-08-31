@@ -222,10 +222,16 @@ function hasEnoughMedicalMaterials(req) {
 function takeMedicalMaterials(req, opts = {}) {
     const { divisorAll = 1, divisorAvanzati = 1, dimezzaBase = false } = opts;
     const baseDivisor = dimezzaBase ? 2 : divisorAll;
-    window.magazzino.materialiMedici.base = Math.max(0, window.magazzino.materialiMedici.base - Math.ceil(req.base / baseDivisor));
+    const usedBase = Math.ceil(req.base / baseDivisor);
     const avzDivisor = divisorAll * divisorAvanzati;
-    window.magazzino.materialiMedici.avanzati = Math.max(0, window.magazzino.materialiMedici.avanzati - Math.ceil(req.avanzati / avzDivisor));
+    const usedAvanzati = Math.ceil(req.avanzati / avzDivisor);
+    window.magazzino.materialiMedici.base = Math.max(0, window.magazzino.materialiMedici.base - usedBase);
+    window.magazzino.materialiMedici.avanzati = Math.max(0, window.magazzino.materialiMedici.avanzati - usedAvanzati);
     window.magazzino.materialiMedici.critici = Math.max(0, window.magazzino.materialiMedici.critici - Math.ceil(req.critici / divisorAll));
+
+    window.magazzino.materialiConsumatiLog = window.magazzino.materialiConsumatiLog || [];
+    window.magazzino.materialiConsumatiLog.push({ ora: window.oreTotali || 0, base: usedBase, avanzati: usedAvanzati });
+    if (window.magazzino.materialiConsumatiLog.length > 200) window.magazzino.materialiConsumatiLog.shift();
 }
 
 function getMedicineLevelBonus(level) {
@@ -381,6 +387,11 @@ function eseguiCuraTarget(medicoIdx, targetIdx, tipo, rollPrecalcolato = null, b
         dcFinale += 2;
         dimezzaBase = true;
     }
+     let divisorAllMedico = 1;
+    if (medico.hasPerk && medico.hasPerk('Medico')) {
+        dcFinale += 2;
+        divisorAllMedico = 2;
+    }
         if (bonusOggettoMagico > 0) {
         dcFinale = Math.max(1, dcFinale - bonusOggettoMagico);
     }
@@ -409,18 +420,19 @@ function eseguiCuraTarget(medicoIdx, targetIdx, tipo, rollPrecalcolato = null, b
     if (totale >= cdConBonusMalus) {
         medico.registraIrascibile(true);
         medico.registraPessimista(true);
-        takeMedicalMaterials(req, { divisorAvanzati: materialiAssistDimezzati ? 2 : 1 });
+        takeMedicalMaterials(req, { divisorAvanzati: materialiAssistDimezzati ? 2 : 1, divisorAll: divisorAllMedico });
         target.receiveMedicalTreatment(true);
         if (assistAvailable) { mostraNotificaInAlto(`${helper.nome} assiste ${medico.nome}.`, 'successo'); window.assistenzaSelezionata = null; }
         medico.pmMedicina += req.pm;
         checkMedicineLevelUp(medico);
         if (tipo === 'pronto_soccorso') target.woundTimer = target.woundTimeToWorsen * 2;
         mostraNotificaInAlto(`✅ ${medico.nome} ha curato ${target.nome} (${totale} vs CD ${cdConBonusMalus}).`, 'successo');
-    } else {
+        } else {
         medico.registraIrascibile(false, scarto >= 5);
         medico.registraPessimista(false);
         takeMedicalMaterials(req, {
             divisorAvanzati: materialiAssistDimezzati ? 2 : 1,
+            divisorAll: divisorAllMedico,
             dimezzaBase: dimezzaBase
         });
         if (assistAvailable) window.assistenzaSelezionata = null;
@@ -539,6 +551,75 @@ window.iniziaCuraMalattia = function(medicoIdx, pazienteIdx) {
     }
     aggiornaInterfaccia();
 };
+window.apriIgienizzaModal = function(idx) {
+    const p = window.party[idx];
+    if (!p || !p.hasPerk('Igenizzatore')) return;
+    const log = (window.magazzino.materialiConsumatiLog || []).filter(e => (window.oreTotali || 0) - e.ora < 24);
+    const totBase = log.reduce((s, e) => s + (e.base || 0), 0);
+    const totAvanzati = log.reduce((s, e) => s + (e.avanzati || 0), 0);
+    if (totBase <= 0 && totAvanzati <= 0) {
+        alert('Nessun materiale medico di base o avanzato è stato consumato nelle ultime 24 ore.');
+        return;
+    }
+    const totDisponibili = totBase + totAvanzati;
+    const pezziStr = prompt(`Materiali consumati nelle ultime 24h: ${totBase} base, ${totAvanzati} avanzati.\nQuanti pezzi vuoi provare a igienizzare in totale? (max ${totDisponibili})`, `${Math.min(totDisponibili, 6)}`);
+    const pezzi = parseInt(pezziStr);
+    if (isNaN(pezzi) || pezzi <= 0 || pezzi > totDisponibili) return;
+
+    const costoAlchemici = Math.ceil(pezzi / 3);
+    if ((window.magazzino.materialiAlchemici || 0) < costoAlchemici) {
+        alert(`Servono ${costoAlchemici} materiali alchemici, ne hai ${window.magazzino.materialiAlchemici || 0}.`);
+        return;
+    }
+
+    // Ripartizione proporzionale tra base e avanzati in base a quanto consumato
+    const propBase = totBase / totDisponibili;
+    const pezziBase = Math.min(totBase, Math.round(pezzi * propBase));
+    const pezziAvanzati = pezzi - pezziBase;
+
+    window.magazzino.materialiAlchemici -= costoAlchemici;
+    if (typeof window.updateMagazzinoFields === 'function') {
+        window.updateMagazzinoFields({ materialiAlchemici: window.magazzino.materialiAlchemici });
+    }
+
+    const oreAzione = pezzi * (10 / 60);
+    const azione = {
+        tipo: 'igienizza',
+        oreTotali: oreAzione,
+        oreRimanenti: oreAzione,
+        onComplete: () => completaIgienizza(p, pezziBase, pezziAvanzati)
+    };
+    if (p.azioneCorrente) {
+        if (confirm(`${p.nome} sta già facendo altro. Metterlo in coda?`)) {
+            p.codaAzioni.push(azione);
+        } else {
+            window.magazzino.materialiAlchemici += costoAlchemici;
+            if (typeof window.updateMagazzinoFields === 'function') {
+                window.updateMagazzinoFields({ materialiAlchemici: window.magazzino.materialiAlchemici });
+            }
+            return;
+        }
+    } else {
+        p.azioneCorrente = azione;
+    }
+    salvaPersonaggio(p);
+    mostraNotificaInAlto(`${p.nome} inizia a igienizzare ${pezzi} materiali (${oreAzione.toFixed(1)}h).`, 'info');
+    aggiornaInterfaccia();
+};
+
+function completaIgienizza(p, pezziBase, pezziAvanzati) {
+    let recuperatiBase = 0, recuperatiAvanzati = 0;
+    for (let i = 0; i < pezziBase; i++) if (Math.random() < 0.40) recuperatiBase++;
+    for (let i = 0; i < pezziAvanzati; i++) if (Math.random() < 0.40) recuperatiAvanzati++;
+
+    window.magazzino.materialiMedici.base = (window.magazzino.materialiMedici.base || 0) + recuperatiBase;
+    window.magazzino.materialiMedici.avanzati = (window.magazzino.materialiMedici.avanzati || 0) + recuperatiAvanzati;
+    if (typeof window.updateMagazzinoFields === 'function') {
+        window.updateMagazzinoFields({ materialiMedici: window.magazzino.materialiMedici });
+    }
+    mostraNotificaInAlto(`${p.nome} ha igienizzato i materiali: recuperati ${recuperatiBase} base e ${recuperatiAvanzati} avanzati.`, 'successo');
+    if (typeof window.aggiornaInterfaccia === 'function') window.aggiornaInterfaccia();
+}
 
 Personaggio.prototype.getOreNecessarieGuarigione = getOreNecessarieGuarigione;
 Personaggio.prototype.checkInfectionRisk = checkInfectionRisk;

@@ -415,6 +415,7 @@ function calcolaCrafting(leader, collaboratori, ricetta, isSmontaggio = false) {
 
         // Riduzione tempo da Collaboratori
         let moltiplicatoreFolla = 1; // 1 per il primo collaboratore, 0.5 per gli altri
+        const leaderScienziatoPazzo = leader.hasPerk && leader.hasPerk('Scienziato Pazzo');
         collaboratori.forEach((collab) => {
             initArtificeria(collab);
             const lvSpec_Collab = collab.artificeria.specializzazioni[specPrincipale].livello;
@@ -423,6 +424,7 @@ function calcolaCrafting(leader, collaboratori, ricetta, isSmontaggio = false) {
             if (lvSpec_Collab >= 1) {
                 // Formula: (LS Collab / LS Leader) * 50% * malus folla
                 let percentualeRiduzione = (lvSpec_Collab / Math.max(1, lvSpec_Leader)) * 0.50 * moltiplicatoreFolla;
+                if (leaderScienziatoPazzo) percentualeRiduzione = Math.max(0, percentualeRiduzione - 0.13);
                 oreBase = oreBase * (1 - percentualeRiduzione);
                 moltiplicatoreFolla = 0.5; // I successivi valgono la metà
             }
@@ -684,6 +686,15 @@ function risolviEsitoArtificeria(leader, collaboratori, ricetta, costoIngranaggi
     leader.registraPessimista(scarto <= 0);
 
     if (scarto <= 0) {
+        if (!isSmontaggio && leader.hasPerk && leader.hasPerk('Scienziato Pazzo') && risultato < 12) {
+            alert(`⚗️ SUCCESSO ma Scienziato Pazzo lo butta via! Tiro totale ${risultato} (< 12)\n"${ricetta.name}" viene distrutto e la creazione ricomincia automaticamente.`);
+            mostraNotificaInAlto(`${leader.nome} (Scienziato Pazzo) butta via "${ricetta.name}" nonostante il successo: ricomincia da capo.`, 'avviso');
+            if (typeof window.updateMagazzinoFields === 'function') {
+                window.updateMagazzinoFields({ ingranaggi: window.magazzino.ingranaggi });
+            }
+            eseguiCreazioneArtificeria(leader, collaboratori, ricetta, costoIngranaggi, false, dettagliExtra, costoBase);
+            return;
+        }
         alert(isSmontaggio ? "✅ SMONTAGGIO RIUSCITO!" : "✅ SUCCESSO! L'oggetto è stato creato.");
         if (isSmontaggio) {
             let resaPercentuale = YIELD_SMONTAGGIO[leader.artificeria.generale.livello] || 0;

@@ -213,6 +213,8 @@ window.assorbiOggettoMagicoRobot = function(p, uid) {
     if (!p || !p.isRobot) return 0;
     const risultato = window.assorbiEnergiaIstanzaOggetto(uid, 'robot');
     if (!risultato) return 0;
-    p.batteryHours = Math.min(p.batteryHoursMax, (p.batteryHours || 0) + risultato.ore);
-    return risultato.ore;
+    let ore = risultato.ore;
+    if (p.hasPerk && p.hasPerk('Batteria morta')) ore = ore * 0.8;
+    p.batteryHours = Math.min(p.batteryHoursMax, (p.batteryHours || 0) + ore);
+    return ore;
 };

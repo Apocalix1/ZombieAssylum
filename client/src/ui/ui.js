@@ -1572,6 +1572,7 @@ export function aggiornaInterfaccia() {
                                             ${user && user.role === 'master' && hasPerk(p, 'Pessimista') ? `<button onclick="gestisciPessimista(${idx})" style="background:#7f8c8d; color:white;">😔 Pessimista</button>` : ''}
                                             ${user && user.role === 'master' && hasPerk(p, 'Ossessione del Pulito') ? `<button onclick="bloccaPulizia(${idx})" style="background:#c0392b; color:white;">🧹 Blocca Pulizia</button>` : ''}
                                             ${hasPerk(p, 'Asmatico') ? `<button onclick="usaRecuperoAsmaticoPersonaggio(${idx})" style="background:#16a085 !important; color:white !important;">🫁 Recupero Rapido</button>` : ''}
+                                             ${hasPerk(p, 'Igenizzatore') ? `<button onclick="apriIgienizzaModal(${idx})">🧴 Igienizza</button>` : ''}
                                             ${user && user.role === 'master' && hasPerk(p, 'Rancoroso') ? `<button onclick="apriImpostaRancore(${idx})" style="background:#8e44ad; color:white;">😠 Imposta Rancore</button>` : ''}
                                             ${user && user.role === 'master' && hasPerk(p, 'CroceRossina') ? `<button onclick="gestisciCroceRossina(${idx})" style="background:#c0392b; color:white;">💉 Sensi di Colpa</button>` : ''}
                                             ${user && user.role === 'master' ? `<button onclick="riduciStaminaManual(${idx})" style="background:#d35400; color:white;">⚡ Consuma Stamina</button>` : ''}
@@ -2853,6 +2854,24 @@ function togglePerk(nomePerk, forceRemove = false) {
                     nuovoPerk.skills = ['Manodopera'];
                 }
                 p.perks.push(nuovoPerk);
+                } else if (nomePerk === 'Enciclopedia') {
+                    const skillsEnciclopedia = ['Natura', 'Religione', 'Storia', 'Cucina', 'Artificeria', 'Medicina', 'Arcano'];
+                    const giaScelte = p.perks
+                        .filter(pp => getPerkBaseName(perkObjectName(pp)) === 'Enciclopedia')
+                        .map(pp => (pp.skills && pp.skills[0]) || null)
+                        .filter(Boolean);
+                    const disponibili = skillsEnciclopedia.filter(s => !giaScelte.includes(s));
+                    if (disponibili.length === 0) {
+                        alert('Hai già preso Enciclopedia su tutte le competenze disponibili!');
+                        return;
+                    }
+                    const scelta = prompt(`Perk "Enciclopedia": scegli una competenza:\n${disponibili.join(", ")}`, disponibili[0]);
+                    const trovata = disponibili.find(s => s.toLowerCase() === (scelta || '').toLowerCase());
+                    if (!trovata) {
+                        alert('Competenza non valida o annullata.');
+                        return;
+                    }
+                    p.perks.push({ ...perkDati, nome: `Enciclopedia (${trovata})`, skills: [trovata] });
                 } else if (nomePerk === 'Ignorante') {
                     const skillsIgnorante = ['Arcano', 'Artificeria', 'Medicina', 'Natura', 'Storia', 'Religione', 'Cucina', 'Sopravvivenza'];
                     const giaScelte = p.perks
@@ -2892,6 +2911,13 @@ function togglePerk(nomePerk, forceRemove = false) {
                 }
                 else if (nomePerk === 'Alchemico') {
                         p.perks.push({...perkDati});
+                        if (!p.masteries.map(m => m.toLowerCase()).includes('natura')) {
+                            p.masteries.push('Natura');
+                        }
+                } else if (nomePerk === 'Scienziato Pazzo') {
+                        p.perks.push({...perkDati});
+                        p.artificeria = p.artificeria || { generale: { livello: 0, pag: 0 }, specializzazioni: { Balistica: { livello: 0, ps: 0 }, Meccanica: { livello: 0, ps: 0 }, Elettronica: { livello: 0, ps: 0 } } };
+                        if (p.artificeria.generale.livello < 2) p.artificeria.generale.livello = 2;
                         if (!p.masteries.map(m => m.toLowerCase()).includes('natura')) {
                             p.masteries.push('Natura');
                         }
