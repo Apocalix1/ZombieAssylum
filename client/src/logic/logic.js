@@ -2610,9 +2610,29 @@ export class Personaggio {
           for (let t in this.timers) {
             if (this.timers[t] > 0) this.timers[t] -= 1;
         }
-        if (this.buffCucinaMaestriaOreRestanti > 0) this.buffCucinaMaestriaOreRestanti -= 1;
+                if (this.buffCucinaMaestriaOreRestanti > 0) this.buffCucinaMaestriaOreRestanti -= 1;
         if (this._folliaBloccataPiattiDeliziosi && (window.oreTotali || 0) - (this._ultimoPiattoDeliziosoOra || 0) >= 48) {
             this._folliaBloccataPiattiDeliziosi = false;
+        }
+
+        // Spada della Follia: maledizione passiva se portata nell'inventario personale
+        if (!this.isRobot) {
+            this.initInventarioBase();
+            const haSpadaMaledetta = (this.inventario.oggettiMagiciPersonali || []).some(i => i.defId === 'spada_della_follia');
+            if (haSpadaMaledetta) {
+                this._spadaFolliaTimer = (this._spadaFolliaTimer || 0) + 1;
+                if (this._spadaFolliaTimer >= 6) {
+                    this._spadaFolliaTimer = 0;
+                    const tiroMaledizione = (typeof rollDice === 'function') ? rollDice(1, 6) : (Math.floor(Math.random() * 6) + 1);
+                    this.follia = Math.min(20, this.follia + tiroMaledizione);
+                    if (typeof this.aggiornaSintomiFollia === 'function') this.aggiornaSintomiFollia();
+                    if (typeof window.mostraNotificaInAlto === 'function') {
+                        window.mostraNotificaInAlto(`${this.nome}: la Spada della Follia sussurra nella sua mente... Follia +${tiroMaledizione}.`, 'pericolo');
+                    }
+                }
+            } else {
+                this._spadaFolliaTimer = 0;
+            }
         }
 
         if (this.timers.buffFame > 0 && !this.isRobot) {

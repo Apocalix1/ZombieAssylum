@@ -153,7 +153,10 @@ function getMedicalData(woundState, tipo = 'cura', personaggio = null) {
         if (personaggio.hasPerk('Fragile')) data.cd += 3;
         if (personaggio.hasPerk('Agofobico')) data.cd += 2; // FIX: prima chiamava personaggio.hasPerk senza controllare che personaggio esistesse
     }
-    if (window.magazzino && window.magazzino.baseIgienizzataGiorno === Math.floor((window.oreTotali || 0) / 24)) {
+    if (window.magazzino && window.magazzino.igienizzazioneMagicaFinoA && (window.oreTotali || 0) < window.magazzino.igienizzazioneMagicaFinoA) {
+        // Igienizzatore magico: -4, prevale (non si somma) sul -1 di Ossessione del Pulito
+        data.cd = Math.max(1, data.cd - 4);
+    } else if (window.magazzino && window.magazzino.baseIgienizzataGiorno === Math.floor((window.oreTotali || 0) / 24)) {
         data.cd = Math.max(1, data.cd - 1);
     }
     return data;

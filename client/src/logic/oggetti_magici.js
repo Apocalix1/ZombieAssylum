@@ -52,21 +52,42 @@ function trovaIstanzaOvunque(uid) {
 window.trovaIstanzaOggettoMagico = trovaIstanzaOvunque;
 
 function applicaFormaBase(ctx, def) {
-    const chiave = def.formaBase.chiave;
-    const qta = def.formaBase.quantita;
-    if (ctx.owner) {
-        ctx.owner.initInventarioBase();
-        ctx.owner.inventario[chiave] = (ctx.owner.inventario[chiave] || 0) + qta;
-        if (typeof window.salvaPersonaggioCloud === 'function') window.salvaPersonaggioCloud(ctx.owner);
-    } else {
-        if (chiave === 'medBase') window.magazzino.materialiMedici.base = (window.magazzino.materialiMedici.base || 0) + qta;
-        else if (chiave === 'medAvanzati') window.magazzino.materialiMedici.avanzati = (window.magazzino.materialiMedici.avanzati || 0) + qta;
-        else if (chiave === 'medCritici') window.magazzino.materialiMedici.critici = (window.magazzino.materialiMedici.critici || 0) + qta;
-        else if (chiave === 'alchemici') window.magazzino.materialiAlchemici = (window.magazzino.materialiAlchemici || 0) + qta;
-        else window.magazzino[chiave] = (window.magazzino[chiave] || 0) + qta;
-        if (typeof window.updateMagazzinoFields === 'function') {
-            window.updateMagazzinoFields({ materialiMedici: window.magazzino.materialiMedici, materialiAlchemici: window.magazzino.materialiAlchemici });
+    // Alcuni oggetti (es. armi maledette) tornano a essere un oggetto fisico normale, non una risorsa numerica
+    if (def.formaBaseArma) {
+        if (ctx.owner) {
+            ctx.owner.initInventarioBase();
+            ctx.owner.inventario.armi.push(def.formaBaseArma);
+            if (typeof window.salvaPersonaggioCloud === 'function') window.salvaPersonaggioCloud(ctx.owner);
+        } else {
+            window.magazzino.armiTrovate = window.magazzino.armiTrovate || [];
+            window.magazzino.armiTrovate.push({ nome: def.formaBaseArma, qta: 1, tipo: 'arma' });
+            if (typeof window.updateMagazzinoFields === 'function') {
+                window.updateMagazzinoFields({ armiTrovate: window.magazzino.armiTrovate });
+            }
         }
+        return;
+    }
+
+    // Supporta sia una singola voce { chiave, quantita } sia un array di più voci
+    const voci = Array.isArray(def.formaBase) ? def.formaBase : [def.formaBase];
+    voci.forEach(v => {
+        const chiave = v.chiave;
+        const qta = v.quantita;
+        if (ctx.owner) {
+            ctx.owner.initInventarioBase();
+            ctx.owner.inventario[chiave] = (ctx.owner.inventario[chiave] || 0) + qta;
+        } else {
+            if (chiave === 'medBase') window.magazzino.materialiMedici.base = (window.magazzino.materialiMedici.base || 0) + qta;
+            else if (chiave === 'medAvanzati') window.magazzino.materialiMedici.avanzati = (window.magazzino.materialiMedici.avanzati || 0) + qta;
+            else if (chiave === 'medCritici') window.magazzino.materialiMedici.critici = (window.magazzino.materialiMedici.critici || 0) + qta;
+            else if (chiave === 'alchemici') window.magazzino.materialiAlchemici = (window.magazzino.materialiAlchemici || 0) + qta;
+            else window.magazzino[chiave] = (window.magazzino[chiave] || 0) + qta;
+        }
+    });
+    if (ctx.owner) {
+        if (typeof window.salvaPersonaggioCloud === 'function') window.salvaPersonaggioCloud(ctx.owner);
+    } else if (typeof window.updateMagazzinoFields === 'function') {
+        window.updateMagazzinoFields({ materialiMedici: window.magazzino.materialiMedici, materialiAlchemici: window.magazzino.materialiAlchemici });
     }
 }
 
@@ -209,12 +230,137 @@ window.assorbiEnergiaIstanzaOggetto = function(uid, modalita) {
 };
 
 // Robot: versione basata su istanza del vecchio absorbMagicItem(rarity).
+// Robot: versione basata su istanza del vecchio absorbMagicItem(rarity).
 window.assorbiOggettoMagicoRobot = function(p, uid) {
     if (!p || !p.isRobot) return 0;
     const risultato = window.assorbiEnergiaIstanzaOggetto(uid, 'robot');
     if (!risultato) return 0;
-    let ore = risultato.ore;
-    if (p.hasPerk && p.hasPerk('Batteria morta')) ore = ore * 0.8;
-    p.batteryHours = Math.min(p.batteryHoursMax, (p.batteryHours || 0) + ore);
-    return ore;
+    p.batteryHours = Math.min(p.batteryHoursMax, (p.batteryHours || 0) + risultato.ore);
+    return risultato.ore;
+};
+
+// --- Igienizzatore Magico: azione di 4 ore nella base, poi CD medicazioni -4 per 24h (non sommabile con Ossessione del Pulito) ---
+window.usaIgienizzatoreMagico = function(idx) {
+    const p = window.party[idx];
+    if (!p) return;
+    if (p.inSpedizione) { alert('Puoi igienizzare la base solo se ti trovi lì.'); return; }
+    const effetto = window.chiediUsoOggettoMagico(p, 'igienizza_magica', `${p.nome} vuole igienizzare magicamente la base`);
+    if (!effetto) return;
+
+    const durataAzione = effetto.durataAzioneOre || 4;
+    const azione = {
+        tipo: 'igienizza_magica',
+        oreTotali: durataAzione,
+        oreRimanenti: durataAzione,
+        onComplete: () => {
+            const durataEffetto = effetto.durataEffettoOre || 24;
+            window.magazzino.igienizzazioneMagicaFinoA = (window.oreTotali || 0) + durataEffetto;
+            if (typeof window.updateMagazzinoFields === 'function') {
+                window.updateMagazzinoFields({ igienizzazioneMagicaFinoA: window.magazzino.igienizzazioneMagicaFinoA });
+            }
+            if (typeof window.mostraNotificaInAlto === 'function') {
+                window.mostraNotificaInAlto(`${p.nome} ha igienizzato magicamente la base: CD medicazioni -${effetto.riduzioneCD || 4} per ${durataEffetto}h.`, 'successo');
+            }
+        }
+    };
+    if (p.azioneCorrente) {
+        if (!confirm(`${p.nome} sta già facendo altro. Metterlo in coda?`)) return;
+        p.codaAzioni.push(azione);
+    } else {
+        p.azioneCorrente = azione;
+    }
+    if (typeof window.salvaPersonaggioCloud === 'function') window.salvaPersonaggioCloud(p);
+    if (typeof window.aggiornaInterfaccia === 'function') window.aggiornaInterfaccia();
+};
+
+// --- Specchio Meraviglioso: Cammuffare Se Stesso senza consumo di Mana ---
+window.usaSpecchioMeraviglioso = function(idx) {
+    const p = window.party[idx];
+    if (!p) return;
+    const effetto = window.chiediUsoOggettoMagico(p, 'cammuffa_gratis', `${p.nome} vuole cammuffarsi con lo Specchio Meraviglioso`);
+    if (!effetto) return;
+    if (typeof window.mostraNotificaInAlto === 'function') {
+        window.mostraNotificaInAlto(`✨ ${p.nome} si è cammuffato grazie allo Specchio Meraviglioso (nessun Mana consumato).`, 'successo');
+    }
+    if (typeof window.aggiornaInterfaccia === 'function') window.aggiornaInterfaccia();
+};
+
+// --- MASTER: assegna un oggetto magico a scelta con cariche personalizzate ---
+window.apriMasterDaiOggettoMagico = function(idx) {
+    const user = window.getCurrentUser ? window.getCurrentUser() : null;
+    if (!user || user.role !== 'master') return;
+    const p = window.party[idx];
+    if (!p) return;
+
+    let modal = document.getElementById('modal-master-oggetto-magico');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'modal-master-oggetto-magico';
+        modal.className = 'modal';
+        document.body.appendChild(modal);
+    }
+
+    const db = window.DATABASE_OGGETTI_MAGICI || {};
+    let optionsHtml = '';
+    ['comune', 'non_comune', 'raro', 'super_raro'].forEach(rarita => {
+        (db[rarita] || []).forEach(def => {
+            optionsHtml += `<option value="${def.id}" data-cariche="${def.cariche}">${def.nome} — ${window.RARITY_LABELS[rarita]} (base ${def.cariche} cariche)</option>`;
+        });
+    });
+
+    modal.innerHTML = `
+        <div class="modal-content" style="max-width:480px;">
+            <h2 style="color:#8e44ad;">🔮 Dai Oggetto Magico a ${p.nome}</h2>
+            <div style="margin-bottom:10px; text-align:left;">
+                <label style="color:#ccc;">Oggetto:</label>
+                <select id="master-oggmagico-select" style="width:100%; background:#222; color:white; border:1px solid #444; padding:6px;" onchange="window._aggiornaCaricheDefaultMasterOggMagico()">
+                    ${optionsHtml}
+                </select>
+            </div>
+            <div style="margin-bottom:10px; text-align:left;">
+                <label style="color:#ccc;">Cariche da assegnare:</label>
+                <input type="number" id="master-oggmagico-cariche" min="1" value="1" style="width:100%; background:#222; color:white; border:1px solid #444; padding:6px;">
+            </div>
+            <div class="modal-footer">
+                <button class="btn-big btn-cancel" onclick="chiudiModal('modal-master-oggetto-magico')">ANNULLA</button>
+                <button class="btn-big btn-confirm" onclick="window.confermaMasterDaiOggettoMagico(${idx})">DAI</button>
+            </div>
+        </div>`;
+    modal.style.display = 'block';
+    window._aggiornaCaricheDefaultMasterOggMagico();
+};
+
+window._aggiornaCaricheDefaultMasterOggMagico = function() {
+    const sel = document.getElementById('master-oggmagico-select');
+    const inp = document.getElementById('master-oggmagico-cariche');
+    if (!sel || !inp) return;
+    const opt = sel.selectedOptions[0];
+    if (opt) inp.value = opt.dataset.cariche || 1;
+};
+
+window.confermaMasterDaiOggettoMagico = function(idx) {
+    const p = window.party[idx];
+    const sel = document.getElementById('master-oggmagico-select');
+    const inp = document.getElementById('master-oggmagico-cariche');
+    if (!p || !sel || !inp) return;
+    const defId = sel.value;
+    const def = window.getOggettoMagicoDef(defId);
+    if (!def) return;
+    const cariche = parseInt(inp.value);
+    if (isNaN(cariche) || cariche <= 0) { alert('Numero di cariche non valido.'); return; }
+
+    p.initInventarioBase();
+    p.inventario.oggettiMagiciPersonali.push({
+        uid: generaIdOggetto(),
+        defId: def.id,
+        rarita: def.rarita,
+        cariche,
+        caricheMax: cariche
+    });
+    if (typeof window.mostraNotificaInAlto === 'function') {
+        window.mostraNotificaInAlto(`${p.nome} ha ricevuto "${def.nome}" (${cariche} cariche) dal Master.`, 'successo');
+    }
+    if (typeof window.salvaPersonaggioCloud === 'function') window.salvaPersonaggioCloud(p);
+    if (typeof window.aggiornaInterfaccia === 'function') window.aggiornaInterfaccia();
+    chiudiModal('modal-master-oggetto-magico');
 };

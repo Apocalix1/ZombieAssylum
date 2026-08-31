@@ -563,7 +563,14 @@ function eseguiNutrizione(p, dati) {
         p.fame += gain;
         if (p.fame > 14) { p.timers.buffFame = (p.hasPerk && p.hasPerk('Adattamento alimentare')) ? 8 : 6;}
         if (gain >= 0.25) p.timers.fameSoddisfatta = durataFameSoddisfatta;
-        const dannoFollia = (p.hasPerk && p.hasPerk('Schizzinoso')) ? 2 : 1;
+        let dannoFollia = (p.hasPerk && p.hasPerk('Schizzinoso')) ? 2 : 1;
+        const effettoAssaporatore = (typeof window.chiediUsoOggettoMagico === 'function')
+            ? window.chiediUsoOggettoMagico(p, 'evita_follia_avariato', `${p.nome} sta per mangiare cibo avariato`)
+            : null;
+        if (effettoAssaporatore) {
+            dannoFollia = 0;
+            mostraNotificaInAlto(`${p.nome} usa l'Assaporatore: nessuna Follia da questo pasto avariato.`, 'successo');
+        }
         p.follia += dannoFollia;
         if (p.nutriSpeciale) p.nutriSpeciale('avariato');
         mostraNotificaInAlto(`${p.nome} ha mangiato cibo avariato. Fame +${gain.toFixed(2)}, follia +${dannoFollia}.`, 'avviso');

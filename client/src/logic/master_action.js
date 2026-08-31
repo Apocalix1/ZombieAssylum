@@ -165,9 +165,14 @@ window.masterAggiungiOggetto = function(idx) {
     if (!p) return;
     p.initInventarioBase();
 
-    const opzioni = ['cibo', 'acqua', 'ingranaggi', 'alchemici', 'medBase', 'medAvanzati', 'medCritici', 'arma_libera'];
+    const opzioni = ['cibo', 'acqua', 'ingranaggi', 'alchemici', 'medBase', 'medAvanzati', 'medCritici', 'arma_libera', 'oggetto_magico'];
     const scelta = prompt(`Cosa vuoi aggiungere a ${p.nome}?\n${opzioni.join(', ')}`, 'cibo');
     if (!scelta) return;
+
+    if (scelta === 'oggetto_magico') {
+        if (typeof window.apriMasterDaiOggettoMagico === 'function') window.apriMasterDaiOggettoMagico(idx);
+        return;
+    }
 
     if (scelta === 'arma_libera') {
         const nomeArma = prompt('Nome dell\'oggetto/arma da aggiungere:');
