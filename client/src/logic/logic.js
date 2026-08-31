@@ -1675,6 +1675,10 @@ export class Personaggio {
                     valoreBase += 2;
                     motivi.push("Piccola taglia (+2)");
                 }
+                if(haPerk("Obeso")) {
+                    valoreBase -= 2;
+                    motivi.push("Obeso (-2)");
+                }
             }
             if (statNome === "Carisma") {
                 if (haPerk("Bel viso")) {
@@ -1689,6 +1693,10 @@ export class Personaggio {
                     valoreBase += 2;
                     motivi.push("Anziana Carismatica (+2)");
                 }
+                if (haPerk("Genitore modello")) {
+                    valoreBase += 1;
+                    motivi.push("Genitore modello (+1)");
+                }
             }
             if (statNome === "Saggezza") {
                 if (haAnzianaVariante("Anziana_Bilanciata")) {
@@ -1700,6 +1708,12 @@ export class Personaggio {
                     motivi.push("Anziana Venerabile (+2)");
                 }
             }
+            if (statNome === "Intelligenza") {
+                if(haPerk("Scienziato Pazzo")){
+                    valoreBase += 2;
+                    motivi.push("Scienziato Pazzo (+2)");
+                }
+        }
         }
         let eccedenza = 0;
         if (valoreBase > 20) {
@@ -2039,7 +2053,7 @@ export class Personaggio {
         const ipoglicemiaDisadvantage = !!this.diabeteIpoglicemiaAttiva;
 
         let disadvantage = false;
-        if ((this.hasPerk('Asmatico') || this.hasPerk('Obeso')) && this.staminaAttuale <= 2 &&
+        if ((this.hasPerk('Asmatico')) && this.staminaAttuale <= 2 &&
             ['Atletica', 'Acrobazia'].includes(skill)) {
             disadvantage = true;
         }
@@ -2557,7 +2571,7 @@ export class Personaggio {
             }
             this.staminaRegenTimer = 0;
         }
-        if (this.hasPerk && (this.hasPerk('Asmatico') || this.hasPerk('Obeso'))) {
+        if (this.hasPerk && (this.hasPerk('Asmatico'))) {
             if (this.staminaAttuale <= 0 && !this._asmaCrisi) {
                 this._asmaCrisi = true;
                 if (typeof mostraNotificaInAlto === 'function') {
