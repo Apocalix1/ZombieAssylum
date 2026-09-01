@@ -637,6 +637,9 @@ export class Personaggio {
         this.puntiFeritaRealiMaxBase = 5;
         this.puntiFeritaReali = 5;
         this.puntiFortunaMax = 15;
+        // Tenere traccia di eventuali riduzioni temporanee del massimo PF Fortuna
+        // causate da sovraccarico mana (da ripristinare al prossimo riposo lungo)
+        this._sovraccaricoFortunaLost = 0;
         this.rancoreDurataOre = null;
         this.puntiFortuna = 15;
         this.vittorieCombattimento = 0;
@@ -1125,9 +1128,12 @@ export class Personaggio {
         //    Se i PF Fortuna si esauriscono, si perde 1 stadio di ferita ogni 3 punti spesi sotto zero.
         if (negativo > 0) {
             const riduzioneMax = negativo * 2;
-            this.puntiFortunaMax = Math.max(0, this.puntiFortunaMax - riduzioneMax);
+            // Applichiamo la riduzione ma tracciamo quanto è stato tolto
+            const realeRidotto = Math.min(this.puntiFortunaMax, riduzioneMax);
+            this.puntiFortunaMax = Math.max(0, this.puntiFortunaMax - realeRidotto);
+            this._sovraccaricoFortunaLost = (this._sovraccaricoFortunaLost || 0) + realeRidotto;
             this.puntiFortuna = Math.min(this.puntiFortuna, this.puntiFortunaMax);
-            message += `Sovraccarico Vitale: -${riduzioneMax} PF Fortuna massimi.`;
+            message += `Sovraccarico Vitale: -${realeRidotto} PF Fortuna massimi.`;
             if (this.puntiFortuna <= 0) {
                 stadiPersi = Math.floor(negativo / 3);
                 if (stadiPersi > 0) {
@@ -1387,6 +1393,13 @@ export class Personaggio {
         // Resetta anche affaticamento arcano ed esaurimento magico
         this.resetArcaneFatigue();
         this._magicExhausted = false;
+        // Ripristina eventuali PF Fortuna massimi tolti da sovraccarichi mana
+        if (this._sovraccaricoFortunaLost && this._sovraccaricoFortunaLost > 0) {
+            this.puntiFortunaMax = (this.puntiFortunaMax || 0) + this._sovraccaricoFortunaLost;
+            this._sovraccaricoFortunaLost = 0;
+            // Assicuriamoci che i PF attuali non superino il nuovo massimo
+            this.normalizePuntiFortuna && this.normalizePuntiFortuna();
+        }
         return this.manaAttuale - oldMana;
     }
 
@@ -1812,6 +1825,11 @@ export class Personaggio {
             if (this.diabeteIperglicemiaAttiva && (statNome === "Saggezza" || statNome === "Carisma")) {
                 modFinale -= 2;
                 motivi.push("Iperglicemia (-2)");
+            }
+            if (this.timers.buffIntegratori > 0 && (statNome === "Intelligenza" || statNome === "Saggezza")) {
+                const bonusInt = this._integratoriBonus || 3;
+                modFinale += bonusInt;
+                motivi.push(`Integratori (+${bonusInt})`);
             }
         }
 
@@ -2871,6 +2889,10 @@ export class Personaggio {
                 this.puntiFeritaReali = Math.min(this.puntiFeritaRealiMax, this.puntiFeritaReali + 1);
                 this.oreRiposoAccumulate = 0;
                 this.resetWoundTimer();
+                if (this._bendaggioCoagulanteAttivo) {
+                    this._bendaggioCoagulanteAttivo = false;
+                    this._bendaggioCoagulantePercent = 0;
+                }
                 if (typeof mostraNotificaInAlto === 'function') {
                     mostraNotificaInAlto(`${this.nome}: La ferita sta guarendo grazie al riposo!`, "successo");
                 }

@@ -239,6 +239,42 @@ window.assorbiOggettoMagicoRobot = function(p, uid) {
     return risultato.ore;
 };
 
+// --- Candela Nera: si accende automaticamente studiando Arcano/Incantesimi, +1d6 al tiro ---
+window.applicaBonusCandelaNeraStudio = function(p) {
+    if (!p) return 0;
+    p.initInventarioBase();
+    const istanza = (p.inventario.oggettiMagiciPersonali || []).find(i => i.defId === 'candela_nera' && i.cariche > 0);
+    if (!istanza) return 0;
+    const ctx = trovaIstanzaOvunque(istanza.uid);
+    if (!ctx) return 0;
+    const { esaurito, convertito } = consumaCaricaCtx(ctx);
+    const bonus = (typeof rollDiceNotation === 'function') ? rollDiceNotation('1d6') : (Math.floor(Math.random() * 6) + 1);
+    if (typeof window.mostraNotificaInAlto === 'function') {
+        let msg = `🕯️ La Candela Nera di ${p.nome} si accende: +${bonus} al tiro di studio.`;
+        if (esaurito) msg += convertito ? ' Si consuma in materiali.' : ' Va distrutta.';
+        window.mostraNotificaInAlto(msg, 'info');
+    }
+    return bonus;
+};
+
+// --- Candela Nera: consumo manuale di una carica per +2 Mana istantanei ---
+window.usaCandelaNeraMana = function(idx) {
+    const p = window.party[idx];
+    if (!p) return;
+    p.initInventarioBase();
+    const istanza = (p.inventario.oggettiMagiciPersonali || []).find(i => i.defId === 'candela_nera' && i.cariche > 0);
+    if (!istanza) return alert('Non hai una Candela Nera con cariche disponibili.');
+    if (!confirm('Consumare 1 carica della Candela Nera per ottenere 2 Mana?')) return;
+    const ctx = trovaIstanzaOvunque(istanza.uid);
+    const { esaurito, convertito } = consumaCaricaCtx(ctx);
+    p.manaAttuale = Math.min(p.manaMax, (p.manaAttuale || 0) + 2);
+    let msg = `${p.nome} usa la Candela Nera: +2 Mana.`;
+    if (esaurito) msg += convertito ? ' La candela si è consumata in materiali.' : ' La candela è andata distrutta.';
+    if (typeof window.mostraNotificaInAlto === 'function') window.mostraNotificaInAlto(msg, 'successo');
+    if (typeof window.salvaPersonaggioCloud === 'function') window.salvaPersonaggioCloud(p);
+    if (typeof window.aggiornaInterfaccia === 'function') window.aggiornaInterfaccia();
+};
+
 // --- Igienizzatore Magico: azione di 4 ore nella base, poi CD medicazioni -4 per 24h (non sommabile con Ossessione del Pulito) ---
 window.usaIgienizzatoreMagico = function(idx) {
     const p = window.party[idx];

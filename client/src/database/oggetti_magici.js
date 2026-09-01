@@ -37,6 +37,16 @@ window.DATABASE_OGGETTI_MAGICI = {
             riutilizzabileFormaBase: false
         },
         {
+            id: 'candela_nera',
+            nome: 'Candela Nera',
+            rarita: 'non_comune',
+            cariche: 5,
+            effetto: { tipo: 'bonus_studio_arcano', dado: '1d6' },
+            desc: 'Si accende automaticamente se il possessore studia per imparare un incantesimo o Arcano, aggiungendo 1d6 al tiro (consuma una carica). In alternativa, puoi consumare una carica per ottenere 2 Mana istantanei.',
+            formaBase: { chiave: 'alchemici', quantita: 2 },
+            riutilizzabileFormaBase: true
+        },
+        {
             id: 'assaporatore',
             nome: 'Assaporatore',
             rarita: 'non_comune',

@@ -632,6 +632,10 @@ function checkRazionamento() {
 
  export function puoIniziareAzione(p,tipo) {
     if (!p) return false;
+    if (p._incapacitatoFinoA && (window.oreTotali || 0) < p._incapacitatoFinoA) {
+        alert(`${p.nome} è incapace di agire per gli effetti collaterali dell'Adrenalina.`);
+        return false;
+    }
     if (p._asmaCrisi) {
         alert(`${p.nome} è in crisi respiratoria (Incapacitato) e non può agire finché non recupera almeno 1 tacca di Stamina.`);
         return false;

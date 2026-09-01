@@ -755,9 +755,11 @@ async function autoSaveParty() {
     }
 }
 function rollDiceNotation(notation) {
-    const match = notation.match(/(\d+)d(\d+)/);
+    const match = notation.match(/(\d+)d(\d+)([+-]\d+)?/);
     if (!match) return 0;
-    return rollDice(parseInt(match[1], 10), parseInt(match[2], 10));
+    const dado = rollDice(parseInt(match[1], 10), parseInt(match[2], 10));
+    const mod = match[3] ? parseInt(match[3], 10) : 0;
+    return dado + mod;
 }
 
 function normalizePerkName(nomePerk) {
@@ -1574,7 +1576,8 @@ export function aggiornaInterfaccia() {
                                             ${hasPerk(p, 'Asmatico') ? `<button onclick="usaRecuperoAsmaticoPersonaggio(${idx})" style="background:#16a085 !important; color:white !important;">🫁 Recupero Rapido</button>` : ''}
                                                                                         ${hasPerk(p, 'Igenizzatore') ? `<button onclick="apriIgienizzaModal(${idx})">🧴 Igienizza</button>` : ''}
                                             ${(typeof window.oggettiMagiciDisponibiliPer === 'function' && window.oggettiMagiciDisponibiliPer(p, 'igienizza_magica').length > 0) ? `<button onclick="usaIgienizzatoreMagico(${idx})">🔮 Igienizza (magico)</button>` : ''}
-                                            ${(typeof window.oggettiMagiciDisponibiliPer === 'function' && window.oggettiMagiciDisponibiliPer(p, 'cammuffa_gratis').length > 0) ? `<button onclick="usaSpecchioMeraviglioso(${idx})">🪞 Cammuffati</button>` : ''}
+                                                                                       ${(typeof window.oggettiMagiciDisponibiliPer === 'function' && window.oggettiMagiciDisponibiliPer(p, 'cammuffa_gratis').length > 0) ? `<button onclick="usaSpecchioMeraviglioso(${idx})">🪞 Cammuffati</button>` : ''}
+                                            ${(p.inventario?.oggettiMagiciPersonali || []).some(i => i.defId === 'candela_nera' && i.cariche > 0) ? `<button onclick="usaCandelaNeraMana(${idx})">🕯️ Candela → Mana</button>` : ''}
                                             ${user && user.role === 'master' && hasPerk(p, 'Rancoroso') ? `<button onclick="apriImpostaRancore(${idx})" style="background:#8e44ad; color:white;">😠 Imposta Rancore</button>` : ''}
                                             ${user && user.role === 'master' && hasPerk(p, 'CroceRossina') ? `<button onclick="gestisciCroceRossina(${idx})" style="background:#c0392b; color:white;">💉 Sensi di Colpa</button>` : ''}
                                             ${user && user.role === 'master' ? `<button onclick="riduciStaminaManual(${idx})" style="background:#d35400; color:white;">⚡ Consuma Stamina</button>` : ''}
@@ -2997,7 +3000,7 @@ function renderInventarioHtml(p) {
             <strong>Zaino equipaggiato:</strong> ${p.zainoEquipaggiato ? p.zainoEquipaggiato.nome : 'Nessuno'}
             ${inv.zaini && inv.zaini.length ? `<br><strong>Altri zaini portati:</strong> ${inv.zaini.map(z => z.nome).join(' • ')}` : ''}
         </div>
-           <div style="margin-top:6px; font-size:0.85rem; color:#eee;">
+                   <div style="margin-top:6px; font-size:0.85rem; color:#eee;">
             <strong>Consumabili:</strong>
             ${inv.consumabili && inv.consumabili.length ? `
                 <div style="display:grid; gap:4px; margin-top:4px;">
@@ -3009,7 +3012,22 @@ function renderInventarioHtml(p) {
                     `).join('')}
                 </div>
             ` : 'Nessuno'}
-i        </div>
+        </div>
+        <div style="margin-top:6px; font-size:0.85rem; color:#eee;">
+            <strong>Composti Alchemici:</strong>
+            ${inv.composti && inv.composti.length ? `
+                <div style="display:grid; gap:4px; margin-top:4px;">
+                    ${inv.composti.map((c, ci) => {
+                        const colore = c.qualita === 'tossico' ? '#e74c3c' : c.qualita === 'instabile' ? '#f39c12' : '#2ecc71';
+                        return `
+                        <div style="display:flex; justify-content:space-between; align-items:center; background:#111; padding:4px 8px; border:1px solid #333;">
+                            <span>${c.nome} <span style="color:${colore}; font-size:0.75rem;">(${c.qualita})</span></span>
+                            <button class="btn-hero" style="padding:3px 8px; font-size:0.7rem;" onclick="window.consumaCompostoPersonaggio(${party.indexOf(p)}, ${ci})">Consuma</button>
+                        </div>`;
+                    }).join('')}
+                </div>
+            ` : 'Nessuno'}
+        </div>
                 <div style="margin-top:6px; font-size:0.85rem; color:#eee;">
             <strong>Oggetti Magici:</strong>
             ${(inv.oggettiMagiciPersonali && inv.oggettiMagiciPersonali.length) ? `

@@ -628,6 +628,13 @@ function completaStudioBookAction(p, action) {
         const teacherObj = action.teacherName ? party.find(x => x.nome === action.teacherName) : (helper || null);
 
         // Calcolo delle ore effettive per il progresso (considerando Deconcentrato e Pessimo studente)
+                // Candela Nera: si accende una sola volta per sessione di studio, se la materia è Arcano
+        let candelaBonus = 0;
+        if ((book.subject === 'Arcano' || book.subject === 'Incantesimi') && typeof window.applicaBonusCandelaNeraStudio === 'function') {
+            candelaBonus = window.applicaBonusCandelaNeraStudio(p);
+        }
+
+        // Calcolo delle ore effettive per il progresso (considerando Deconcentrato e Pessimo studente)
         const progressHours = Math.max(0, effectiveAdjusted * progressMultiplier);
         const progressHoursInt = Math.ceil(progressHours); // arrotondato per eccesso
 
@@ -646,6 +653,8 @@ function completaStudioBookAction(p, action) {
             }
             // Applica bonus Studio in compagnia (se attivo)
             roll += studioBonus;
+            if (p.timers && p.timers.buffIntegratori > 0) roll += (p._integratoriBonus || 3);
+            if (i === 0) roll += candelaBonus;
             if (p.studyOverload) roll = Math.max(0, roll - 2);
             if (rancoreAttivo) roll = Math.floor(roll * 0.6);
             currentPoints += roll;

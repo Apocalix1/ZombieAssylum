@@ -198,6 +198,9 @@ function getOreNecessarieGuarigione() {
     const presenteUccello = !this.inSpedizione && window.party &&
         window.party.some(m => m !== this && !m.inSpedizione && m.hasPerk && m.hasPerk('Uccello del malaugurio'));
     if (presenteUccello) ore *= 1.1;
+    if (this._bendaggioCoagulanteAttivo) {
+        ore *= (1 - (this._bendaggioCoagulantePercent || 20) / 100);
+    }
     return ore;
 }
 
@@ -390,10 +393,14 @@ function eseguiCuraTarget(medicoIdx, targetIdx, tipo, rollPrecalcolato = null, b
         dcFinale += 2;
         dimezzaBase = true;
     }
-     let divisorAllMedico = 1;
+    let divisorAllMedico = 1;
     if (medico.hasPerk && medico.hasPerk('Medico')) {
         dcFinale += 2;
         divisorAllMedico = 2;
+    }
+    if (target._unguentoCoagulanteAttivo && target.woundState !== 'Ferita lieve') {
+        dcFinale = Math.max(1, dcFinale + (target._unguentoCoagulanteBonus || -4));
+        target._unguentoCoagulanteAttivo = false;
     }
         if (bonusOggettoMagico > 0) {
         dcFinale = Math.max(1, dcFinale - bonusOggettoMagico);

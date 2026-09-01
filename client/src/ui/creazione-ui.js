@@ -850,6 +850,13 @@ export function renderSetupPerks() {
         </div>
     `;
 
+    const perksPanel = container.closest('.perks-panel');
+    if (perksPanel) {
+        perksPanel.style.minHeight = '420px';
+        perksPanel.style.height = '100%';
+    }
+    container.style.minHeight = '320px';
+    container.style.height = '100%';
     container.innerHTML = html;
     container.scrollTop = scrollPos;
 }

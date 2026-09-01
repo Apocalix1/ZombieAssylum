@@ -364,11 +364,80 @@ function lootAlchemici(tiro) {
 }
 
 /**
- * Applica il consumo di un composto a un personaggio target.
- * - "Pillole della Calma" (antidepressivo): effetto automatico su Follia (o danno se tossico)
- * - Tutti gli altri composti: l'effetto resta manuale (gestito dal master)
- * In ogni caso registra il consumo ai fini dell'overdose (3+ in 4 ore).
+ * Applica l'effetto meccanico specifico del composto sul bersaglio.
+ * Ritorna una stringa descrittiva dell'esito da mostrare in notifica.
+ * Gestisce automaticamente qualità 'tossico' (sostituisce l'effetto con un danno)
+ * e 'instabile' (dimezza l'effetto).
  */
+function applicaEffettoComposto(target, c) {
+    const effetto = c.effetto || {};
+    const isInstabile = c.qualita === 'instabile';
+    const isTossico = c.qualita === 'tossico';
+
+    if (isTossico) {
+        target.puntiFeritaReali = Math.max(0, target.puntiFeritaReali - 1);
+        target.faticaBase = Math.min(6, target.faticaBase + 2);
+        target.resetWoundTimer();
+        return `☠️ era TOSSICO! -1 PF Reale, +2 Fatica.`;
+    }
+
+    switch (effetto.tipo) {
+        case 'rimuovi_disidratazione': {
+            const durata = effetto.durata || 4;
+            // Non cumulabile: si imposta, non si somma
+            target.timers.seteSoddisfatta = Math.max(target.timers.seteSoddisfatta || 0, isInstabile ? Math.ceil(durata / 2) : durata);
+            return `Disidratazione alleviata per ${target.timers.seteSoddisfatta}h.`;
+        }
+        case 'bonus_abilità': {
+            const durata = effetto.durata || 1;
+            const bonus = isInstabile ? Math.ceil((effetto.bonus || 3) / 2) : (effetto.bonus || 3);
+            target.timers.buffIntegratori = Math.max(target.timers.buffIntegratori || 0, durata);
+            target._integratoriBonus = bonus;
+            return `+${bonus} a Intelligenza, Saggezza e prove di Studio per ${durata}h.`;
+        }
+        case 'xp_mischia_bonus': {
+            const durata = effetto.durata || 1;
+            const mult = isInstabile ? 1.5 : (effetto.moltiplicatore || 2);
+            target.timers.buffProteico = Math.max(target.timers.buffProteico || 0, durata);
+            target._proteicoMoltiplicatore = mult;
+            return `XP delle armi da mischia moltiplicato x${mult} per ${durata}h.`;
+        }
+        case 'rimuovi_sanguinante': {
+            const bonusMed = isInstabile ? Math.ceil((effetto.bonus_med || -4) / 2) : (effetto.bonus_med || -4);
+            target._unguentoCoagulanteAttivo = true;
+            target._unguentoCoagulanteBonus = bonusMed;
+            return `Pronto per la prossima medicazione di ferita grave: CD ${bonusMed}.`;
+        }
+        case 'riduzione_tempo_rigenerazione': {
+            const percent = isInstabile ? Math.ceil((effetto.percent || 20) / 2) : (effetto.percent || 20);
+            target._bendaggioCoagulanteAttivo = true;
+            target._bendaggioCoagulantePercent = percent;
+            return `Il prossimo PF Reale rigenererà il ${percent}% più velocemente.`;
+        }
+        case 'rigenera_mana': {
+            let guadagno = (typeof rollDiceNotation === 'function') ? rollDiceNotation(effetto.dado || '1d4') : (Math.floor(Math.random() * 4) + 1);
+            if (isInstabile) guadagno = Math.floor(guadagno / 2);
+            const prima = target.manaAttuale;
+            target.manaAttuale = Math.min(target.manaMax, target.manaAttuale + guadagno);
+            return `+${target.manaAttuale - prima} Mana (${target.manaAttuale}/${target.manaMax}).`;
+        }
+        case 'bonus_iniziativa_ca_pf': {
+            let pf = effetto.pf || 5;
+            if (isInstabile) pf = Math.floor(pf / 2);
+            target.puntiFortunaTemp = (target.puntiFortunaTemp || 0) + pf;
+            return `+${pf} PF Fortuna temporanei.`;
+        }
+        case 'adrenalina': {
+            const postOre = effetto.post_incapacita_h || 1;
+            target._incapacitatoFinoA = (window.oreTotali || 0) + postOre;
+            return `Ignora ferite e debuff fisici per pochi minuti. Al termine sarà incapace di agire per ${postOre}h.`;
+        }
+        default:
+            return null;
+    }
+}
+window.applicaEffettoComposto = applicaEffettoComposto;
+
 function applicaConsumoComposto(target, c, onConsumed) {
     if (!target || !c) return;
     const isPilloleCalma = c.nome === 'Pillole della Calma' || (c.effetto && c.effetto.tipo === 'riduci_follia');
@@ -388,8 +457,14 @@ function applicaConsumoComposto(target, c, onConsumed) {
             mostraNotificaInAlto(`💊 ${target.nome} consuma "${c.nome}": Follia -${riduzione}.`, 'successo');
         }
     } else {
-        if (!confirm(`Confermi che ${target.nome} consuma "${c.nome}" (${c.qualita})? L'effetto va applicato manualmente dal master.`)) return;
-        mostraNotificaInAlto(`${target.nome} ha consumato "${c.nome}".`, 'successo');
+        const descBreve = c.desc ? ` (${c.desc})` : '';
+        if (!confirm(`Confermi che ${target.nome} consuma "${c.nome}" (${c.qualita})?${descBreve}`)) return;
+        const esito = applicaEffettoComposto(target, c);
+        if (esito) {
+            mostraNotificaInAlto(`🧪 ${target.nome} consuma "${c.nome}": ${esito}`, c.qualita === 'tossico' ? 'pericolo' : 'successo');
+        } else {
+            mostraNotificaInAlto(`${target.nome} ha consumato "${c.nome}". Effetto da applicare manualmente dal master.`, 'successo');
+        }
     }
 
     if (typeof target.registraConsumoConsumabile === 'function') {
