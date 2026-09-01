@@ -374,11 +374,15 @@ function renderSchedaCombattimentoMaster(p, idx) {
                 ${p.isRobot ? `
                     <div>🤖 PF Robotici: ${p.robotPF} / ${p.robotPFMax}</div>
                     ${typeof getBarra === 'function' ? getBarra(p.robotPF, p.robotPFMax, '#c0392b') : ''}
-                ` : `
+                               ` : `
                     <div>❤️ PF Reali: ${p.puntiFeritaReali} / ${p.puntiFeritaRealiMax}</div>
                     ${typeof getBarra === 'function' ? getBarra(p.puntiFeritaReali, p.puntiFeritaRealiMax, '#c0392b') : ''}
                     <div>✨ PF Fortuna: ${p.puntiFortuna} / ${p.puntiFortunaMax} ${p.puntiFortunaTemp > 0 ? `<span style="color:#3498db;">(+${p.puntiFortunaTemp} temp.)</span>` : ''}</div>
                     ${typeof getBarra === 'function' ? getBarra(p.puntiFortuna, p.puntiFortunaMax, '#f1c40f') : ''}
+                    ${p.livelloMagia > 0 ? `
+                        <div>🔮 Mana: ${p.manaAttuale} / ${p.manaMax} ${p.manaAttuale < 0 ? `<span style="color:#e74c3c;">(Sovraccarico ${p.manaAttuale})</span>` : ''} ${p._arcaneFatigueApplied ? '<span style="color:#e74c3c;">⚠️ Affaticato</span>' : ''} ${p._magicExhausted ? '<span style="color:#e74c3c;">⛔ Esaurito</span>' : ''}</div>
+                        ${typeof getBarra === 'function' ? getBarra(Math.max(0, p.manaAttuale), p.manaMax, '#9b59b6') : ''}
+                    ` : ''}
                 `}
                 <div style="margin-top:8px; font-size:0.85rem; color:#aaa;">Vittorie comb.: ${p.vittorieCombattimento || 0}</div>
             </div>
@@ -443,11 +447,12 @@ function renderSchedaSpedizioneRidotta(p, idx) {
                 <strong>${p.nome}</strong>
                 <button class="combat-retreat" onclick="ritiraPersonaggio(${idx})">RITIRA</button>
             </div>
-            <div style="margin:10px 0; font-size:0.85rem; color:#ddd;">
+                <div style="margin:10px 0; font-size:0.85rem; color:#ddd;">
                 <div>🏃 Velocità: ${p.velocitaAttuale}m</div>
                 ${p.isRobot ? `<div>🤖 PF: ${p.robotPF}/${p.robotPFMax}</div>` : `
                     <div>❤️ PF Reali: ${p.puntiFeritaReali}/${p.puntiFeritaRealiMax}</div>
                     <div>✨ PF Fortuna: ${p.puntiFortuna}/${p.puntiFortunaMax}${p.puntiFortunaTemp > 0 ? ` <span style="color:#3498db;">(+${p.puntiFortunaTemp} temp.)</span>` : ''}</div>
+                    ${p.livelloMagia > 0 ? `<div>🔮 Mana: ${p.manaAttuale}/${p.manaMax}${p.manaAttuale < 0 ? ` <span style="color:#e74c3c;">(Sovraccarico ${p.manaAttuale})</span>` : ''}</div>` : ''}
                 `}
                 <div style="margin-top:6px;">${statsHtml}</div>
             </div>

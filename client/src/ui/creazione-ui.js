@@ -102,7 +102,7 @@ function avviaCreazione(directAdd = false) {
     window.tempP = new Personaggio("Nuovo", Math.floor((window.oreTotali || 0) / 24));
     window.tempP.puntiCreazione = 63;
     window.tempP.livelloMagia = 0;
-    window.tempP.spellsKnown = {0:0,1:0,2:0,3:0,4:0};
+    window.tempP.spellsKnown = {0:0,1:0,2:0,3:0};
 
     // Inizializzazione forzata delle statistiche
     ["forza", "destrezza", "costituzione", "intelligenza", "saggezza", "carisma"].forEach(stat => {
@@ -333,7 +333,7 @@ function modificaIncantesimiConosciuti(livello, delta) {
     let attuale = p.spellsKnown[livello] || 0;
     const costo = SPELL_KNOWLEDGE_COST[livello] || 0;
 
-    if (delta > 0) {
+       if (delta > 0) {
         if (livello > p.livelloMagia) {
             alert('Devi sbloccare un livello di magia più alto per poter scegliere questo incantesimo.');
             return;

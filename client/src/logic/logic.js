@@ -1106,23 +1106,66 @@ export class Personaggio {
     return true;
 }
 
-    canCastSpell(level) {
-        if (!this.hasSpellLevel(level)) return {allowed: false, reason: 'Incantesimo non conosciuto.'};
-        const cost = this.getSpellCost(level);
-        if (cost === undefined) return {allowed: false, reason: 'Livello incantesimo non valido.'};
-
-        // Controlla esaurimento magico (se ha raggiunto il limite negativo e non ha recuperato mana)
-        if (this._magicExhausted) {
-            return {allowed: false, reason: 'Esaurimento magico! Recupera almeno 1 mana con un riposo lungo.'};
+        castSpell(level, target = null) {
+        const check = this.canCastSpell(level);
+        if (!check.allowed) {
+            return {success: false, message: check.reason};
         }
 
-        // Calcola il minimo consentito (soglia negativa = -livelloMagia)
-        const minAllowed = -this.livelloMagia;
-        if (this.manaAttuale - cost < minAllowed) {
-            return {allowed: false, reason: `Mana insufficiente (anche sotto zero). Limite: ${minAllowed}`};
+        const cost = check.cost;
+        let message = '';
+        let stadiPersi = 0;
+
+        // 1. Applica il consumo mana (anche sotto zero, entro il limite -LM)
+        const manaAfter = this.manaAttuale - cost;
+        const negativo = manaAfter < 0 ? Math.min(-manaAfter, this.livelloMagia) : 0;
+        this.manaAttuale = Math.max(-this.livelloMagia, manaAfter);
+
+        // 2. Sovraccarico Vitale: ogni punto mana speso sotto lo 0 riduce i PF Fortuna massimi di 2.
+        //    Se i PF Fortuna si esauriscono, si perde 1 stadio di ferita ogni 3 punti spesi sotto zero.
+        if (negativo > 0) {
+            const riduzioneMax = negativo * 2;
+            this.puntiFortunaMax = Math.max(0, this.puntiFortunaMax - riduzioneMax);
+            this.puntiFortuna = Math.min(this.puntiFortuna, this.puntiFortunaMax);
+            message += `Sovraccarico Vitale: -${riduzioneMax} PF Fortuna massimi.`;
+            if (this.puntiFortuna <= 0) {
+                stadiPersi = Math.floor(negativo / 3);
+                if (stadiPersi > 0) {
+                    this.puntiFeritaReali = Math.max(0, this.puntiFeritaReali - stadiPersi);
+                    message += ` PF Fortuna esauriti: -${stadiPersi} stadio/i di ferita.`;
+                }
+            }
         }
 
-        return {allowed: true, cost};
+        // 3. Esaurimento Magico: ha raggiunto il limite negativo massimo di mana
+        if (this.manaAttuale <= -this.livelloMagia) {
+            this._magicExhausted = true;
+            this.faticaBase = Math.min(6, this.faticaBase + 2);
+            message += ' Esaurimento magico: +2 fatica, incantesimi bloccati fino al prossimo riposo lungo.';
+            if (typeof window.mostraNotificaInAlto === 'function') {
+                window.mostraNotificaInAlto(`${this.nome} è esausto magicamente! +2 fatica, incantesimi bloccati.`, 'pericolo');
+            }
+        }
+
+        // 4. Affaticamento Arcano (>50% della mana massima spesa in 1 minuto)
+        this.checkArcaneFatigue(cost);
+
+        // 5. Effetto su bersaglio, se applicabile (gestione danni resta a carico del combattimento)
+        if (target && typeof target.applyDamage === 'function') {
+            const damage = cost * 2 + this.getCastingModifier();
+            target.applyDamage(damage);
+            message += ` Inflitto ${damage} danni a ${target.nome}.`;
+        }
+
+        message = `Consumati ${cost} mana. ` + message;
+        if (this._arcaneFatigueApplied) message += ' (Affaticato arcano)';
+        if (this._magicExhausted) message += ' (Esaurito magicamente)';
+
+        if (typeof window.aggiornaInterfaccia === 'function') {
+            window.aggiornaInterfaccia();
+        }
+
+        return {success: true, manaSpent: cost, stadiPersi, message};
     }
 
     castSpell(level, target = null) {
@@ -1749,6 +1792,14 @@ export class Personaggio {
             modFinale -= 1;
             motivi.push("Carenza di Biocarburante (-1)");
         }
+        if (this.isRobot && this.biocarburanteDeficit) {
+            modFinale -= 1;
+            motivi.push("Carenza di Biocarburante (-1)");
+        }
+        if (this._arcaneFatigueApplied) {
+            modFinale -= 2;
+            motivi.push("Affaticamento Arcano (-2)");
+        }
         if (this.timers && this.timers.overdose > 0) {
             modFinale -= 2;
             motivi.push("Overdose (-2)");
@@ -1855,20 +1906,20 @@ export class Personaggio {
     }
 
     getManaMaxFromLevel(livello) {
-        const manaPerLivello = [0, 4, 6, 9, 12, 16, 20, 24, 28, 32];
+        const manaPerLivello = [0, 4, 6, 9, 12, 16];
         const base = manaPerLivello[Math.min(Math.max(0, livello), manaPerLivello.length - 1)] || 0;
         const bonusPerk = this.perks && this.perks.some(p => p.nome === 'Apprendista mago') ? 4 : 0;
         return base + bonusPerk + (this.hasArcanoMastery() ? 2 : 0);
     }
 
-    getManaSpellCost(livelloIncantesimo) {
-        const costi = {0: 1, 1: 2, 2: 4, 3: 7, 4: 11};
-        return costi[Math.min(Math.max(0, livelloIncantesimo), 4)] || 0;
+        getManaSpellCost(livelloIncantesimo) {
+        const costi = {0: 1, 1: 2, 2: 5, 3: 10};
+        return costi[Math.min(Math.max(0, livelloIncantesimo), 3)] || 0;
     }
 
     getMaxKnownSpells(livelloIncantesimo) {
         if (this.livelloMagia < livelloIncantesimo) return 0;
-        const maxSpells = {0: 2, 1: 3, 2: 2, 3: 2, 4: 1};
+        const maxSpells = {0: 2, 1: 3, 2: 2, 3: 2};
         return maxSpells[livelloIncantesimo] || 0;
     }
 
@@ -2848,11 +2899,12 @@ export class Personaggio {
         let v = this.velcotiaBase || 9;
         if (this.hasPerk('Grande taglia')) v -= 1;
         if (this.hasPerk('Piccola taglia')) v += 2;
+        if (this.hasPerk('Corpo Leggero')) v += 1;
         if (this.hasPerk('Corridore')) v += 1;
         if (this.hasPerk('Obeso')) v -= 3;
         if (this.hasPerk('Sovrappeso')) v -= 1;
         if(this.hasPerk('Pesante')) v-=3;
-        if (this.hasPerk('Carapace/Esoscheletro duro')) v -= 3;
+        if (this.hasPerk('Carapace/Esoscheletro duro')) v -= 2;
         if (this.capacitaMax > 0 && !(this.hasPerk && this.hasPerk('Facchino esperto')) && (this.pesoAttuale / this.capacitaMax) > 0.70) v -= 2;
         v = Math.max(0, v);
         if (this.hasPerk('Zoppo')) v = v / 2;

@@ -1089,7 +1089,7 @@ function partyConosceLingua(lingua, extra = []) {
 }
 
     function applicaScalataLivelloMagia(p) {
-        const costi = [0, 1, 2, 3, 3, 4, 4, 5, 5, 6]; // costo per salire al livello i
+        const costi = [0, 2, 3, 4, 5, 6]; // costo per salire al livello i
         while (p.livelloMagia < 9) {
             const prossimoCosto = costi[p.livelloMagia + 1];
             if ((p.puntiConoscenzaMagica || 0) >= prossimoCosto) {
