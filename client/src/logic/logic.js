@@ -2071,18 +2071,18 @@ export class Personaggio {
                 }
             });
         }
-        if (this.competenze && Array.isArray(this.competenze)) {
+            if (this.competenze && Array.isArray(this.competenze)) {
             if (this.competenze.map(c => c.toLowerCase().trim()).includes(skillKey)) {
                 punteggioAbilita += 1;
             }
-               if (this.masteries && Array.isArray(this.masteries)) {
-        if (this.masteries.map(m => m.toLowerCase().trim()).includes(skillKey)) {
-            punteggioAbilita = 2; // la maestria è il massimo, prevale su tutto
         }
+        if (this.masteries && Array.isArray(this.masteries)) {
+            if (this.masteries.map(m => m.toLowerCase().trim()).includes(skillKey)) {
+                return 2;
+            }
         }
         return Math.max(-2, Math.min(2, punteggioAbilita));
     }
-}
 
     getSkillModifierForCheck(skill) {
         const rating = this.getSkillRating(skill);

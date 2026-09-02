@@ -398,6 +398,7 @@ function renderSchedaCombattimentoMaster(p, idx) {
                 ${(() => {
                     let extras = '';
                     if (p.hasPerk && p.hasPerk('Stress fisico') && p.faticaTotale > 0) extras += `<button style="background:#8e44ad;" onclick="useStressFisico(${idx})">⚡ Stress Fisico</button>`;
+                    if (typeof hasPerk === 'function' && hasPerk(p, 'Produrre veleni')) extras += `<button onclick="produciVeleno(${idx})">🧪 Produci Veleno</button>`;
                     if (typeof hasPerk === 'function' && hasPerk(p, 'Nato per combattere')) extras += `<button onclick="useInizioCombattimento(${idx})">Rigenera inizio</button>`;
                     if (typeof hasPerk === 'function' && hasPerk(p, 'Guerriero')) extras += `<button onclick="useGuerrieroRigenera(${idx})">Rigenera Guerriero</button>`;
                     if (p.perks && p.perks.some(pp => (pp.nome||pp) === "Fino all'ultimo")) extras += `<button onclick="toggleFinoAllUltimo(${idx})">${p.finoAllUltimoActive ? 'Disattiva FinoAll' : "Usa Fino all'ultimo"}</button>`;

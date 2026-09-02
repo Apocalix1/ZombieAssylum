@@ -157,6 +157,53 @@ function renderAlchimiaModal(idx) {
 
 function avviaCreazione_Alchimia(idx, nomeRicetta, grado) {
     const p = window.party[idx];
+
+    let antidotoVelenoTipo = null;
+    if (nomeRicetta === 'Antidoto Specifico') {
+        p.initInventarioBase();
+        p._antidotiScoperti = p._antidotiScoperti || [];
+        const veleniDisponibili = [
+            ...(p.inventario.consumabili || []).filter(c => c.tipo === 'veleno'),
+            ...((window.magazzino.consumabili || []).filter(c => c.tipo === 'veleno'))
+        ];
+        const conteggioPerTipo = {};
+        veleniDisponibili.forEach(v => { conteggioPerTipo[v.veleno] = (conteggioPerTipo[v.veleno] || 0) + 1; });
+        const tipiConAlmeno2 = Object.entries(conteggioPerTipo).filter(([, n]) => n >= 2).map(([t]) => t);
+        const opzioni = [...new Set([...tipiConAlmeno2, ...p._antidotiScoperti])];
+        if (opzioni.length === 0) {
+            alert('Servono almeno 10ml (2 unità da 5ml) dello stesso tipo di veleno per sviluppare un Antidoto Specifico.');
+            return;
+        }
+        const elenco = opzioni.map((t, i) => `${i + 1}) ${t}${p._antidotiScoperti.includes(t) ? ' (già scoperto: grado Media)' : ' (nuovo: richiede 10ml, grado Difficile)'}`).join('\n');
+        const sceltaTipo = parseInt(prompt(`Per quale veleno vuoi l'antidoto?\n${elenco}`, '1'));
+        antidotoVelenoTipo = opzioni[sceltaTipo - 1];
+        if (!antidotoVelenoTipo) return;
+
+        if (p._antidotiScoperti.includes(antidotoVelenoTipo)) {
+            grado = 'media';
+        } else {
+            if ((conteggioPerTipo[antidotoVelenoTipo] || 0) < 2) {
+                alert(`Non hai abbastanza veleno "${antidotoVelenoTipo}" (servono 10ml / 2 unità).`);
+                return;
+            }
+            let daConsumare = 2;
+            p.inventario.consumabili = (p.inventario.consumabili || []).filter(c => {
+                if (daConsumare > 0 && c.tipo === 'veleno' && c.veleno === antidotoVelenoTipo) { daConsumare--; return false; }
+                return true;
+            });
+            if (daConsumare > 0) {
+                window.magazzino.consumabili = (window.magazzino.consumabili || []).filter(c => {
+                    if (daConsumare > 0 && c.tipo === 'veleno' && c.veleno === antidotoVelenoTipo) { daConsumare--; return false; }
+                    return true;
+                });
+                if (typeof window.updateMagazzinoFields === 'function') {
+                    window.updateMagazzinoFields({ consumabili: window.magazzino.consumabili });
+                }
+            }
+            salvaPersonaggioCloud(p);
+        }
+    }
+
     const gradoInfo = ALCHIMIA_GRADI[grado];
 
     const haMaestriaNatura = p.masteries && p.masteries.map(m => m.toLowerCase()).includes('natura');
@@ -244,7 +291,7 @@ function avviaCreazione_Alchimia(idx, nomeRicetta, grado) {
         nomeRicetta, grado, cdEffettiva,
         collaboratoreNome: null,
         rollPrecalcolato,
-        onComplete: () => completaAlchimia(p, nomeRicetta, grado, cdEffettiva, null, rollPrecalcolato)
+    onComplete: () => completaAlchimia(p, nomeRicetta, grado, cdEffettiva, null, rollPrecalcolato, antidotoVelenoTipo)
     };
 
     if (p.azioneCorrente) {
@@ -265,7 +312,7 @@ function avviaCreazione_Alchimia(idx, nomeRicetta, grado) {
 }
 
 
-function completaAlchimia(p, nomeRicetta, grado, cdEffettiva, collaboratore, rollPrecalcolato = null) {
+function completaAlchimia(p, nomeRicetta, grado, cdEffettiva, collaboratore, rollPrecalcolato = null, antidotoVelenoTipo = null) {
 
     const modInt    = p.getStatDettagliata('Intelligenza').mod;
     const bonusComp = p.hasCompetenza('Natura') ? p.getBonusCompetenza() : 0;
@@ -306,7 +353,14 @@ function completaAlchimia(p, nomeRicetta, grado, cdEffettiva, collaboratore, rol
             if (idxRestart !== -1) avviaCreazione_Alchimia(idxRestart, nomeRicetta, grado);
             return;
         }
-        aggiungiComposto(nomeRicetta, ricettaDati, 'normale');
+                aggiungiComposto(nomeRicetta, ricettaDati, 'normale');
+        if (nomeRicetta === 'Antidoto Specifico' && antidotoVelenoTipo) {
+            p._antidotiScoperti = p._antidotiScoperti || [];
+            if (!p._antidotiScoperti.includes(antidotoVelenoTipo)) {
+                p._antidotiScoperti.push(antidotoVelenoTipo);
+            }
+            salvaPersonaggioCloud(p);
+        }
         esito = `✅ SUCCESSO! Tiro: ${tiroDado} + ${modInt} + ${bonusComp} = ${totale} vs CD ${cdEffettiva}\n"${nomeRicetta}" creato perfettamente!`;
     } else if (scarto <= 2) {
         // FALLIMENTO LIEVE (Inferiore di 1-2)

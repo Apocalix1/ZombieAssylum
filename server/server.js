@@ -629,7 +629,7 @@ app.get('/api/magazzino', authenticateUser, async (req, res) => {
   }
 });
 
-app.put('/api/magazzino', authenticateUser, requireMaster, async (req, res) => {
+app.put('/api/magazzino', authenticateUser, requireNotGuest, async (req, res) => {
   const payload = req.body?.data || req.body || {};
   try {
     const db = await dbPromise;

@@ -773,6 +773,8 @@ function getPerkBaseName(nomePerk) {
     if (clean.startsWith("Lingue (")) return "Lingue";
     if (clean.startsWith("Ignorante (")) return "Ignorante";
     if (clean.startsWith("Razzista (")) return "Razzista";
+    if (clean.startsWith("Sensibilità alle temperature (")) return "Sensibilità alle temperature";
+    if (clean.startsWith("Termoregolazione (")) return "Termoregolazione";
     return clean;
 }
 
@@ -1409,6 +1411,10 @@ export function aggiornaInterfaccia() {
         document.getElementById('display-medici-base').innerText = (magazzino.materialiMedici || {}).base || 0;
         document.getElementById('display-medici-avanzati').innerText = (magazzino.materialiMedici || {}).avanzati || 0;
         document.getElementById('display-medici-critici').innerText = (magazzino.materialiMedici || {}).critici || 0;
+        const cadUmaniDisplay = document.getElementById('display-cadaveri-umani');
+        if (cadUmaniDisplay) cadUmaniDisplay.innerText = magazzino.cadaveriUmani || 0;
+        const cadRobotDisplay = document.getElementById('display-cadaveri-robot');
+        if (cadRobotDisplay) cadRobotDisplay.innerText = magazzino.cadaveriRobot || 0;
 
         const container = document.getElementById('party-container');
         const openDetailsKeys = new Set();
@@ -1563,15 +1569,17 @@ export function aggiornaInterfaccia() {
                                         <button onclick="assorbiMagia(${idx})">Assorbi</button>
                                         ${user && user.role === 'master' ? `<button onclick="masterConsumaBatteria(${idx})" style="background:#d35400; color:white;">🔋 Consuma Batteria</button>` : ''}
                                         ${hasPerk(p, 'Biocarburante') ? `<button onclick="nutriBiocarburante(${idx})" style="background:${p.biocarburanteDeficit ? '#c0392b' : '#27ae60'}; color:white;">${p.biocarburanteDeficit ? '⚠️ Nutri (URGENTE)' : '🍽️ Nutri (Biocarburante)'}</button>` : ''}
+                                         ${hasPerk(p, 'Modalità riposo') ? `<button onclick="attivaModalitaRiposo(${idx})">💤 Modalità Riposo</button>` : ''}
                                     ` : `
-                                        ${hasPerk(p, 'Modalità riposo') ? `<button onclick="attivaModalitaRiposo(${idx})">💤 Modalità Riposo</button>` : ''}
+                                        ${magazzino.cadaveriUmani > 0 ? `<button onclick="rimuoviCadaverePersonaggio(${idx})">${hasPerk(p, 'Becchino') ? `🕯️ Commemora cadavere (${magazzino.cadaveriUmani})` : `🪦 Sbarazzati del cadavere (${magazzino.cadaveriUmani})`}</button>` : ''}
                                         <button onclick="openRisorsaModal(${idx}, 'fame')">Nutri</button>
                                         <button onclick="openRisorsaModal(${idx}, 'sete')">Bevi</button>
                                         <button onclick="openRisorsaModal(${idx}, 'sonno')">Dormi</button>
                                         ${hasPerk(p, 'Artista') ? `<button onclick="apriIntrattieniModal(${idx})">🎭 Intrattieni</button>` : ''}
                                         ${hasPerk(p, 'Musicista') ? `<button onclick="apriMusicistaModal(${idx})">🎵 Suona</button>` : ''}
                                         ${user && user.role === 'master' ? `<button onclick="apriAumentaFollia(${idx})" style="background:#c0392b; color:white;">🧠 Aumenta Follia</button>` : ''}
-                                        <button onclick="apriMedica(${idx})">🩹 Medica</button>
+                                        ${hasPerk(p, 'Produrre veleni') ? `<button onclick="produciVeleno(${idx})">🧪 Produci Veleno</button>` : ''}
+                                        <button onclick="apriMedica(${idx})" ${canUseMedicalAction ? '' : 'disabled'}>🩹 Medica</button>
                                         <button onclick="apriDiagnosiMalattia(${idx})">🩺 Diagnostica</button>
                                         <button onclick="apriCuraMalattia(${idx})">💊 Cura</button>
                                     `}
@@ -1750,7 +1758,10 @@ window.rimuoviCadaverePersonaggio = function(idx) {
     const p = party[idx];
     magazzino.cadaveriUmani -= 1;
     window.updateMagazzinoFields({ cadaveriUmani: magazzino.cadaveriUmani });
-    mostraNotificaInAlto(`${p.nome} si è sbarazzato di un cadavere dalla base.`, 'successo');
+    const messaggio = hasPerk(p, 'Becchino')
+        ? `${p.nome} avvia una commemorazione prima di occuparsi del corpo.`
+        : `${p.nome} si è sbarazzato di un cadavere dalla base.`;
+    mostraNotificaInAlto(messaggio, 'successo');
     applicaFolliaSbarazzoCadavere(p);
     aggiornaInterfaccia();
 };
@@ -2944,7 +2955,23 @@ function togglePerk(nomePerk, forceRemove = false) {
             });
             if (typeof window.mostraNotificaInAlto === 'function') {
                 window.mostraNotificaInAlto(`Soldato: competenza Livello 1 registrata in ${p.soldatoArmiScelte.join(' e ')}.`, 'successo');
+            }        } else if (nomePerk === 'Produrre veleni') {
+            const veleni = ['Emotossine', 'Neurotossine', 'Neurotossine Ottiche', 'Allucinogeni', 'Miotossine', 'Blocco Respirazione', 'Gestrotossine'];
+            const elencoVeleni = veleni.map((v, i) => `${i + 1}) ${v}`).join('\n');
+            const sceltaVel = parseInt(prompt(`Perk "Produrre veleni": scegli il tuo tipo di veleno:\n${elencoVeleni}`, '1'));
+            const tipoVeleno = veleni[sceltaVel - 1] || veleni[0];
+            p.perks.push({ ...perkDati, nome: 'Produrre veleni', tipoVeleno });
+            if (typeof window.mostraNotificaInAlto === 'function') {
+                window.mostraNotificaInAlto(`${p.nome} produce veleno di tipo: ${tipoVeleno}.`, 'successo');
             }
+        } else if (nomePerk === 'Sensibilità alle temperature') {
+            const sceltaTemp = prompt(`Perk "Sensibilità alle temperature": scegli la tua debolezza:\n1) Fuoco\n2) Gelo`, '1');
+            const tipoTemp = sceltaTemp === '2' ? 'Gelo' : 'Fuoco';
+            p.perks.push({ ...perkDati, nome: `Sensibilità alle temperature (${tipoTemp})`, tipoTemperatura: tipoTemp });
+        } else if (nomePerk === 'Termoregolazione') {
+            const sceltaTemp2 = prompt(`Perk "Termoregolazione": scegli la tua resistenza:\n1) Fuoco\n2) Gelo`, '1');
+            const tipoTemp2 = sceltaTemp2 === '2' ? 'Gelo' : 'Fuoco';
+            p.perks.push({ ...perkDati, nome: `Termoregolazione (${tipoTemp2})`, tipoTemperatura: tipoTemp2 });
         } else {
                 p.perks.push({...perkDati});
             }

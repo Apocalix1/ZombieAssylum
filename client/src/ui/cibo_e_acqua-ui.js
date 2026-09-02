@@ -1,6 +1,20 @@
 import { aggiornaInterfaccia } from "./ui.js";
 import { party } from '../state.js';
 
+function recordResourceConsumption(p, quantita, tipo = 'cibo') {
+    if (!p || !quantita) return;
+    window.magazzino.logConsumo = window.magazzino.logConsumo || [];
+    window.magazzino.logConsumo.push({
+        ora: window.oreTotali || 0,
+        personaggioId: p.id,
+        personaggio: p.nome,
+        tipo,
+        quantita
+    });
+    if (window.magazzino.logConsumo.length > 200) window.magazzino.logConsumo.shift();
+}
+window.recordResourceConsumption = recordResourceConsumption;
+
 function openRisorsaModal(idx, tipo) {
     const p = party[idx];
     if (!p) return;

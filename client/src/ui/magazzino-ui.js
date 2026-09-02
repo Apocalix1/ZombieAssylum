@@ -483,6 +483,39 @@ window.daiOggettoMagicoAPersonaggio = function(uid, personaggioId) {
     aggiornaInterfaccia();
 };
 
+window.produciVeleno = function(idx) {
+    const p = party[idx];
+    if (!p) return;
+    if (!hasPerk(p, 'Produrre veleni')) return alert('Non hai il perk Produrre veleni.');
+    const perkObj = (p.perks || []).find(pk => (typeof pk === 'string' ? pk : pk.nome) === 'Produrre veleni');
+    const tipoVeleno = perkObj && perkObj.tipoVeleno;
+    if (!tipoVeleno) return alert('Il tipo di veleno non è stato impostato per questo perk.');
+    if (p.sete < 0.2) return alert(`${p.nome} non ha abbastanza acqua nella barra Sete per produrre veleno (serve 0.2).`);
+    p.sete = Math.max(0, p.sete - 0.2);
+    p.initInventarioBase();
+    p.inventario.consumabili = p.inventario.consumabili || [];
+    p.inventario.consumabili.push({ nome: `5ml di veleno ${tipoVeleno}`, tipo: 'veleno', veleno: tipoVeleno });
+    mostraNotificaInAlto(`${p.nome} produce 5ml di veleno (${tipoVeleno}). Sete -0.2.`, 'successo');
+    salvaPersonaggioCloud(p);
+    aggiornaInterfaccia();
+};
+
+window.depositaVelenoInMagazzino = function(idx, itemIdx) {
+    const p = party[idx];
+    if (!p || !p.inventario || !p.inventario.consumabili || !p.inventario.consumabili[itemIdx]) return;
+    const item = p.inventario.consumabili[itemIdx];
+    if (item.tipo !== 'veleno') return;
+    p.inventario.consumabili.splice(itemIdx, 1);
+    window.magazzino.consumabili = window.magazzino.consumabili || [];
+    window.magazzino.consumabili.push(item);
+    if (typeof window.updateMagazzinoFields === 'function') {
+        window.updateMagazzinoFields({ consumabili: window.magazzino.consumabili });
+    }
+    mostraNotificaInAlto(`${p.nome} deposita "${item.nome}" in magazzino.`, 'successo');
+    salvaPersonaggioCloud(p);
+    aggiornaInterfaccia();
+};
+
 window.daiCompostoASelezionato = function(compIdx) {
     const select = document.getElementById(`dest-select-${compIdx}`);
     if (!select) return;
