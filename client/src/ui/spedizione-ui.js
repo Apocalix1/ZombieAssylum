@@ -1160,39 +1160,52 @@ function getExplorationBonus(p) {
 function renderEccedenzaModal(idx) {
     const p = party[idx];
     const modal = document.getElementById('modal-eccedenza');
-    const eccedenza = (p.pesoAttuale - p.capacitaMax).toFixed(2);
+    const eccedenza = +(p.pesoAttuale - p.capacitaMax).toFixed(2);
 
     const campi = [
         { key: 'cibo', label: 'Cibo', peso: 1 },
         { key: 'acqua', label: 'Acqua', peso: 1 },
         { key: 'ingranaggi', label: 'Ingranaggi', peso: 0.1 },
-        { key: 'alchemici', label: 'Materiali Alchemici', peso: 0.1 },
+        { key: 'alchemici', label: 'Materiali Alchemici', peso: 1/6 },
         { key: 'medBase', label: 'Medici Base', peso: 0.1 },
-        { key: 'medAvanzati', label: 'Medici Avanzati', peso: 0.1 },
-        { key: 'medCritici', label: 'Medici Critici', peso: 0.1 }
+        { key: 'medAvanzati', label: 'Medici Avanzati', peso: 0.2 },
+        { key: 'medCritici', label: 'Medici Critici', peso: 0.3 }
     ];
 
     modal.innerHTML = `
         <div class="modal-content" style="max-width:520px;">
             <h2 style="color:#e74c3c;">⚠️ ZAINO PIENO — ${p.nome}</h2>
-            <p style="color:#ddd;">Peso attuale: ${p.pesoAttuale.toFixed(2)} / Capacità: ${p.capacitaMax} (eccedenza: ${eccedenza})</p>
-            <p style="color:#aaa; font-size:0.85rem;">Scegli cosa lasciare al magazzino base per rientrare nella capacità (verrà depositato automaticamente).</p>
+            <p style="color:#ddd;">Peso attuale: ${p.pesoAttuale.toFixed(2)} / Capacità: ${p.capacitaMax} (eccedenza: <span id="ecc-residua">${eccedenza}</span>)</p>
+            <p style="color:#aaa; font-size:0.85rem;">Le quantità suggerite coprono esattamente l'eccedenza.</p>
             <div style="display:grid; gap:8px; text-align:left; margin:12px 0;">
-                ${campi.filter(c => (p.inventario[c.key] || 0) > 0).map(c => `
+                ${campi.filter(c => (p.inventario[c.key] || 0) > 0).map(c => {
+                    const suggerito = Math.min(p.inventario[c.key], Math.max(0, Math.ceil((eccedenza / c.peso) * 100) / 100));
+                    return `
                     <div style="display:flex; justify-content:space-between; align-items:center; background:#111; padding:6px; border:1px solid #333;">
-                        <span>${c.label} (hai ${p.inventario[c.key].toFixed ? p.inventario[c.key].toFixed(1) : p.inventario[c.key]})</span>
+                        <span>${c.label} (hai ${p.inventario[c.key].toFixed ? p.inventario[c.key].toFixed(1) : p.inventario[c.key]}, peso/u ${c.peso.toFixed(2)})</span>
                         <div>
-                            <input type="number" id="ecc-${c.key}" min="0" max="${p.inventario[c.key]}" value="0" style="width:70px;">
+                            <input type="number" id="ecc-${c.key}" data-peso="${c.peso}" min="0" max="${p.inventario[c.key]}" value="${suggerito}" style="width:70px;" oninput="window.aggiornaEccedenzaResidua(${idx})">
                             <span style="color:#888; font-size:0.75rem;">da lasciare</span>
                         </div>
-                    </div>
-                `).join('')}
+                    </div>`;
+                }).join('')}
             </div>
             <div class="modal-footer">
                 <button class="btn-big btn-confirm" onclick="confermaEccedenza(${idx})">DEPOSITA E CONFERMA</button>
             </div>
         </div>`;
 }
+
+window.aggiornaEccedenzaResidua = function(idx) {
+    const p = party[idx];
+    if (!p) return;
+    let pesoLasciato = 0;
+    document.querySelectorAll('#modal-eccedenza input[id^="ecc-"]').forEach(input => {
+        pesoLasciato += (parseFloat(input.dataset.peso) || 0) * (parseFloat(input.value) || 0);
+    });
+    const span = document.getElementById('ecc-residua');
+    if (span) span.textContent = Math.max(0, +(p.pesoAttuale - p.capacitaMax - pesoLasciato).toFixed(2));
+};
 
 window.useTaser = function(idx) {
     const p = party[idx];

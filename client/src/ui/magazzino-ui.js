@@ -397,25 +397,37 @@ function renderMagazzinoModal() {
             `).join('') || '<div style="color:#888;">Nessun consumabile in magazzino.</div>'}
         </div>
     </div>`;
-    // Dispositivi della Base
-        html += `
-    <div style="margin-top:16px;">
-        <h4 style="color:#8e44ad;">🔮 Oggetti Magici (Magazzino)</h4>
-        <div style="display:grid; gap:6px;">
-            ${(window.magazzino.oggettiMagiciIstanze || []).map((istanza, ii) => {
-                const def = window.getOggettoMagicoDef(istanza.defId);
-                if (!def) return '';
+    const currentUserForMagic = window.getCurrentUser ? window.getCurrentUser() : null;
+const isMasterForMagic = currentUserForMagic && currentUserForMagic.role === 'master';
+html += `
+<div style="margin-top:16px;">
+    <h4 style="color:#8e44ad;">🔮 Oggetti Magici (Magazzino)</h4>
+    <div style="display:grid; gap:6px;">
+        ${(window.magazzino.oggettiMagiciIstanze || []).map((istanza, ii) => {
+            const def = window.getOggettoMagicoDef(istanza.defId);
+            if (!def) return '';
+            const infoHtml = `<div><strong>${def.nome}</strong>
+                <span style="color:#aaa; font-size:0.8rem;"> (${window.RARITY_LABELS[def.rarita]}, ${istanza.cariche}/${istanza.caricheMax} cariche)</span></div>`;
+            if (isMasterForMagic) {
                 return `
-                    <div style="display:flex; justify-content:space-between; align-items:center; background:#111; padding:6px; border:1px solid #333;">
-                        <div>
-                            <strong>${def.nome}</strong>
-                            <span style="color:#aaa; font-size:0.8rem;"> (${window.RARITY_LABELS[def.rarita]}, ${istanza.cariche}/${istanza.caricheMax} cariche)</span>
-                        </div>
-                        <button class="btn-hero" onclick="window.prendiOggettoMagicoDaMagazzino(${idx}, '${istanza.uid}')">Prendi</button>
-                    </div>`;
-            }).join('') || '<div style="color:#888;">Nessun oggetto magico in magazzino.</div>'}
-        </div>
-    </div>`;
+                <div style="display:flex; justify-content:space-between; align-items:center; background:#111; padding:6px; border:1px solid #333;">
+                    ${infoHtml}
+                    <div style="display:flex; gap:4px; align-items:center;">
+                        <select id="oggmagico-dest-${ii}" style="background:#222;color:white;border:1px solid #444;padding:4px;">
+                            ${party.map(p2 => `<option value="${p2.id}">${p2.nome}</option>`).join('')}
+                        </select>
+                        <button class="btn-hero" onclick="window.daiOggettoMagicoAPersonaggio('${istanza.uid}', document.getElementById('oggmagico-dest-${ii}').value)">Dai</button>
+                    </div>
+                </div>`;
+            }
+            return `
+                <div style="display:flex; justify-content:space-between; align-items:center; background:#111; padding:6px; border:1px solid #333;">
+                    ${infoHtml}
+                    <button class="btn-hero" onclick="window.prendiOggettoMagicoDaMagazzino(${idx}, '${istanza.uid}')">Prendi</button>
+                </div>`;
+        }).join('') || '<div style="color:#888;">Nessun oggetto magico in magazzino.</div>'}
+    </div>
+</div>`;
     html += `
     <div style="margin-top:16px;">
         <h4 style="color:#9b59b6;">🏗️ Dispositivi della Base</h4>
@@ -455,6 +467,20 @@ window.daiCompostoASelezionato = function(compIdx) {
     if (!target) return;
     const idx = window.party.indexOf(target);
     daiCompostoAPersonaggio(idx, compIdx);
+};
+
+window.daiOggettoMagicoAPersonaggio = function(uid, personaggioId) {
+    const target = party.find(p2 => p2.id === parseInt(personaggioId));
+    if (!target) return alert('Personaggio non trovato.');
+    const ctx = window.trovaIstanzaOggettoMagico(uid);
+    if (!ctx || ctx.owner) return alert('Oggetto non trovato in magazzino.');
+    ctx.collection.splice(ctx.index, 1);
+    target.initInventarioBase();
+    target.inventario.oggettiMagiciPersonali.push(ctx.istanza);
+    mostraNotificaInAlto(`${target.nome} ha ricevuto "${window.getOggettoMagicoDef(ctx.istanza.defId)?.nome}" dal Master.`, 'successo');
+    salvaPersonaggioCloud(target);
+    renderMagazzinoModal();
+    aggiornaInterfaccia();
 };
 
 window.daiCompostoASelezionato = function(compIdx) {

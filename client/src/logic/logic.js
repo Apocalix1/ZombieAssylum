@@ -2075,9 +2075,14 @@ export class Personaggio {
             if (this.competenze.map(c => c.toLowerCase().trim()).includes(skillKey)) {
                 punteggioAbilita += 1;
             }
+               if (this.masteries && Array.isArray(this.masteries)) {
+        if (this.masteries.map(m => m.toLowerCase().trim()).includes(skillKey)) {
+            punteggioAbilita = 2; // la maestria è il massimo, prevale su tutto
+        }
         }
         return Math.max(-2, Math.min(2, punteggioAbilita));
     }
+}
 
     getSkillModifierForCheck(skill) {
         const rating = this.getSkillRating(skill);

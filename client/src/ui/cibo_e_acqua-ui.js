@@ -57,19 +57,64 @@ function manualRisorsa(tipo, idx) {
     const p = party[idx];
     if (!p) return;
     if (tipo === 'fame') {
-        if (magazzino.piattiDeliziosi > 0) {
-            if (confirm('Vuoi utilizzare un pasto delizioso invece di cibo normale?')) {
-                nutri(idx, 'delizioso');
-                return;
-            }
-        }
-        nutri(idx);
+        nutriDirettoConScelta(idx);
     } else if (tipo === 'sete') {
         bevi(idx);
     } else if (tipo === 'sonno') {
         pianificaAzione(idx, 'dormi');
     }
     document.getElementById('modal-risorse').style.display = 'none';
+}
+
+function nutriDirettoConScelta(idx) {
+    const p = party[idx];
+    if (!p) return;
+    const totaleDeliziosi = (magazzino.piattiDeliziosi || 0) + (magazzino.piattiDeliziosiPotenziati || 0) + (magazzino.piattiDeliziosiMaestria || 0);
+    const opzioni = [];
+    if (totaleDeliziosi > 0) opzioni.push(['delizioso', `Piatto delizioso (${totaleDeliziosi} disp.)`]);
+    if ((magazzino.cibo || 0) > 0) opzioni.push(['normale', `Cibo normale (${magazzino.cibo} disp.)`]);
+    if ((magazzino.ciboAvariato || 0) > 0) opzioni.push(['avariato', `Cibo avariato (${magazzino.ciboAvariato} disp.)`]);
+    if (opzioni.length === 0) { alert('Non ci sono risorse alimentari nel magazzino.'); return; }
+
+    let scelta = opzioni[0][0];
+    if (opzioni.length > 1) {
+        const lista = opzioni.map(([k, l]) => `${k}) ${l}`).join('\n');
+        scelta = (prompt(`Cosa vuoi dare a ${p.nome}?\n${lista}`, opzioni[0][0]) || '').trim().toLowerCase();
+        if (!opzioni.some(([k]) => k === scelta)) return;
+    }
+
+    const dati = prepareNutriData(p, scelta, null);
+    if (!dati) return;
+    eseguiNutrizioneDiretta(idx, dati);
+}
+
+function eseguiNutrizioneDiretta(idx, dati) {
+    const p = party[idx];
+    if (!p) return;
+    if (dati.tipo === 'delizioso') {
+        const usaPotenziato = (magazzino.piattiDeliziosiPotenziati || 0) > 0;
+        const usaMaestria = !usaPotenziato && (magazzino.piattiDeliziosiMaestria || 0) > 0;
+        dati.potenziato = usaPotenziato;
+        dati.daMaestria = usaMaestria;
+        if (usaPotenziato) magazzino.piattiDeliziosiPotenziati -= dati.qty;
+        else if (usaMaestria) magazzino.piattiDeliziosiMaestria -= dati.qty;
+        else magazzino.piattiDeliziosi -= dati.qty;
+    } else if (dati.tipo === 'avariato') {
+        magazzino.ciboAvariato -= dati.qty;
+        applicaFollia(idx, 'cibo_avariato');
+    } else {
+        magazzino.cibo -= dati.qty;
+    }
+    if (typeof window.updateMagazzinoFields === 'function') {
+        window.updateMagazzinoFields({
+            cibo: magazzino.cibo,
+            ciboAvariato: magazzino.ciboAvariato,
+            piattiDeliziosi: magazzino.piattiDeliziosi,
+            piattiDeliziosiPotenziati: magazzino.piattiDeliziosiPotenziati,
+            piattiDeliziosiMaestria: magazzino.piattiDeliziosiMaestria
+        });
+    }
+    eseguiNutrizione(p, dati); // funzione già esistente, applica subito l'effetto
 }
 
 function setAutoRisorsa(idx, tipo, livello) {

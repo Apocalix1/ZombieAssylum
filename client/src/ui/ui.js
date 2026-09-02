@@ -1986,10 +1986,12 @@ function allenamento(idx) {
     const rimanenti = Math.max(0, gratuite - p.oreAllenamento);
     
     let html = `<div style="margin-bottom:12px; color:#ddd;">
-        <p><strong>${p.nome}</strong></p>
-        <p>Ore allenamento gratuite oggi: <span style="color:#2ecc71">${rimanenti}/${gratuite}</span></p>
-        <p>Stamina attuale: ${p.staminaAttuale}/${p.staminaMax}</p>
-    </div>
+    <p><strong>${p.nome}</strong></p>
+    <p>Ore allenamento gratuite oggi: <span style="color:#2ecc71">${rimanenti}/${gratuite}</span></p>
+    ${p.isRobot
+        ? `<p>🔋 Batteria Arcana: ${Number(p.batteryHours || 0).toFixed(1)}h / ${Number(p.batteryHoursMax || 0).toFixed(0)}h</p>`
+        : `<p>Stamina attuale: ${p.staminaAttuale}/${p.staminaMax}</p>`}
+</div>
     <p style="font-weight:bold; color:#f1c40f; margin-bottom:10px;">Seleziona categoria arma e ore da programmare:</p>
     <div style="display:grid; gap:10px;">`;
     
