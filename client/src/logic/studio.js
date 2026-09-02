@@ -309,6 +309,86 @@ function lootBooks(tiro) {
 }
 window.lootBooks = lootBooks;
 
+// ---------- MASTER: DAI LIBRO A SCELTA ----------
+window.masterDaiLibro = function(idx) {
+    const user = window.getCurrentUser ? window.getCurrentUser() : null;
+    if (!user || user.role !== 'master') return;
+    const p = window.party[idx];
+    if (!p) return;
+
+    let modal = document.getElementById('modal-master-libro');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'modal-master-libro';
+        modal.className = 'modal';
+        document.body.appendChild(modal);
+    }
+
+    const materie = Object.keys(BOOK_SUBJECT_TITLES).concat(['Incantesimi']);
+
+    modal.innerHTML = `
+        <div class="modal-content" style="max-width:480px;">
+            <h2 style="color:#8e44ad;">📖 Dai Libro a ${p.nome}</h2>
+            <div style="margin-bottom:10px; text-align:left;">
+                <label style="color:#ccc;">Materia:</label>
+                <select id="master-libro-materia" style="width:100%; background:#222; color:white; border:1px solid #444; padding:6px;">
+                    ${materie.map(m => `<option value="${m}">${m}</option>`).join('')}
+                </select>
+            </div>
+            <div style="margin-bottom:10px; text-align:left;">
+                <label style="color:#ccc;">Titolo (vuoto = casuale dalla materia):</label>
+                <input type="text" id="master-libro-titolo" placeholder="Es. Manuale segreto..." style="width:100%; background:#222; color:white; border:1px solid #444; padding:6px;">
+            </div>
+            <div style="margin-bottom:10px; text-align:left;">
+                <label style="color:#ccc;">Ore di studio fornite dal libro:</label>
+                <input type="number" id="master-libro-ore" min="1" value="8" style="width:100%; background:#222; color:white; border:1px solid #444; padding:6px;">
+            </div>
+            <div style="color:#888; font-size:0.8rem; margin-bottom:10px;">Il libro verrà aggiunto alla Biblioteca condivisa (utilizzabile massimo il doppio delle ore indicate, come da regola).</div>
+            <div class="modal-footer">
+                <button class="btn-big btn-cancel" onclick="chiudiModal('modal-master-libro')">ANNULLA</button>
+                <button class="btn-big btn-confirm" onclick="window.confermaMasterDaiLibro(${idx})">DAI</button>
+            </div>
+        </div>`;
+    modal.style.display = 'block';
+};
+
+window.confermaMasterDaiLibro = function(idx) {
+    const p = window.party[idx];
+    const materiaSel = document.getElementById('master-libro-materia');
+    const titoloInp = document.getElementById('master-libro-titolo');
+    const oreInp = document.getElementById('master-libro-ore');
+    if (!p || !materiaSel || !oreInp) return;
+
+    const subject = materiaSel.value;
+    const ore = parseInt(oreInp.value);
+    if (isNaN(ore) || ore <= 0) { alert('Ore non valide.'); return; }
+
+    let titolo = (titoloInp.value || '').trim();
+    if (!titolo) {
+        const titleList = BOOK_SUBJECT_TITLES[subject] || [subject];
+        titolo = titleList[Math.floor(Math.random() * titleList.length)];
+    }
+
+    window.magazzino.libri = window.magazzino.libri || [];
+    window.magazzino.libri.push({
+        id: `libro-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
+        subject,
+        title: titolo,
+        hours: ore,
+        maxStudyHours: ore * 2,
+        usedHours: 0
+    });
+
+    if (typeof window.updateMagazzinoFields === 'function') {
+        window.updateMagazzinoFields({ libri: window.magazzino.libri });
+    }
+    if (typeof window.mostraNotificaInAlto === 'function') {
+        window.mostraNotificaInAlto(`📖 Il Master ha aggiunto "${titolo}" (${subject}, ${ore}h) alla biblioteca.`, 'successo');
+    }
+    if (typeof window.aggiornaInterfaccia === 'function') window.aggiornaInterfaccia();
+    chiudiModal('modal-master-libro');
+};
+
 // ---------- INTERFACCIA STUDIO ----------
 function studio(idx) {
     const p = party[idx];
@@ -417,10 +497,10 @@ function renderStudioModal() {
     const content = document.getElementById('studio-content');
     if (!content) return;
     const selezionato = party[studioPersonaggioSelezionato] || party[0];
-    let html = `<div style="margin-bottom:14px; font-size:0.9rem; color:#ddd;">
+        let html = `<div style="margin-bottom:14px; font-size:0.9rem; color:#ddd;">
         <strong>Studente:</strong> ${selezionato.nome}<br>
         <strong>Medicina:</strong> Livello ${selezionato.livelloMedicina} - PM ${selezionato.pmMedicina}/${getStudyPMCap(selezionato)}<br>
-      <strong>Ore studiosi oggi:</strong> ${selezionato.oreStudioGiornaliere}/${getSogliaStudioGiornaliera(selezionato)} ${selezionato.studyOverload ? '(<span style="color:#e74c3c">Sovraccarico</span>)' : ''}
+      <strong>Ore studiosi oggi:</strong> ${selezionato.oreStudioGiornaliere}/${selezionato.getSogliaStudioGiornaliero()} ${selezionato.studyOverload ? '(<span style="color:#e74c3c">Sovraccarico</span>)' : ''}
     </div>`;
     html += '<div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:12px;">';
     party.forEach((p, idx) => {

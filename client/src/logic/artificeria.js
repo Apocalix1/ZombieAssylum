@@ -823,12 +823,12 @@ function getArtificerRecipeById(id) {
 }
 
 function artificeriaPersonaggio(idx) {
+    const p = party[idx];
+    if (!p) return;
     if (window.hasPerk && window.hasPerk(p, 'Cieco')) {
         alert('Il tuo personaggio non riesce a vedere abbastanza bene per lavorare di precisione.');
         return;
     }
-    const p = party[idx];
-    if (!p) return;
 
     // Crea il modal se non esiste
     let modal = document.getElementById('modal-artificeria');

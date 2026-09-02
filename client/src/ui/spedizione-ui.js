@@ -344,6 +344,8 @@ async function renderSpedizioneModal() {
 }
 
 function renderSchedaCombattimentoMaster(p, idx) {
+    const user = getCurrentUser();
+    const isMaster = user && user.role === 'master';
     const perkList = (p.perks || [])
         .filter(perk => {
             const nome = typeof perk === 'string' ? perk : perk.nome;
