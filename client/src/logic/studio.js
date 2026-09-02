@@ -967,6 +967,11 @@ window.passaDocumento = async function(mittenteId, docId) {
             body: JSON.stringify({ nuovoProprietarioId: destinatarioId })
         });
 
+        if (response.status === 404) {
+            alert('❌ Documento non trovato (potrebbe essere già stato rimosso).');
+            await syncDocumentiDalServer();
+            return;
+        }
         if (!response.ok) {
             const err = await response.json().catch(() => null);
             throw new Error(err?.error || 'Errore del server.');
@@ -1001,6 +1006,12 @@ window.archiviaInBiblioteca = async function(mittenteId, docId) {
             headers: buildAuthHeaders({ 'Content-Type': 'application/json' })
         });
 
+        if (response.status === 404) {
+            alert('❌ Documento non trovato (potrebbe essere già stato rimosso).');
+            await syncDocumentiDalServer();
+            await caricaDocumentiArchiviati();
+            return;
+        }
         if (!response.ok) {
             const err = await response.json().catch(() => null);
             throw new Error(err?.error || 'Errore del server.');
@@ -1034,6 +1045,12 @@ window.eliminaDocumento = async function(docId) {
             headers: buildAuthHeaders()
         });
 
+        if (response.status === 404) {
+            alert('❌ Documento non trovato (potrebbe essere già stato rimosso).');
+            await syncDocumentiDalServer();
+            await caricaDocumentiArchiviati();
+            return;
+        }
         if (!response.ok) {
             const err = await response.json().catch(() => null);
             throw new Error(err?.error || 'Errore del server.');

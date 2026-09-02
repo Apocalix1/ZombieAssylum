@@ -687,6 +687,12 @@ function esplora(idx) {
         { nome: 'Pericolosa', bonus: 2, oreBase: 7, mult: 3 },
         { nome: 'Estremamente Rischiosa', bonus: 3, oreBase: 9, mult: 4 }
     ];
+    // If current user is Master, open a modal for choosing parameters (avoids prompt defaults)
+    const currentUser = (window.getCurrentUser && window.getCurrentUser()) || null;
+    if (currentUser && currentUser.role === 'master') {
+        return window.apriMasterEsploraModal(idx, livelliPericolo);
+    }
+
     let sceltaPericoloStr = prompt(`Scegli il livello di pericolosità:\n0: Sicura (3H, +0% Drop)\n1: Impegnativa (5H, +5% Drop)\n2: Pericolosa (7H, +10% Drop)\n3: Estremamente Rischiosa (9H, +15% Drop)`, "0");
     let pericoloIdx = parseInt(sceltaPericoloStr);
     if (isNaN(pericoloIdx) || pericoloIdx < 0 || pericoloIdx > 3) pericoloIdx = 0;
@@ -720,6 +726,70 @@ function esplora(idx) {
         avviaEsplorazioneGruppo(leader, [], pericolo, pericoloIdx);
     }
 }
+
+// --- Modal per Master per avviare esplorazioni con parametri ---
+window.apriMasterEsploraModal = function(idx, livelliPericolo) {
+    const leader = window.party[idx];
+    if (!leader) return;
+    let modal = document.getElementById('modal-master-esplora');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'modal-master-esplora';
+        modal.className = 'modal';
+        document.body.appendChild(modal);
+    }
+
+    // salvo livelli pericolo globalmente per accesso in conferma
+    window.livelliPericolo = livelliPericolo;
+
+    const options = livelliPericolo.map((l, i) => `<option value="${i}">${l.nome} (${l.oreBase}h)</option>`).join('');
+    const disponibili = window.party.filter((p, i) => i !== idx && p.id && !p.inSpedizione && !p.azioneCorrente);
+    const checkboxes = disponibili.map((p, i) => `<label style="display:block; color:#ddd;"><input type="checkbox" data-idx="${i}"> ${p.nome}</label>`).join('');
+
+    modal.innerHTML = `
+        <div class="modal-content" style="max-width:520px;">
+            <h2 style="color:#f39c12;">🔎 Esplora - Parametri (Master)</h2>
+            <div style="margin-bottom:8px; text-align:left; color:#ccc;">Leader: <strong>${leader.nome}</strong></div>
+            <div style="margin-bottom:8px; text-align:left;">
+                <label style="color:#ccc;">Pericolosità:</label>
+                <select id="master-esplora-pericolo" style="width:100%; background:#222; color:white; border:1px solid #444; padding:6px; margin-top:6px;">
+                    ${options}
+                </select>
+            </div>
+            <div style="margin-bottom:8px; text-align:left;">
+                <label style="color:#ccc;">Invita compagni (max 2):</label>
+                <div id="master-esplora-compagni" style="background:#111; padding:8px; border:1px solid #333; max-height:180px; overflow:auto; margin-top:6px;">
+                    ${checkboxes || '<div style="color:#aaa;">Nessun compagno disponibile</div>'}
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-big btn-cancel" onclick="chiudiModal('modal-master-esplora')">ANNULLA</button>
+                <button class="btn-big btn-confirm" onclick="window.confermaMasterEsplora(${idx})">AVVIA</button>
+            </div>
+        </div>`;
+    modal.style.display = 'block';
+};
+
+window.confermaMasterEsplora = function(idx) {
+    const leader = window.party[idx];
+    if (!leader) return;
+    const sel = document.getElementById('master-esplora-pericolo');
+    const compContainer = document.getElementById('master-esplora-compagni');
+    if (!sel) return;
+    const pericoloIdx = parseInt(sel.value) || 0;
+    const compChecks = compContainer ? Array.from(compContainer.querySelectorAll('input[type=checkbox]')) : [];
+    const chosen = compChecks.filter(c => c.checked).slice(0,2).map(c => parseInt(c.dataset.idx));
+    const disponibili = window.party.filter((p, i) => i !== idx && p.id && !p.inSpedizione && !p.azioneCorrente);
+    const destinatari = chosen.map(i => disponibili[i]).filter(Boolean);
+
+    chiudiModal('modal-master-esplora');
+    const pericolo = (window.livelliPericolo || [])[pericoloIdx] || { nome: 'Sicura' };
+    if (destinatari.length > 0) {
+        inviaInvitiEsplorazione(leader, destinatari, pericolo, pericoloIdx);
+    } else {
+        avviaEsplorazioneGruppo(leader, [], pericolo, pericoloIdx);
+    }
+};
 
 async function inviaInvitiEsplorazione(leader, destinatari, pericolo, pericoloIdx) {
     const idSpedizione = `sped-${Date.now()}-${leader.id}`;

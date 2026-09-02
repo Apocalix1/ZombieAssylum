@@ -1560,52 +1560,49 @@ export function aggiornaInterfaccia() {
                                 <summary>SOPRAVVIVI</summary>
                                 <div class="dropdown-buttons">
                                     ${p.isRobot ? `
-                                            <button onclick="assorbiMagia(${idx})">Assorbi</button>
-                                                ${user && user.role === 'master' ? `<button onclick="masterConsumaBatteria(${idx})" style="background:#d35400; color:white;">🔋 Consuma Batteria</button>` : ''}
-                                                ${hasPerk(p, 'Biocarburante') ? `<button onclick="nutriBiocarburante(${idx})" style="background:${p.biocarburanteDeficit ? '#c0392b' : '#27ae60'}; color:white;">${p.biocarburanteDeficit ? '⚠️ Nutri (URGENTE)' : '🍽️ Nutri (Biocarburante)'}</button>` : ''}
-                                        ` : `
-                                            ${hasPerk(p, 'Modalità riposo') ? `<button onclick="attivaModalitaRiposo(${idx})">💤 Modalità Riposo</button>` : ''}
-                                            <button onclick="openRisorsaModal(${idx}, 'fame')">Nutri</button>
-                                            <button onclick="openRisorsaModal(${idx}, 'sete')">Bevi</button>
-                                            <button onclick="openRisorsaModal(${idx}, 'sonno')">Dormi</button>
-                                            ${hasPerk(p, 'Artista') ? `<button onclick="apriIntrattieniModal(${idx})">🎭 Intrattieni</button>` : ''}
-                                            ${hasPerk(p, 'Musicista') ? `<button onclick="apriMusicistaModal(${idx})">🎵 Suona</button>` : ''}
-                                            ${user && user.role === 'master' ? `<button onclick="apriAumentaFollia(${idx})" style="background:#c0392b; color:white;">🧠 Aumenta Follia</button>` : ''}
-                                            ${user && user.role === 'master' && hasPerk(p, 'Pessimista') ? `<button onclick="gestisciPessimista(${idx})" style="background:#7f8c8d; color:white;">😔 Pessimista</button>` : ''}
-                                            ${user && user.role === 'master' && hasPerk(p, 'Ossessione del Pulito') ? `<button onclick="bloccaPulizia(${idx})" style="background:#c0392b; color:white;">🧹 Blocca Pulizia</button>` : ''}
-                                            ${hasPerk(p, 'Asmatico') ? `<button onclick="usaRecuperoAsmaticoPersonaggio(${idx})" style="background:#16a085 !important; color:white !important;">🫁 Recupero Rapido</button>` : ''}
-                                                                                        ${hasPerk(p, 'Igenizzatore') ? `<button onclick="apriIgienizzaModal(${idx})">🧴 Igienizza</button>` : ''}
-                                            ${(typeof window.oggettiMagiciDisponibiliPer === 'function' && window.oggettiMagiciDisponibiliPer(p, 'igienizza_magica').length > 0) ? `<button onclick="usaIgienizzatoreMagico(${idx})">🔮 Igienizza (magico)</button>` : ''}
-                                                                                       ${(typeof window.oggettiMagiciDisponibiliPer === 'function' && window.oggettiMagiciDisponibiliPer(p, 'cammuffa_gratis').length > 0) ? `<button onclick="usaSpecchioMeraviglioso(${idx})">🪞 Cammuffati</button>` : ''}
-                                            ${(p.inventario?.oggettiMagiciPersonali || []).some(i => i.defId === 'candela_nera' && i.cariche > 0) ? `<button onclick="usaCandelaNeraMana(${idx})">🕯️ Candela → Mana</button>` : ''}
-                                            ${user && user.role === 'master' && hasPerk(p, 'Rancoroso') ? `<button onclick="apriImpostaRancore(${idx})" style="background:#8e44ad; color:white;">😠 Imposta Rancore</button>` : ''}
-                                            ${user && user.role === 'master' && hasPerk(p, 'CroceRossina') ? `<button onclick="gestisciCroceRossina(${idx})" style="background:#c0392b; color:white;">💉 Sensi di Colpa</button>` : ''}
-                                            ${user && user.role === 'master' ? `<button onclick="riduciStaminaManual(${idx})" style="background:#d35400; color:white;">⚡ Consuma Stamina</button>` : ''}
-                                            <button onclick="apriMedica(${idx})" ${canUseMedicalAction ? '' : 'disabled'}>🩹 Medica</button>
-                                            <button onclick="apriDiagnosiMalattia(${idx})">🩺 Diagnostica</button>
-                                            <button onclick="apriCuraMalattia(${idx})">💊 Cura</button>
-                                            ${p.diabeteTipoII ? `<button onclick="usaInsulinaPersonaggio(${idx})" style="background:#16a085 !important; color:white !important;">💉 Insulina (${(p.diabeteTimer/24).toFixed(1)}g)</button>` : ''}
-                                        `}
+                                        <button onclick="assorbiMagia(${idx})">Assorbi</button>
+                                        ${user && user.role === 'master' ? `<button onclick="masterConsumaBatteria(${idx})" style="background:#d35400; color:white;">🔋 Consuma Batteria</button>` : ''}
+                                        ${hasPerk(p, 'Biocarburante') ? `<button onclick="nutriBiocarburante(${idx})" style="background:${p.biocarburanteDeficit ? '#c0392b' : '#27ae60'}; color:white;">${p.biocarburanteDeficit ? '⚠️ Nutri (URGENTE)' : '🍽️ Nutri (Biocarburante)'}</button>` : ''}
+                                    ` : `
+                                        ${hasPerk(p, 'Modalità riposo') ? `<button onclick="attivaModalitaRiposo(${idx})">💤 Modalità Riposo</button>` : ''}
+                                        <button onclick="openRisorsaModal(${idx}, 'fame')">Nutri</button>
+                                        <button onclick="openRisorsaModal(${idx}, 'sete')">Bevi</button>
+                                        <button onclick="openRisorsaModal(${idx}, 'sonno')">Dormi</button>
+                                        ${hasPerk(p, 'Artista') ? `<button onclick="apriIntrattieniModal(${idx})">🎭 Intrattieni</button>` : ''}
+                                        ${hasPerk(p, 'Musicista') ? `<button onclick="apriMusicistaModal(${idx})">🎵 Suona</button>` : ''}
+                                        ${user && user.role === 'master' ? `<button onclick="apriAumentaFollia(${idx})" style="background:#c0392b; color:white;">🧠 Aumenta Follia</button>` : ''}
+                                        <button onclick="apriMedica(${idx})">🩹 Medica</button>
+                                        <button onclick="apriDiagnosiMalattia(${idx})">🩺 Diagnostica</button>
+                                        <button onclick="apriCuraMalattia(${idx})">💊 Cura</button>
+                                    `}
                                 </div>
                             </details>
-                                            <div class="dropdown-buttons">
-                        <button onclick="openCucinaModal(${idx})">Cucina</button>
-                        <button onclick="alchimiaPersonaggio(${idx})">Alchimia</button>
-                        <button onclick="artificeriaPersonaggio(${idx})">Artificeria</button>
-                        ${(p.isRobot && hasPerk(p, 'Autopotenziamento')) ? `<button onclick="apriAutopotenziamentoModal(${idx})">🔧 Autopotenziamento</button>` : ''}
-                    </div>
-                    <div class="dropdown-buttons">
-                        <button onclick="allenamento(${idx})">Allenamento</button>
-                        <button onclick="studio(${idx})">Studio</button>
-                        <button onclick="apriDecifra(${idx})">🔤 Decifra</button>
-                        ${magazzino.cadaveriUmani > 0 ? `<button onclick="rimuoviCadaverePersonaggio(${idx})">🪦 Sbarazzati del cadavere (${magazzino.cadaveriUmani})</button>` : ''}
-                        ${(magazzino.stazioneRicarica && p.isRobot) ? `<button onclick="apriRicaricaRobot(${idx})">🔌 Ricarica</button>` : ''}
-                        ${(!p.isRobot && (magazzino.batterie > 0 || (p.inventario?.batterie > 0)) && magazzino.stazioneRicarica) ? `<button onclick="inserisciBatterieStazione(${idx})">🔋 Inserisci batterie in stazione</button>` : ''}
-                    </div>
-                    <div class="dropdown-buttons">
-                        <button onclick="spedisciPersonaggio(${idx})">Spedisci</button>
-                        <button onclick="esplora(${idx})">🔎 Esplora</button>
-                    </div>
+
+                            <details class="action-dropdown">
+                                <summary>CREA</summary>
+                                <div class="dropdown-buttons">
+                                    <button onclick="openCucinaModal(${idx})">Cucina</button>
+                                    <button onclick="alchimiaPersonaggio(${idx})">Alchimia</button>
+                                    <button onclick="artificeriaPersonaggio(${idx})">Artificeria</button>
+                                </div>
+                            </details>
+
+                            <details class="action-dropdown">
+                                <summary>MIGLIORA</summary>
+                                <div class="dropdown-buttons">
+                                    <button onclick="allenamento(${idx})">Allenamento</button>
+                                    <button onclick="studio(${idx})">Studio</button>
+                                    <button onclick="apriDecifra(${idx})">Decifra</button>
+                                </div>
+                            </details>
+
+                            <details class="action-dropdown">
+                                <summary>ESPLORA</summary>
+                                <div class="dropdown-buttons">
+                                    <button onclick="spedisciPersonaggio(${idx})">Spedisci</button>
+                                    <button onclick="esplora(${idx})">Esplora</button>
+                                </div>
+                            </details>
                     `;
                 } else {
                     // --- Visualizzazione ospite: solo lettura ---

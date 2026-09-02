@@ -41,7 +41,12 @@ async function caricaPartyMaster() {
         });
 
         aggiornaInterfaccia();
-        console.log(`Party master caricato: ${party.length} personaggi`);
+        // Log only when party size changes to avoid spamming the console during polling
+        window._lastPartyCount = window._lastPartyCount || null;
+        if (window._lastPartyCount !== party.length) {
+            console.log(`Party master caricato: ${party.length} personaggi`);
+            window._lastPartyCount = party.length;
+        }
     } catch (err) {
         console.error('Errore caricamento party per master:', err);
     }

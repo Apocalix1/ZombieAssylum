@@ -810,7 +810,10 @@ export class Personaggio {
     }
 
     get capacitaMax() {
-        const modForza = this.getStatDettagliata('Forza').mod;
+        // Evitiamo di chiamare `getStatDettagliata` qui per non creare ricorsioni.
+        // Usiamo il valore base della Forza se presente, altrimenti 10 come default.
+        const forzaVal = (typeof this.forza === 'number') ? this.forza : (typeof this['forza'] === 'number' ? this['forza'] : (this.Forza || 10));
+        const modForza = Math.floor((forzaVal - 10) / 2);
         let cap = 5 + modForza;
         if (this.zainoEquipaggiato) {
             let bonusZaino = this.zainoEquipaggiato.bonus;

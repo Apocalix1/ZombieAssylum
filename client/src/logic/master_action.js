@@ -166,7 +166,15 @@ window.masterAggiungiOggetto = function(idx) {
     p.initInventarioBase();
 
     const opzioni = ['cibo', 'acqua', 'ingranaggi', 'alchemici', 'medBase', 'medAvanzati', 'medCritici', 'arma_libera', 'oggetto_magico'];
-    const scelta = prompt(`Cosa vuoi aggiungere a ${p.nome}?\n${opzioni.join(', ')}`, 'cibo');
+		let modal = document.getElementById('modal-master-dai');
+		if (!modal) {
+			modal = document.createElement('div');
+			modal.id = 'modal-master-dai';
+			modal.className = 'modal';
+			document.body.appendChild(modal);
+		}
+
+		const scelta = prompt(`Cosa vuoi aggiungere a ${p.nome}?\n${opzioni.join(', ')}`, 'cibo');
     if (!scelta) return;
 
     if (scelta === 'oggetto_magico') {
@@ -191,6 +199,98 @@ window.masterAggiungiOggetto = function(idx) {
     salvaPersonaggioCloud(p);
     aggiornaInterfaccia();
 };
+	window.confermaMasterDai = function(idx) {
+		const p = party[idx];
+		if (!p) return;
+		const sel = document.getElementById('master-dai-select');
+		const qtyInp = document.getElementById('master-dai-qty');
+		const dest = document.querySelector('input[name="master-dai-dest"]:checked')?.value || 'personaggio';
+		if (!sel || !qtyInp) return;
+		const key = sel.value;
+		const qty = parseFloat(qtyInp.value) || 0;
+		if (qty <= 0) return alert('Quantità non valida.');
+
+		// gestione oggetto magico
+		if (key === 'oggetto_magico') {
+			chiudiModal('modal-master-dai');
+			if (typeof window.apriMasterDaiOggettoMagico === 'function') window.apriMasterDaiOggettoMagico(idx);
+			return;
+		}
+
+		p.initInventarioBase();
+
+		if (key === 'arma_libera') {
+			const nome = document.getElementById('master-dai-arma-nome-input')?.value?.trim();
+			if (!nome) return alert('Inserisci il nome dell\'arma.');
+			if (dest === 'personaggio') {
+				p.inventario.armi.push(nome);
+				mostraNotificaInAlto(`${p.nome} ha ricevuto: ${nome}.`, 'successo');
+			} else {
+				window.magazzino.armiTrovate = window.magazzino.armiTrovate || [];
+				window.magazzino.armiTrovate.push({ nome, qta: qty, tipo: 'arma' });
+				if (typeof window.updateMagazzinoFields === 'function') window.updateMagazzinoFields({ armiTrovate: window.magazzino.armiTrovate });
+				mostraNotificaInAlto(`${qty}x ${nome} aggiunte al magazzino.`, 'successo');
+			}
+			if (typeof window.salvaPersonaggioCloud === 'function') window.salvaPersonaggioCloud(p);
+			if (typeof window.aggiornaInterfaccia === 'function') window.aggiornaInterfaccia();
+			chiudiModal('modal-master-dai');
+			return;
+		}
+
+		// map keys to inventory fields
+		const mapKey = {
+			'cibo': 'cibo', 'acqua': 'acqua', 'ingranaggi': 'ingranaggi', 'alchemici': 'alchemici',
+			'medBase': 'medBase', 'medAvanzati': 'medAvanzati', 'medCritici': 'medCritici'
+		};
+		const invKey = mapKey[key];
+		if (!invKey) return alert('Elemento non gestito.');
+
+		if (dest === 'magazzino') {
+			// aggiungi al magazzino condiviso
+			if (invKey.startsWith('med')) {
+				const tipo = invKey === 'medBase' ? 'base' : (invKey === 'medAvanzati' ? 'avanzati' : 'critici');
+				window.magazzino.materialiMedici = window.magazzino.materialiMedici || { base:0,avanzati:0,critici:0 };
+				window.magazzino.materialiMedici[tipo] = (window.magazzino.materialiMedici[tipo] || 0) + qty;
+				if (typeof window.updateMagazzinoFields === 'function') window.updateMagazzinoFields({ materialiMedici: window.magazzino.materialiMedici });
+			} else {
+				window.magazzino[invKey] = (window.magazzino[invKey] || 0) + qty;
+				if (typeof window.updateMagazzinoFields === 'function') window.updateMagazzinoFields({ [invKey]: window.magazzino[invKey] });
+			}
+			mostraNotificaInAlto(`${qty} ${invKey} aggiunti al magazzino.`, 'successo');
+			chiudiModal('modal-master-dai');
+			return;
+		}
+
+		// destinazione: persona
+		// prova ad aggiungere e verifica peso; se eccede, sposta in magazzino e notifica
+		const backup = JSON.parse(JSON.stringify(p.inventario || {}));
+		p.inventario[invKey] = (p.inventario[invKey] || 0) + qty;
+		const pesoDopo = p.pesoAttuale;
+		const capacita = p.capacitaMax || 9999;
+		if (pesoDopo > capacita) {
+			// revert
+			p.inventario = backup;
+			// metti nel magazzino invece
+			if (invKey.startsWith('med')) {
+				const tipo = invKey === 'medBase' ? 'base' : (invKey === 'medAvanzati' ? 'avanzati' : 'critici');
+				window.magazzino.materialiMedici = window.magazzino.materialiMedici || { base:0,avanzati:0,critici:0 };
+				window.magazzino.materialiMedici[tipo] = (window.magazzino.materialiMedici[tipo] || 0) + qty;
+				if (typeof window.updateMagazzinoFields === 'function') window.updateMagazzinoFields({ materialiMedici: window.magazzino.materialiMedici });
+			} else {
+				window.magazzino[invKey] = (window.magazzino[invKey] || 0) + qty;
+				if (typeof window.updateMagazzinoFields === 'function') window.updateMagazzinoFields({ [invKey]: window.magazzino[invKey] });
+			}
+			mostraNotificaInAlto(`${p.nome} sarebbe sovraccarico. Ho spostato ${qty} ${invKey} nel magazzino.`, 'avviso');
+			if (typeof window.aggiornaInterfaccia === 'function') window.aggiornaInterfaccia();
+			chiudiModal('modal-master-dai');
+			return;
+		}
+
+		if (typeof window.salvaPersonaggioCloud === 'function') window.salvaPersonaggioCloud(p);
+		if (typeof window.aggiornaInterfaccia === 'function') window.aggiornaInterfaccia();
+		mostraNotificaInAlto(`${p.nome} ha ricevuto ${qty} ${invKey}.`, 'successo');
+		chiudiModal('modal-master-dai');
+	};
 
 window.masterConsumaBatteria = function(idx) {
     const p = party[idx];
