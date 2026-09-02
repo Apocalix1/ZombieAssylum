@@ -650,6 +650,7 @@ export class Personaggio {
         this.medicalHealPending = false;
         this.oreRiposoAccumulate = 0;
         this.giornoInizio = giornoPartenza;
+        this.oreVissute = 0;
 
         this.malattia = {
             attiva: false,
@@ -1536,7 +1537,7 @@ export class Personaggio {
     }
 
     // client/src/logic/logic.js — subisciFollia
-    subisciFollia(causa) {
+        subisciFollia(causa) {
         let dCount = 1;
         let dFaces = 4;
         let descCausa = "";
@@ -1569,14 +1570,16 @@ export class Personaggio {
         const tiro = typeof rollDice === 'function' ? rollDice(dCount, dFaces) : Math.floor(Math.random() * dFaces) + 1;
         const modCar = this.getStatDettagliata('Carisma').mod;
         let puntiPresi;
+        let effectiveModCar;
         if (modCar >= 0) {
             // Il Carisma positivo non può ridurre la follia ricevuta di più del 50%
             const riduzioneMax = tiro * 0.5;
             const riduzioneEffettiva = Math.min(riduzioneMax, modCar);
+            effectiveModCar = riduzioneEffettiva;
             puntiPresi = Math.max(1, tiro - riduzioneEffettiva);
         } else {
             // Il Carisma negativo continua a peggiorare normalmente (floor -2 come prima)
-            const effectiveModCar = Math.max(-2, modCar);
+            effectiveModCar = Math.max(-2, modCar);
             puntiPresi = Math.max(1, tiro - effectiveModCar);
         }
 
@@ -2018,12 +2021,18 @@ export class Personaggio {
         return true;
     }
 
-    getBonusCompetenza() {
-        const oreTotali = typeof window.oreTotali !== 'undefined' ? window.oreTotali : 0;
-        const giorniAttivi = Math.floor(oreTotali / 24) - this.giornoInizio;
-        if (giorniAttivi < 10) return 2;
-        if (giorniAttivi < 20) return 3;
-        if (giorniAttivi < 40) return 4;
+        getBonusCompetenza() {
+        let giorniAttivi;
+        if (typeof this.oreVissute === 'number' && this.oreVissute > 0) {
+            giorniAttivi = Math.floor(this.oreVissute / 24);
+        } else {
+            // Fallback per personaggi salvati prima dell'introduzione di oreVissute
+            const oreTotali = typeof window.oreTotali !== 'undefined' ? window.oreTotali : 0;
+            giorniAttivi = Math.max(0, Math.floor(oreTotali / 24) - this.giornoInizio);
+        }
+        if (giorniAttivi < 15) return 2;
+        if (giorniAttivi < 30) return 3;
+        if (giorniAttivi < 45) return 4;
         return 5;
     }
 
@@ -2530,7 +2539,8 @@ export class Personaggio {
         this.diabeteUltimoPastoTimestamp = window.oreTotali || 0;
     }
 
-    tickOra() {
+        tickOra() {
+        this.oreVissute = (this.oreVissute || 0) + 1;
         // ==================== 1. DECADIMENTO RISORSE ====================
         if (!this.isRobot) {
             this._ensurePesoCorporeoInit();

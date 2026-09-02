@@ -795,11 +795,18 @@ function applicaPerkArmato(p) {
     let idx = parseInt(scelta, 10) - 1;
     if (isNaN(idx) || idx < 0 || idx >= categorie.length) idx = 0;
     const categoria = categorie[idx];
-        p.initInventarioBase();
+    p.initInventarioBase();
     p.inventario.armi.push(categoria);
     p.armiLivello = p.armiLivello || {};
     const livelloBase = p.isRobot ? 4 : 1;
-    p.armiLivello[categoria] = Math.max(livelloBase, p.armiLivello[categoria] || 0);
+    const livelloAttuale = p.armiLivello[categoria] || 0;
+    if (!p.isRobot && livelloAttuale >= 1) {
+        const costi = window.ARMI_COSTI && window.ARMI_COSTI[categoria];
+        const rimborso = costi ? (costi[1] || 1) : 1;
+        p.puntiCreazione = (p.puntiCreazione || 0) + rimborso;
+        alert(`Avevi già acquistato Livello 1 in ${categoria}: rimborsati ${rimborso} punti, ora fornito gratis dal perk Armato.`);
+    }
+    p.armiLivello[categoria] = Math.max(livelloBase, livelloAttuale);
 
     let munText = '';
     if (categoria === 'Archi' || categoria === 'Balestre') {

@@ -497,10 +497,10 @@ function renderStudioModal() {
     const content = document.getElementById('studio-content');
     if (!content) return;
     const selezionato = party[studioPersonaggioSelezionato] || party[0];
-    let html = `<div style="margin-bottom:14px; font-size:0.9rem; color:#ddd;">
+        let html = `<div style="margin-bottom:14px; font-size:0.9rem; color:#ddd;">
         <strong>Studente:</strong> ${selezionato.nome}<br>
         <strong>Medicina:</strong> Livello ${selezionato.livelloMedicina} - PM ${selezionato.pmMedicina}/${getStudyPMCap(selezionato)}<br>
-      <strong>Ore studiosi oggi:</strong> ${selezionato.oreStudioGiornaliere}/${getSogliaStudioGiornaliera(selezionato)} ${selezionato.studyOverload ? '(<span style="color:#e74c3c">Sovraccarico</span>)' : ''}
+      <strong>Ore studiosi oggi:</strong> ${selezionato.oreStudioGiornaliere}/${selezionato.getSogliaStudioGiornaliero()} ${selezionato.studyOverload ? '(<span style="color:#e74c3c">Sovraccarico</span>)' : ''}
     </div>`;
     html += '<div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:12px;">';
     party.forEach((p, idx) => {

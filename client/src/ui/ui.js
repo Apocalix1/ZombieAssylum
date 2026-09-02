@@ -1342,8 +1342,11 @@ async function passaTempoGlobale() {
 // --- AGGIORNAMENTO INTERFACCIA PRINCIPALE ---
 window.aggiungiPersonaggioAlParty = function(p) {
     if (!p) return;
-    // Evita duplicati
-    if (!party.some(char => char.id === p.id)) {
+    // Evita duplicati (per id se presente, altrimenti per nome)
+    const isDuplicate = p.id != null
+        ? party.some(char => char.id === p.id)
+        : party.some(char => char.nome === p.nome);
+    if (!isDuplicate) {
         party.push(p);
         aggiornaInterfaccia();
     }

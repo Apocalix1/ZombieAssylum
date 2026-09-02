@@ -319,6 +319,7 @@ function renderSetupArmi() {
 
 window.modificaArmaLivello = modificaArmaLivello;
 window.renderSetupArmi = renderSetupArmi;
+window.ARMI_COSTI = ARMI_COSTI;
 
 const SPELL_KNOWLEDGE_COST = { 0: 1, 1: 2, 2: 3, 3: 4, 4: 5 };
 
@@ -521,7 +522,7 @@ async function confermaCreazione(directAdd = window._directAdd || false) {
     const isMasterUser = currentUser && currentUser.role === 'master';
 
     // Se è Master, crea sempre direttamente (senza limiti)
-    if (isMasterUser) {
+        if (isMasterUser) {
         try {
             const response = await fetch(apiUrl('/api/characters'), {
                 method: 'POST',
@@ -536,6 +537,11 @@ async function confermaCreazione(directAdd = window._directAdd || false) {
             if (!response.ok) {
                 const errData = await response.json().catch(() => ({}));
                 throw new Error(errData.error || 'Errore sconosciuto durante la creazione');
+            }
+            const responseData = await response.json().catch(() => ({}));
+            if (responseData.character && responseData.character.id) {
+                window.tempP.id = responseData.character.id;
+                if (responseData.character.updated_at) window.tempP.updated_at = responseData.character.updated_at;
             }
             // Salva localmente e aggiungi al party
             salvaPersonaggioLocalmente(window.tempP);
@@ -579,9 +585,15 @@ async function confermaCreazione(directAdd = window._directAdd || false) {
                 return;
             }
 
-            if (!response.ok) {
+                        if (!response.ok) {
                 const errData = await response.json().catch(() => ({}));
                 throw new Error(errData.error || 'Errore sconosciuto durante la creazione');
+            }
+
+            const responseData = await response.json().catch(() => ({}));
+            if (responseData.character && responseData.character.id) {
+                window.tempP.id = responseData.character.id;
+                if (responseData.character.updated_at) window.tempP.updated_at = responseData.character.updated_at;
             }
 
             salvaPersonaggioLocalmente(window.tempP);
