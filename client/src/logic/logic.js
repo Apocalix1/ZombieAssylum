@@ -1845,10 +1845,11 @@ export class Personaggio {
         if ((statNome === "Intelligenza" || statNome === "Destrezza") && seteEffettiva >= 1) modFinale -= 2;
         if ((statNome === "Carisma" || statNome === "Saggezza") && sonnoEffettivo >= 1) modFinale -= 2;
 
-        if (this.capacitaMax > 0 && !(this.hasPerk && this.hasPerk('Facchino esperto')) && (this.pesoAttuale / this.capacitaMax) > 0.91) {
+        if (statNome === "Destrezza" && this.capacitaMax > 0 && !(this.hasPerk && this.hasPerk('Facchino esperto')) && (this.pesoAttuale / this.capacitaMax) > 0.91) {
             modFinale -= 1;
             motivi.push("Zaino quasi pieno (-1)");
         }
+
         
         if (this.statiAlterati) {
             this.statiAlterati.forEach(s => {

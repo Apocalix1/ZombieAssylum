@@ -1511,8 +1511,10 @@ export function aggiornaInterfaccia() {
                     ${canManage ? `<span class="fatica-badge">Fatic. ${p.faticaTotale}</span>` : ''}
                     ${isMaster ? `<button onclick="masterEliminaPersonaggio(${idx})" title="Elimina personaggio"
                         style="position:absolute; top:0; right:0; background:#c0392b !important; border:1px solid #c0392b !important; padding:4px 8px; font-size:0.75rem;">🗑️</button>` : ''}
-                         ${isMaster ? `<button onclick="masterAggiungiOggetto(${idx})" title="Aggiungi oggetto"
-                        style="position:absolute; top:-26px; right:2.2rem; background:#27ae60 !important; border:1px solid #27ae60 !important; padding:4px 8px; font-size:0.75rem;">🎁</button>` : ''}                
+                                                 ${isMaster ? `<button onclick="masterAggiungiOggetto(${idx})" title="Aggiungi oggetto"
+                        style="position:absolute; top:-26px; right:2.2rem; background:#27ae60 !important; border:1px solid #27ae60 !important; padding:4px 8px; font-size:0.75rem;">🎁</button>` : ''}
+                    ${isMaster ? `<button onclick="masterDaiLibro(${idx})" title="Dai libro"
+                        style="position:absolute; top:-26px; right:5.4rem; background:#8e44ad !important; border:1px solid #8e44ad !important; padding:4px 8px; font-size:0.75rem;">📖</button>` : ''}
                 </div>
             `;
 

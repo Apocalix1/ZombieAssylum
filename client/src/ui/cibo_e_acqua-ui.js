@@ -15,6 +15,28 @@ function recordResourceConsumption(p, quantita, tipo = 'cibo') {
 }
 window.recordResourceConsumption = recordResourceConsumption;
 
+function getFoodEfficiency(p) {
+    if (!p) return 1;
+    let fabbisogno = 1;
+    if (p.hasPerk && p.hasPerk('Digiuno')) fabbisogno -= 0.20;
+    if (p.hasPerk && p.hasPerk('Insaziabile')) fabbisogno += 0.20;
+    if (p.hasPerk && p.hasPerk('Anoressico')) fabbisogno += 0.20;
+    if (p.hasPerk && p.hasPerk('Sottopeso')) fabbisogno += 0.10;
+    fabbisogno = Math.max(0.2, fabbisogno);
+    return 1 / fabbisogno;
+}
+window.getFoodEfficiency = getFoodEfficiency;
+
+function getWaterEfficiency(p) {
+    if (!p) return 1;
+    let fabbisogno = 1;
+    if (p.hasPerk && p.hasPerk('Dromedario')) fabbisogno -= 0.20;
+    if (p.hasPerk && p.hasPerk('Bocca asciutta')) fabbisogno += 0.20;
+    fabbisogno = Math.max(0.2, fabbisogno);
+    return 1 / fabbisogno;
+}
+window.getWaterEfficiency = getWaterEfficiency;
+
 function openRisorsaModal(idx, tipo) {
     const p = party[idx];
     if (!p) return;
