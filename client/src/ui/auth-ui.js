@@ -5,7 +5,8 @@ import { getPendingDeadIds,apiUrl, buildAuthHeaders,avviaSincronizzazioneComplet
 
 async function caricaPartyMaster() {
     try {
-        const response = await fetch(apiUrl('/api/party'), {
+        const campoId = window.getCampoBaseId ? window.getCampoBaseId() : 1;
+        const response = await fetch(apiUrl(`/api/party?campoBaseId=${campoId}`), {
             headers: buildAuthHeaders()
         });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -298,7 +299,8 @@ async function loadCharacterNamesForUser() {
 
 async function caricaPartyOspite() {
     try {
-        const response = await fetch(apiUrl('/api/party'), {
+        const campoId = window.getCampoBaseId ? window.getCampoBaseId() : 1;
+        const response = await fetch(apiUrl(`/api/party?campoBaseId=${campoId}`), {
             headers: buildAuthHeaders()
         });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -417,6 +419,19 @@ function showGameScreen(role) {
         } else {
             masterPanelBtn.classList.add('hidden');
         }
+    }
+
+    const cambiaCampoBtn = document.getElementById('btn-cambia-campo');
+    if (cambiaCampoBtn) {
+        if (role === 'Master') {
+            cambiaCampoBtn.classList.remove('hidden');
+        } else {
+            cambiaCampoBtn.classList.add('hidden');
+        }
+    }
+
+    if (typeof window.initCampoBaseCorrenteUI === 'function') {
+        window.initCampoBaseCorrenteUI();
     }
     }
 

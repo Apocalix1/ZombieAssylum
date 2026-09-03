@@ -622,13 +622,20 @@ async function confermaCreazione(directAdd = window._directAdd || false) {
                 alert(`⚠️ Personaggio salvato localmente, ma non è stato possibile attivarlo. Riprova più tardi.`);
             }
         }
-    } else {
-        // Creazione dalla lobby: salva solo in locale
+       } else {
+        const campoScelto = await window.chiediCampoBase();
+        if (!campoScelto) {
+            alert('Creazione annullata: devi scegliere un campo base per il personaggio.');
+            return;
+        }
+        window.tempP.campoBaseId = campoScelto.id;
+        window.tempP.campoBaseNome = campoScelto.nome;
+
         salvaPersonaggioLocalmente(window.tempP);
         if (typeof window.saveCharacterForUser === 'function') {
             window.saveCharacterForUser(window.tempP.nome);
         }
-        alert(`✅ Personaggio "${window.tempP.nome}" salvato in locale.\nUsa il pulsante "Manda in gioco" nella lobby per renderlo attivo.`);
+        alert(`✅ Personaggio "${window.tempP.nome}" salvato in locale, assegnato a "${campoScelto.nome}".\nUsa il pulsante "Manda in gioco" nella lobby per renderlo attivo.`);
     }
     // --- 7. CHIUDI MODAL E AGGIORNA ---
     document.getElementById('modal-creazione').style.display = 'none';

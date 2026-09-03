@@ -157,6 +157,124 @@ app.get('/api/ping', async (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// ========================= ROUTE: CAMPI BASE =========================
+
+app.get('/api/campi', authenticateUser, async (req, res) => {
+  try {
+    const db = await dbPromise;
+    const campi = await db.all(`
+      SELECT c.*, (SELECT COUNT(*) FROM personaggi p WHERE p.campo_base_id = c.id AND p.status != 'morto') AS pg_attivi
+      FROM campi_base c ORDER BY c.id ASC
+    `);
+    res.json({ campi });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/campi', authenticateUser, requireMaster, async (req, res) => {
+  const { nome } = req.body;
+  if (!nome || !nome.trim()) return res.status(400).json({ error: 'Nome campo base richiesto' });
+  try {
+    const db = await dbPromise;
+    const result = await db.run('INSERT INTO campi_base (nome) VALUES (?)', nome.trim());
+    await db.run('INSERT INTO magazzini (campo_base_id, data) VALUES (?, ?)', result.lastID, JSON.stringify({}));
+    const campo = await db.get('SELECT * FROM campi_base WHERE id = ?', result.lastID);
+    res.json({ campo });
+  } catch (error) {
+    if (error.message.includes('UNIQUE constraint failed')) {
+      return res.status(409).json({ error: 'Esiste già un campo base con questo nome' });
+    }
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.delete('/api/campi/:id', authenticateUser, requireMaster, async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id) || id === 1) return res.status(400).json({ error: 'Impossibile eliminare questo campo base' });
+  try {
+    const db = await dbPromise;
+    const abitanti = await db.get("SELECT COUNT(*) AS n FROM personaggi WHERE campo_base_id = ? AND status != 'morto'", id);
+    if (abitanti.n > 0) {
+      return res.status(409).json({ error: 'Il campo base ha ancora personaggi attivi: spostali prima di eliminarlo.' });
+    }
+    await db.run('DELETE FROM campi_base WHERE id = ?', id);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ========================= ROUTE: OROLOGIO GLOBALE =========================
+
+app.get('/api/mondo', authenticateUser, async (req, res) => {
+  try {
+    const db = await dbPromise;
+    const row = await db.get('SELECT * FROM mondo WHERE id = 1');
+    res.json({ mondo: row || { id: 1, ore_totali: 0 } });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.put('/api/mondo', authenticateUser, requireMaster, async (req, res) => {
+  const { ore_totali } = req.body;
+  if (typeof ore_totali !== 'number' || ore_totali < 0) {
+    return res.status(400).json({ error: 'ore_totali non valido' });
+  }
+  try {
+    const db = await dbPromise;
+    await db.run('UPDATE mondo SET ore_totali = ? WHERE id = 1', ore_totali);
+    res.json({ success: true, ore_totali });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ========================= ROUTE: LOG EVENTI (per campo) =========================
+
+app.get('/api/eventi', authenticateUser, async (req, res) => {
+  const campoBaseId = parseInt(req.query.campoBaseId, 10);
+  if (isNaN(campoBaseId)) return res.status(400).json({ error: 'campoBaseId richiesto' });
+  try {
+    const db = await dbPromise;
+    const eventi = await db.all(
+      'SELECT * FROM eventi_log WHERE campo_base_id = ? ORDER BY id DESC LIMIT 200',
+      campoBaseId
+    );
+    res.json({ eventi });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/eventi', authenticateUser, async (req, res) => {
+  const { campoBaseId, oraGioco, tipo, messaggio, personaggioNome } = req.body;
+  if (!campoBaseId || !messaggio) return res.status(400).json({ error: 'Dati mancanti' });
+  try {
+    const db = await dbPromise;
+    await db.run(
+      'INSERT INTO eventi_log (campo_base_id, ora_gioco, tipo, messaggio, personaggio_nome) VALUES (?, ?, ?, ?, ?)',
+      campoBaseId, oraGioco || 0, tipo || 'info', messaggio, personaggioNome || null
+    );
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/eventi/segna-letti', authenticateUser, async (req, res) => {
+  const { campoBaseId } = req.body;
+  if (!campoBaseId) return res.status(400).json({ error: 'campoBaseId richiesto' });
+  try {
+    const db = await dbPromise;
+    await db.run('UPDATE eventi_log SET letto = 1 WHERE campo_base_id = ?', campoBaseId);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // ========================= ROUTE: AUTENTICAZIONE =========================
 
 app.post('/api/auth/register', async (req, res) => {
@@ -223,7 +341,8 @@ app.post('/api/auth/logout', authenticateUser, async (req, res) => {
 
 // ========================= ROUTE: PERSONAGGI =========================
 
-// GET /api/party – unica route, gestisce master, giocatore, ospite
+// GET /api/party?campoBaseId=X – party filtrato per campo base. Se campoBaseId è omesso,
+// mantiene il comportamento legacy (campo 1) per retrocompatibilità con client vecchi.
 app.get('/api/party', authenticateUser, async (req, res) => {
   try {
     const db = await dbPromise;
@@ -358,7 +477,7 @@ app.get('/api/cimitero', authenticateUser, async (req, res) => {
 });
 
 app.post('/api/characters', authenticateUser, requireNotGuest, async (req, res) => {
-  const { nome, classe, data, updated_at } = req.body;
+  const { nome, classe, data, updated_at, campoBaseId } = req.body;
   try {
     const db = await dbPromise;
 
@@ -367,29 +486,34 @@ app.post('/api/characters', authenticateUser, requireNotGuest, async (req, res) 
           'SELECT COUNT(*) as count FROM personaggi WHERE user_id = ? AND status != "morto"',
           req.user.id
       );
-      if (count.count >= 2) {
-        return res.status(403).json({ error: 'Hai già 2 personaggi attivi. Eliminane uno prima di crearne un altro.' });
+      if (count.count >= 3) {
+        return res.status(403).json({ error: 'Hai già 3 personaggi attivi. Eliminane uno prima di crearne un altro.' });
       }
     }
     if (!nome || !classe) {
       return res.status(400).json({ error: 'nome e classe richiesti' });
     }
 
+    let campoFinale = parseInt(campoBaseId, 10);
+    if (isNaN(campoFinale)) campoFinale = 1;
+    const campoEsiste = await db.get('SELECT id FROM campi_base WHERE id = ?', campoFinale);
+    if (!campoEsiste) return res.status(400).json({ error: 'Campo base non trovato' });
+
     const existing = await db.get('SELECT * FROM personaggi WHERE user_id = ? AND nome = ?', req.user.id, nome);
     if (existing) {
       await db.run(
-          'UPDATE personaggi SET data = ?, updated_at = ?, classe = ? WHERE id = ?',
+          'UPDATE personaggi SET data = ?, updated_at = ?, classe = ?, campo_base_id = ? WHERE id = ?',
           typeof data === 'string' ? data : JSON.stringify(data || {}),
-          updated_at || new Date().toISOString(), classe, existing.id
+          updated_at || new Date().toISOString(), classe, campoFinale, existing.id
       );
       const character = await db.get('SELECT * FROM personaggi WHERE id = ?', existing.id);
       return res.json({ character });
     }
     const result = await db.run(
-        'INSERT INTO personaggi (user_id, nome, classe, data, updated_at) VALUES (?, ?, ?, ?, ?)',
+        'INSERT INTO personaggi (user_id, nome, classe, data, updated_at, campo_base_id) VALUES (?, ?, ?, ?, ?, ?)',
         req.user.id, nome, classe,
         typeof data === 'string' ? data : JSON.stringify(data || {}),
-        updated_at || new Date().toISOString()
+        updated_at || new Date().toISOString(), campoFinale
     );
     const character = await db.get('SELECT * FROM personaggi WHERE id = ?', result.lastID);
     res.json({ character });
@@ -436,7 +560,17 @@ app.put('/api/personaggi/:id', authenticateUser, requireNotGuest, async (req, re
     if (req.user.role !== 'master' && personaggio.user_id !== req.user.id) {
       return res.status(403).json({ error: 'Non hai il permesso di modificare questo personaggio' });
     }
-    
+
+    // Solo il master può spostare un personaggio in un altro campo base
+    const { campoBaseId } = req.body;
+    let campoFinale = personaggio.campo_base_id;
+    if (req.user.role === 'master' && campoBaseId !== undefined) {
+      const nuovoCampo = parseInt(campoBaseId, 10);
+      const campoEsiste = await db.get('SELECT id FROM campi_base WHERE id = ?', nuovoCampo);
+      if (!campoEsiste) return res.status(400).json({ error: 'Campo base non trovato' });
+      campoFinale = nuovoCampo;
+    }
+
     // Se non è master, forziamo il mantenimento dello status attuale o comunque impediamo di resuscitare
     let finalStatus = status || personaggio.status;
     if (req.user.role !== 'master') {
@@ -456,12 +590,13 @@ app.put('/api/personaggi/:id', authenticateUser, requireNotGuest, async (req, re
       finalStatus = 'vivo';
     }
 
-    const dataJson = typeof data === 'string' ? data : JSON.stringify(data);
+      const dataJson = typeof data === 'string' ? data : JSON.stringify(data);
 
     await db.run(
-        'UPDATE personaggi SET data = ?, status = ?, updated_at = ? WHERE id = ?',
-        dataJson, finalStatus, new Date().toISOString(), personaggioId,
+        'UPDATE personaggi SET data = ?, status = ?, updated_at = ?, campo_base_id = ? WHERE id = ?',
+        dataJson, finalStatus, new Date().toISOString(), campoFinale, personaggioId,
     );
+
     const updated = await db.get('SELECT * FROM personaggi WHERE id = ?', personaggioId);
     if (updated.data && typeof updated.data === 'string') {
       try { updated.data = JSON.parse(updated.data); } catch (e) { updated.data = {}; }
@@ -474,16 +609,28 @@ app.put('/api/personaggi/:id', authenticateUser, requireNotGuest, async (req, re
 // ========================= ROUTE: DOCUMENTI =========================
 
 app.post('/api/documenti', authenticateUser, requireMaster, async (req, res) => {
-  const { contenuto, personaggio_id, personaggioId, titolo } = req.body;
+  const { contenuto, personaggio_id, personaggioId, titolo, campoBaseId } = req.body;
   try {
     const db = await dbPromise;
     const payload = contenuto || JSON.stringify({});
     const targetId = (personaggio_id !== undefined && personaggio_id !== null && personaggio_id !== '')
         ? personaggio_id
         : (personaggioId !== undefined && personaggioId !== null && personaggioId !== '' ? personaggioId : 0);
+
+    // Ricava il campo base dal personaggio destinatario, se presente, altrimenti usa quello passato esplicitamente
+    let campoFinale = parseInt(campoBaseId, 10);
+    if (isNaN(campoFinale)) {
+      if (targetId) {
+        const char = await db.get('SELECT campo_base_id FROM personaggi WHERE id = ?', targetId);
+        campoFinale = char ? char.campo_base_id : 1;
+      } else {
+        campoFinale = 1;
+      }
+    }
+
     const result = await db.run(
-        'INSERT INTO documenti (master_id, personaggio_id, titolo, contenuto) VALUES (?, ?, ?, ?)',
-        req.user.id, targetId, titolo, payload,
+        'INSERT INTO documenti (master_id, personaggio_id, titolo, contenuto, campo_base_id) VALUES (?, ?, ?, ?, ?)',
+        req.user.id, targetId, titolo, payload, campoFinale,
     );
     const document = await db.get('SELECT * FROM documenti WHERE id = ?', result.lastID);
     res.json({ document });
@@ -494,6 +641,7 @@ app.post('/api/documenti', authenticateUser, requireMaster, async (req, res) => 
 
 app.get('/api/documenti', authenticateUser, async (req, res) => {
   const personaggioId = req.query.personaggioId || req.query.personaggio_id;
+  const campoBaseId = req.query.campoBaseId ? parseInt(req.query.campoBaseId, 10) : null;
   try {
     const db = await dbPromise;
     let documenti = [];
@@ -504,10 +652,16 @@ app.get('/api/documenti', authenticateUser, async (req, res) => {
         if (!char || (char.user_id !== req.user.id && req.user.role !== 'master')) {
           return res.status(403).json({ error: 'Accesso negato a questi documenti' });
         }
+        documenti = await db.all('SELECT * FROM documenti WHERE personaggio_id = ? ORDER BY id DESC', id);
+      } else {
+        // Biblioteca (personaggio_id=0): serve il campo base per non mischiare biblioteche diverse
+        if (!campoBaseId) return res.status(400).json({ error: 'campoBaseId richiesto per la biblioteca' });
+        documenti = await db.all('SELECT * FROM documenti WHERE personaggio_id = 0 AND campo_base_id = ? ORDER BY id DESC', campoBaseId);
       }
-      documenti = await db.all('SELECT * FROM documenti WHERE personaggio_id = ? ORDER BY id DESC', id);
     } else if (req.user.role === 'master') {
-      documenti = await db.all('SELECT * FROM documenti ORDER BY id DESC');
+      documenti = campoBaseId
+        ? await db.all('SELECT * FROM documenti WHERE campo_base_id = ? ORDER BY id DESC', campoBaseId)
+        : await db.all('SELECT * FROM documenti ORDER BY id DESC');
     } else {
       return res.status(400).json({ error: 'personaggioId richiesto' });
     }
@@ -613,9 +767,15 @@ app.put('/api/documenti/:id/traduci', authenticateUser, requireNotGuest, async (
 });
 
 app.get('/api/magazzino', authenticateUser, async (req, res) => {
+  const campoBaseId = req.query.campoBaseId ? parseInt(req.query.campoBaseId, 10) : 1;
+  if (isNaN(campoBaseId)) return res.status(400).json({ error: 'campoBaseId non valido' });
   try {
     const db = await dbPromise;
-    const row = await db.get('SELECT * FROM magazzino WHERE id = 1');
+    let row = await db.get('SELECT * FROM magazzini WHERE campo_base_id = ?', campoBaseId);
+    if (!row) {
+      await db.run('INSERT INTO magazzini (campo_base_id, data) VALUES (?, ?)', campoBaseId, '{}');
+      row = await db.get('SELECT * FROM magazzini WHERE campo_base_id = ?', campoBaseId);
+    }
     if (row && row.data && typeof row.data === 'string') {
       try {
         row.data = JSON.parse(row.data);
@@ -623,25 +783,33 @@ app.get('/api/magazzino', authenticateUser, async (req, res) => {
         row.data = {};
       }
     }
-    res.json({ magazzino: row || { id: 1, data: {}, updated_at: new Date().toISOString() } });
+    res.json({ magazzino: row });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
 app.put('/api/magazzino', authenticateUser, requireNotGuest, async (req, res) => {
+  const campoBaseId = req.query.campoBaseId ? parseInt(req.query.campoBaseId, 10) : (req.body?.campoBaseId ? parseInt(req.body.campoBaseId, 10) : 1);
+  if (isNaN(campoBaseId)) return res.status(400).json({ error: 'campoBaseId non valido' });
   const payload = req.body?.data || req.body || {};
   try {
     const db = await dbPromise;
-    const current = await db.get('SELECT * FROM magazzino WHERE id = 1');
+    const current = await db.get('SELECT * FROM magazzini WHERE campo_base_id = ?', campoBaseId);
     const currentData = current?.data ? JSON.parse(current.data) : {};
     const mergedData = { ...currentData, ...(payload && typeof payload === 'object' && !Array.isArray(payload) ? payload : {}) };
-    await db.run(
-        'UPDATE magazzino SET data = ?, updated_at = ? WHERE id = 1',
-        JSON.stringify(mergedData),
-        new Date().toISOString(),
-    );
-    const updated = await db.get('SELECT * FROM magazzino WHERE id = 1');
+    if (current) {
+      await db.run(
+          'UPDATE magazzini SET data = ?, updated_at = ? WHERE campo_base_id = ?',
+          JSON.stringify(mergedData), new Date().toISOString(), campoBaseId,
+      );
+    } else {
+      await db.run(
+          'INSERT INTO magazzini (campo_base_id, data, updated_at) VALUES (?, ?, ?)',
+          campoBaseId, JSON.stringify(mergedData), new Date().toISOString(),
+      );
+    }
+    const updated = await db.get('SELECT * FROM magazzini WHERE campo_base_id = ?', campoBaseId);
     if (updated && updated.data && typeof updated.data === 'string') {
       try {
         updated.data = JSON.parse(updated.data);
