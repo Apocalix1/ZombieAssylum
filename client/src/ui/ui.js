@@ -78,16 +78,15 @@ export async function showLobbyScreen(user) {
     }
 }
 
-// Nuove funzioni helper per la lobby
 window.mandaInGiocoDaLobby = async function(nome) {
     const user = getCurrentUser();
     if (!user) return alert('Devi essere loggato.');
 
-    // Controllo limite 2 personaggi per giocatore (non master)
+    // Controllo limite 3 personaggi per giocatore (non master)
     if (user.role !== 'master') {
         const viviUser = party.filter(p => p.user_id === user.id);
-        if (viviUser.length >= 2) {
-            return alert('Puoi avere massimo 2 personaggi in gioco alla volta.');
+        if (viviUser.length >= 3) {
+            return alert('Puoi avere massimo 3 personaggi in gioco alla volta.');
         }
     }
 
@@ -96,22 +95,32 @@ window.mandaInGiocoDaLobby = async function(nome) {
     try {
         const stats = JSON.parse(localDataRaw);
         const p = Object.assign(new Personaggio(stats.nome, stats.giornoInizio || 0), stats);
-        
-        // Se ha già un ID, proviamo PUT per evitare il limite di 2
+
+        // Retrocompatibilità: personaggi creati prima di questa feature non hanno campoBaseId salvato
+        let campoBaseId = stats.campoBaseId;
+        if (!campoBaseId) {
+            const campoScelto = await window.chiediCampoBase();
+            if (!campoScelto) return;
+            campoBaseId = campoScelto.id;
+        }
+
+        // Se ha già un ID, proviamo PUT per evitare il limite
         if (p.id) {
              const res = await fetch(apiUrl(`/api/personaggi/${p.id}`), {
                 method: 'PUT',
                 headers: buildAuthHeaders({ 'Content-Type': 'application/json' }),
-                body: JSON.stringify({ data: JSON.stringify(p), status: 'vivo' })
+                body: JSON.stringify({ data: JSON.stringify(p), status: 'vivo', campoBaseId })
             });
             if (res.ok) {
+                window.setCampoBaseCorrente({ id: campoBaseId, nome: stats.campoBaseNome || '' });
                 alert(`✅ ${nome} è stato riattivato con successo!`);
                 renderCharacterList();
                 return;
             }
         }
 
-        await salvaPersonaggioCloud(p);
+        await salvaPersonaggioCloud(p, campoBaseId);
+        window.setCampoBaseCorrente({ id: campoBaseId, nome: stats.campoBaseNome || '' });
         alert(`✅ ${nome} è stato mandato in gioco con successo!`);
         renderCharacterList();
     } catch (e) {
@@ -174,6 +183,10 @@ window.entraInGiocoDaLobby = async function(nome, id) {
         p.id = pData.id;
         p.user_id = pData.user_id;
         p.ownerUsername = pData.owner_username || null;
+        if (pData.campo_base_id) {
+            window.setCampoBaseCorrente({ id: pData.campo_base_id, nome: window.campoBaseCorrente?.nome || '' });
+            await window.initCampoBaseCorrenteUI();
+        }
         if (!party.some(x => x.nome === p.nome)) party.push(p);
         showGameScreen('Giocatore');
     } catch (e) {
@@ -1559,11 +1572,12 @@ export function aggiornaInterfaccia() {
                     const canUseDecipherAction = (hasPerk(p, 'Traduttore') || hasPerk(p, 'Lingue'));
 
                     // --- Pulsanti di azione (solo per proprietario/master) ---
-                    detailsHtml += `
+                        detailsHtml += `
                         <div style="display:flex; gap:4px; margin-bottom:10px;">
                             <button class="btn-big" style="flex:1; background:#8e44ad;" onclick="apriDocumentiPersonaggio(${idx})">📜 Doc</button>
                             <button class="btn-big" style="flex:1; background:#2980b9;" onclick="apriStatiPersonaggio(${idx})">✨ Stati</button>
                             <button class="btn-big guest-allow" style="flex:1; background:#16a085;" onclick="apriInventario(${idx})">🎒 Inventario</button>
+                            ${isMaster ? `<button class="btn-big" style="flex:1; background:#d35400;" onclick="masterCambiaCampoPersonaggio(${idx})">🔀 Campo</button>` : ''}
                         </div>
                         <button onclick="apriScheda(${idx})" style="width:100%; margin-bottom:10px;">Visualizza Scheda</button>
                         <div class="action-dropdowns" style="margin-top: 12px; display:grid; gap:6px;">
@@ -1681,7 +1695,8 @@ export async function entraInGioco() {
     const user = getCurrentUser();
     if (!user) { alert('Devi accedere prima.'); return; }
     try {
-        const response = await fetch(apiUrl('/api/party'), { headers: buildAuthHeaders() });
+        const campoId = window.getCampoBaseId ? window.getCampoBaseId() : 1;
+        const response = await fetch(apiUrl(`/api/party?campoBaseId=${campoId}`), { headers: buildAuthHeaders() });
         const data = await response.json();
         const partyData = data.party || [];
         party.length = 0;
@@ -2615,15 +2630,23 @@ window.mandaInGioco = async function(nome) {
     pData.nome = nome;
     pData.classe = pData.classe || 'Sopravvissuto';
 
+    let campoBaseId = pData.campoBaseId;
+    if (!campoBaseId) {
+        const campoScelto = await window.chiediCampoBase();
+        if (!campoScelto) return;
+        campoBaseId = campoScelto.id;
+    }
+
     try {
-        // Se ha un ID, usiamo PUT invece di POST per evitare il limite dei 2 personaggi attivi
+        // Se ha un ID, usiamo PUT invece di POST per evitare il limite dei personaggi attivi
         if (pData.id) {
             const response = await fetch(apiUrl(`/api/personaggi/${pData.id}`), {
                 method: 'PUT',
                 headers: buildAuthHeaders({ 'Content-Type': 'application/json' }),
                 body: JSON.stringify({
                     data: JSON.stringify(pData),
-                    status: 'vivo'
+                    status: 'vivo',
+                    campoBaseId
                 })
             });
             if (response.ok) {
@@ -2638,7 +2661,7 @@ window.mandaInGioco = async function(nome) {
             console.warn('PUT fallita, risposta:', text);
         }
 
-        // POST per creare il personaggio
+         // POST per creare il personaggio
         const response = await fetch(apiUrl('/api/characters'), {
             method: 'POST',
             headers: buildAuthHeaders({ 'Content-Type': 'application/json' }),
@@ -2646,7 +2669,8 @@ window.mandaInGioco = async function(nome) {
                 nome: nome,
                 classe: pData.classe,
                 data: JSON.stringify(pData),
-                updated_at: new Date().toISOString()
+                updated_at: new Date().toISOString(),
+                campoBaseId
             })
         });
 

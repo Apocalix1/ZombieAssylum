@@ -14,7 +14,8 @@ export async function syncPartyFromServer() {
     if (isSyncing) return;
     isSyncing = true;
     try {
-        const data = await requestJson(apiUrl('/api/party'));
+        const campoId = window.getCampoBaseId ? window.getCampoBaseId() : 1;
+        const data = await requestJson(apiUrl(`/api/party?campoBaseId=${campoId}`));
         if (!data.party || !Array.isArray(data.party)) return;
 
         const serverChars = data.party;
@@ -220,7 +221,8 @@ export async function syncMagazzinoDalServer() {
     if (isSyncingMagazzino) return;
     isSyncingMagazzino = true;
     try {
-        const data = await requestJson(apiUrl('/api/magazzino'));
+        const campoId = window.getCampoBaseId ? window.getCampoBaseId() : 1;
+        const data = await requestJson(apiUrl(`/api/magazzino?campoBaseId=${campoId}`));
         if (data.magazzino && data.magazzino.data) {
             setMagazzino(data.magazzino.data);
             window.magazzino = magazzino;
@@ -423,13 +425,14 @@ export async function fetchUserCharacters() {
     }
 }
 
-export async function salvaPersonaggioCloud(personaggio) {
+export async function salvaPersonaggioCloud(personaggio, campoBaseId = null) {
     personaggio.updated_at = nowTimestamp();
     salvaPersonaggioLocalmente(personaggio);
 
     const user = getCurrentUser();
     if (!user) return;
     const isMaster = user.role === 'master';
+    const campoFinale = campoBaseId || personaggio.campoBaseId || (window.getCampoBaseId ? window.getCampoBaseId() : 1);
 
     // Se il personaggio ha un ID, usa PUT per aggiornare la riga esistente (sia per Master che per Giocatore)
     if (personaggio.id) {
@@ -437,7 +440,8 @@ export async function salvaPersonaggioCloud(personaggio) {
             const risposta = await requestJson(apiUrl(`/api/personaggi/${personaggio.id}`), {
                 method: 'PUT',
                 body: JSON.stringify({
-                    data: JSON.stringify(personaggio)
+                    data: JSON.stringify(personaggio),
+                    campoBaseId: campoFinale
                 }),
             });
             if (risposta && risposta.personaggio && risposta.personaggio.id) {
@@ -463,6 +467,7 @@ export async function salvaPersonaggioCloud(personaggio) {
                 classe: personaggio.classe || 'Sopravvissuto',
                 data: JSON.stringify(personaggio),
                 updated_at: personaggio.updated_at,
+                campoBaseId: campoFinale
             }),
         });
         if (risposta && risposta.character && risposta.character.id) {

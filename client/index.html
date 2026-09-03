@@ -128,6 +128,7 @@
                 <span>📅 GIORNO: <b id="display-giorno">0</b></span>
                 <span>🕒 ORA: <b id="display-ora">00:00</b></span>
                 <span class="role-indicator">🛡️ RUOLO: <b id="display-role">Nessuno</b></span>
+                <span>🏕️ CAMPO: <b id="display-campo-base">-</b></span>
                 <span id="backend-status" style="margin-left:12px; color:#f1c40f; font-size:0.95rem;">🔌 Server: <b id="backend-status-text">sconosciuto</b></span>
                 <span>🍞 CIBO: <b id="display-cibo">10</b> <span style="font-size:0.85em; color:#ecf0f1;">(🥫 <b id="display-conserve">0</b> • 🍽️ <b id="display-piatti-deliziosi">0</b> • 🤮 <b id="display-cibo-avariato">0</b>)</span></span>
                 <span>💧 ACQUA: <b id="display-acqua">10</b></span>
@@ -149,6 +150,7 @@
                 <button id="btn-caduti" class="btn-hero guest-allow" onclick="toggleCimitero()">🪦 CADUTI</button>
                 <button id="btn-magazzino" class="btn-hero guest-allow" onclick="openMagazzino()">📦 MAGAZZINO</button>
                 <button id="btn-master-panel" class="btn-hero master-only hidden" onclick="apriPannelloMaster()">👑 MASTER</button>
+                <button id="btn-cambia-campo" class="btn-hero master-only hidden" onclick="masterCambiaCampoVisuale()">🔀 CAMBIA CAMPO</button>
             </div>
             <div id="party-container"></div>
         </main>
@@ -327,6 +329,8 @@
         { src: '/src/ui/magazzino-ui.js', module: true },
         { src: '/src/ui/spedizione-ui.js', module: true },
         { src: '/src/ui/cimitero-ui.js', module: true },
+        { src: '/src/logic/campo.js', module: true },
+        { src: '/src/ui/campo-ui.js', module: true },
         { src: '/src/logic/alchimia.js', module: true },
         { src: '/src/logic/artificeria.js', module: true },
         { src: '/src/logic/studio.js', module: true },

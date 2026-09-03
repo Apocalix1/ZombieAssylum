@@ -200,7 +200,74 @@ export async function openDatabase() {
   if (!documentColumnNames.includes('traduzioni')) {
     await db.run("ALTER TABLE documenti ADD COLUMN traduzioni TEXT NOT NULL DEFAULT '[]'");
   }
+  if (!documentColumnNames.includes('campo_base_id')) {
+    await db.run("ALTER TABLE documenti ADD COLUMN campo_base_id INTEGER NOT NULL DEFAULT 1");
+  }
 
+  // --- MULTI CAMPO BASE ---
+  await db.exec(`
+    CREATE TABLE IF NOT EXISTS campi_base (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      nome TEXT NOT NULL UNIQUE,
+      creato_il TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TABLE IF NOT EXISTS mondo (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      ore_totali REAL NOT NULL DEFAULT 0
+    );
+    INSERT OR IGNORE INTO mondo (id, ore_totali) VALUES (1, 0);
+    CREATE TABLE IF NOT EXISTS magazzini (
+      campo_base_id INTEGER PRIMARY KEY,
+      data TEXT NOT NULL DEFAULT '{}',
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(campo_base_id) REFERENCES campi_base(id) ON DELETE CASCADE
+    );
+    CREATE TABLE IF NOT EXISTS eventi_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      campo_base_id INTEGER NOT NULL,
+      ora_gioco REAL NOT NULL,
+      tipo TEXT NOT NULL DEFAULT 'info',
+      messaggio TEXT NOT NULL,
+      personaggio_nome TEXT,
+      letto INTEGER NOT NULL DEFAULT 0,
+      creato_il TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(campo_base_id) REFERENCES campi_base(id) ON DELETE CASCADE
+    );
+  `);
+
+    // Crea i campi base iniziali se non esistono (retrocompatibilità + seed richiesto)
+  const campoDefault = await db.get('SELECT id, nome FROM campi_base WHERE id = 1');
+  if (!campoDefault) {
+    await db.run('INSERT INTO campi_base (id, nome) VALUES (1, ?)', 'Casa di Maria');
+  } else if (campoDefault.nome === 'Campo Base 1') {
+    // Rinomina il campo di default creato da una versione precedente della migrazione
+    await db.run('UPDATE campi_base SET nome = ? WHERE id = 1', 'Casa di Maria');
+  }
+  const campoSuga = await db.get('SELECT id FROM campi_base WHERE nome = ?', 'Suga Toddie');
+  if (!campoSuga) {
+    const result = await db.run('INSERT INTO campi_base (nome) VALUES (?)', 'Suga Toddie');
+    await db.run('INSERT OR IGNORE INTO magazzini (campo_base_id, data) VALUES (?, ?)', result.lastID, '{}');
+  }
+
+  // Migrazione: sposta l'unica riga legacy `magazzino` (id=1) dentro `magazzini` (campo 1),
+  // solo se `magazzini` non ha già quella riga.
+  const magazziniRow1 = await db.get('SELECT campo_base_id FROM magazzini WHERE campo_base_id = 1');
+  if (!magazziniRow1) {
+    const legacyMag = await db.get('SELECT data FROM magazzino WHERE id = 1');
+    const legacyData = legacyMag?.data || '{}';
+    await db.run('INSERT INTO magazzini (campo_base_id, data) VALUES (1, ?)', legacyData);
+    // Se il vecchio magazzino aveva un oreTotali salvato, lo riportiamo nell'orologio globale
+    try {
+      const parsed = JSON.parse(legacyData);
+      if (typeof parsed.oreTotali === 'number' && parsed.oreTotali > 0) {
+        await db.run('UPDATE mondo SET ore_totali = ? WHERE id = 1', parsed.oreTotali);
+      }
+    } catch (e) { /* dati legacy corrotti, ignoriamo */ }
+  }
+
+  if (!columnNames.includes('campo_base_id')) {
+    await db.run("ALTER TABLE personaggi ADD COLUMN campo_base_id INTEGER NOT NULL DEFAULT 1");
+  }
 
   return db;
 }

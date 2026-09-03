@@ -576,7 +576,8 @@ function depositaRisorsa(idx, key) {
 
 export async function updateMagazzinoFields(fields) {
     try {
-        const res = await fetch(apiUrl('/api/magazzino'), {
+        const campoId = window.getCampoBaseId ? window.getCampoBaseId() : 1;
+        const res = await fetch(apiUrl(`/api/magazzino?campoBaseId=${campoId}`), {
             method: 'PUT',
             headers: buildAuthHeaders({ 'Content-Type': 'application/json' }),
             body: JSON.stringify({ data: fields })
