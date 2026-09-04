@@ -634,12 +634,13 @@ function eseguiCreazioneArtificeria(leader, collaboratoriIdxs, ricetta, costoIng
     }
 
     const azioneLeader = {
-        tipo: isSmontaggio ? 'artificeria-smontaggio' : 'artificeria',
-        oreTotali: oreFinali,
-        oreRimanenti: oreFinali,
-        ricettaNome: ricetta.name,
-        onComplete: () => risolviEsitoArtificeria(leader, collaboratori, ricetta, costoIngranaggi, isSmontaggio, dettagliExtra, costoBase, calcoli, rollPrecalcolato)
-    };
+    tipo: isSmontaggio ? 'artificeria-smontaggio' : 'artificeria',
+    oreTotali: oreFinali,
+    oreRimanenti: oreFinali,
+    ricettaNome: ricetta.name,
+    costoIngranaggi: isSmontaggio ? 0 : costoIngranaggi,
+    onComplete: () => risolviEsitoArtificeria(...)
+};
 
     const creaAzioneCollab = (collab) => ({
         tipo: 'artificeria-assistenza',

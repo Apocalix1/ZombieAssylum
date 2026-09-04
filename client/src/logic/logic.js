@@ -648,6 +648,12 @@ export class Personaggio {
         this.rancoreDurataOre = null;
         this.puntiFortuna = 15;
         this.vittorieCombattimento = 0;
+        this.forza = 6; 
+        this.destrezza = 6; 
+        this.costituzione = 6;
+        this.intelligenza = 6; 
+        this.saggezza = 6; 
+        this.carisma = 6;
         this.pmMedicina = 0;
         this.livelloMedicina = 0;
         this.woundTimer = 0;
@@ -1673,9 +1679,13 @@ export class Personaggio {
     }
 
     getStatDettagliata(statNome) {
-        const nomeLower = statNome.toLowerCase();
-        let valoreBase = this[nomeLower];
-        let motivi = [];
+    const nomeLower = statNome.toLowerCase();
+    let valoreBase = this[nomeLower];
+    if (typeof valoreBase !== 'number' || Number.isNaN(valoreBase)) {
+        valoreBase = 6; // base da manuale (mod -1)
+        this[nomeLower] = 6;
+    }
+    let motivi = [];
 
         if (this.perks && this.perks.length > 0) {
             const haPerk = (nome) => this.perks.some(p => p.nome === nome);

@@ -241,7 +241,11 @@ function annullaCollaborazioniPersonaggio(personaggio) {
         magazzino.materialiAlchemici += az.costoMateriali;
         mostraNotificaInAlto(`Rimborsati ${az.costoMateriali} materiali alchemici (azione interrotta di ${personaggio.nome}).`, 'successo');
         window.updateMagazzinoFields?.({ materialiAlchemici: magazzino.materialiAlchemici });
-    } else if (az?.tipo === 'cucina') {
+    } else if ((az?.tipo === 'artificeria' || az?.tipo === 'artificeria-smontaggio') && az.costoIngranaggi) {
+    magazzino.ingranaggi = (magazzino.ingranaggi || 0) + az.costoIngranaggi;
+    mostraNotificaInAlto(`Rimborsati ${az.costoIngranaggi} ingranaggi (azione interrotta di ${personaggio.nome}).`, 'successo');
+    window.updateMagazzinoFields?.({ ingranaggi: magazzino.ingranaggi });
+} else if (az?.tipo === 'cucina') {
         // NUOVO: rimborso cucina interrotta
         let cambiati = false;
         if (az.costoCibo) { magazzino.cibo += az.costoCibo; cambiati = true; }
@@ -266,15 +270,6 @@ export function inizializzaBottoniUI() {
 
     document.getElementById("btn-biblioteca")?.addEventListener("click", () => {
         document.getElementById("modal-biblioteca").style.display = "flex";
-    });
-
-    document.getElementById("btn-caduti")?.addEventListener("click", () => {
-        const cimitero = document.getElementById("side-cimitero");
-        cimitero.style.transform = cimitero.style.transform === "translateX(0px)" ? "translateX(100%)" : "translateX(0px)";
-    });
-
-    document.getElementById("btn-chiudi-cimitero")?.addEventListener("click", () => {
-        document.getElementById("side-cimitero").style.transform = "translateX(100%)";
     });
 
     document.getElementById("btn-annulla-creazione")?.addEventListener("click", () => {
@@ -2753,8 +2748,8 @@ function togglePerk(nomePerk, forceRemove = false) {
     const shouldRemove = forceRemove || (!isRepeatable && isSelected);
 
     if (shouldRemove && isSelected) {
-        const index = p.perks.findIndex(pp => getPerkBaseName(perkObjectName(pp)) === getPerkBaseName(perkDati.nome));
-                p.perks.splice(index, 1);
+    const index = p.perks.findIndex(pp => getPerkBaseName(perkObjectName(pp)) === getPerkBaseName(perkDati.nome));
+            p.perks.splice(index, 1);
         if (getPerkBaseName(perkDati.nome) === 'Obeso' || getPerkBaseName(perkDati.nome) === 'Sovrappeso') {
             p.pesoCorporeo = p.pesoCorporeo || {};
             p.pesoCorporeo.usiCuscinetto = null;
@@ -2777,6 +2772,23 @@ function togglePerk(nomePerk, forceRemove = false) {
     p.lingue = (p.lingue || []).filter(l => l !== 'Eklesti');
 }
         p.puntiCreazione += perkDati.costo;
+
+        // NUOVO: rimuovi a cascata (e rimborsa) i perk che dipendevano da questo,
+        // finché non si stabilizza (es. rimuovere Medicina Lv1 deve far cadere anche Lv2/3/4/5)
+        let cambiatoQualcosa = true;
+        while (cambiatoQualcosa) {
+            cambiatoQualcosa = false;
+            const nomiAttuali = p.perks.map(pp => getPerkBaseName(perkObjectName(pp)));
+            p.perks = p.perks.filter(pp => {
+                if (pp.requires && !nomiAttuali.includes(getPerkBaseName(pp.requires))) {
+                    p.puntiCreazione += (pp.costo || 0);
+                    cambiatoQualcosa = true;
+                    return false;
+                }
+                return true;
+            });
+        }
+
         renderSetupStats();
         p.sincronizzaLivelloMedicina();
         renderSetupPerks();
@@ -2888,8 +2900,8 @@ function togglePerk(nomePerk, forceRemove = false) {
                 const spec = mappaSpec[scelta] || 'Musicista';
                 const nuovoPerk = {...perkDati, nome: 'Artista', specializzazione: spec};
                 if (spec === 'Musicista') {
-                    const orecchioDati = getGlobalPerkData('Orecchio fino') || {
-                        nome: 'Orecchio fino',
+                    const orecchioDati = getGlobalPerkData('Orecchio Fino') || {
+                        nome: 'Orecchio Fino',
                         desc: '',
                         costo: 0
                     };
