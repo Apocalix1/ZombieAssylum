@@ -197,6 +197,7 @@ window.DATABASE_PERK = {
     ],
     "razziali": [
         { nome: "Carapace/Esoscheletro duro", desc: "Ottieni +2 alla CA ma -2 metri di velocita", costo: 3, skills: [] },
+        {nome:"Corsa a quattro zampe",desc:"Come reazione puoi entrare nello stato di 4 zampe. Mentre sei a 4 zampe la tua velocità aumenta di 3 metri e puoi compiere l'azione di Scatto come azione bonus. In questo stadio non puoi usare altre azioni."},
         { nome: "Sensibilità alle temperature", desc: "Ottieni debolezza ai danni da gelo o da fuoco (tua scelta)", costo: -4, skills: [] },
         { nome: "Fiuto eccezionale", desc: "Hai +2 in percezione passiva. Ottieni competenza in Percezione. Puoi provare a fare un tiro su Percezione per individuare persone/infetti nell'area circostante.", costo: 7, skills: ["Percezione"] },
         { nome: "Lingua prensile", desc: "Puoi usare un'azione per allungare la lingua di 3 metri. La tua lingua puo' afferrare gli oggetti e trainare i bersagli se falliscono un tiro su Forza contrapposto.Dopo aver attirato un bersaglio l’abilita’ si deve ricaricare per un turno", costo: 5, skills: [] },

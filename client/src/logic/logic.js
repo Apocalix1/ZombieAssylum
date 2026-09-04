@@ -1069,7 +1069,7 @@ export class Personaggio {
     }
 
     getSpellCost(level) {
-        const costs = {0: 1, 1: 2, 2: 5, 3: 10, 4: 16};
+        const costs = {0: 1, 1: 3, 2: 7, 3: 14};
         return costs[level] || 0;
     }
 
