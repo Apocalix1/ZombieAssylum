@@ -70,8 +70,9 @@ function chiudiCimitero() {
     const overlay = document.getElementById('overlay');
     if (!cim) return;
     if (cim.id === 'side-cimitero') {
-        cim.classList.remove('open');
-        overlay.style.display = 'none';
+    cim.classList.remove('open');
+    cim.style.transform = '';
+    overlay.style.display = 'none';
     } else {
         cim.style.display = 'none';
         overlay.style.display = 'none';
