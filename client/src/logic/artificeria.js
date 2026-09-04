@@ -639,7 +639,7 @@ function eseguiCreazioneArtificeria(leader, collaboratoriIdxs, ricetta, costoIng
     oreRimanenti: oreFinali,
     ricettaNome: ricetta.name,
     costoIngranaggi: isSmontaggio ? 0 : costoIngranaggi,
-    onComplete: () => risolviEsitoArtificeria(...)
+    onComplete: () => risolviEsitoArtificeria(leader, collaboratori, ricetta, costoIngranaggi, isSmontaggio, dettagliExtra, costoBase, calcoli, rollPrecalcolato)
 };
 
     const creaAzioneCollab = (collab) => ({
