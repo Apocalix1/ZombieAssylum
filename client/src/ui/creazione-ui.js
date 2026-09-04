@@ -254,13 +254,13 @@ function modificaMagicLevel(delta) {
 }
 
 const ARMI_COSTI = {
-    "Archi": [0, 1, 1, 2, 2, 3],
-    "Balestre": [0, 1, 1, 2, 2, 3],
-    "Armi con l'asta": [0, 1, 1, 2, 3],
+    "Archi": [0, 1, 2, 3, 4, 5],
+    "Balestre": [0, 1, 2, 3, 4, 5],
+    "Armi con l'asta": [0, 1, 2, 3, 4],
     "Armi da fuoco": [0, 1, 2, 2, 3, 4],
-    "Rampini e fruste": [0, 1, 1, 2, 2, 3],
-    "Lame leggere": [0, 1, 1, 2, 3],
-    "Mazze e armi contundenti": [0, 1, 1, 2, 3]
+    "Rampini e fruste": [0, 1, 2, 3, 4, 5],
+    "Lame leggere": [0, 1, 2, 3, 4],
+    "Mazze e armi contundenti": [0, 1, 2, 3, 4]
 };
 
 function modificaArmaLivello(categoria, delta) {
