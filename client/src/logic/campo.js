@@ -92,6 +92,31 @@ export async function segnaEventiLetti(campoBaseId) {
     } catch (e) { /* non bloccante */ }
 }
 
+window._eliminaCampoBase = async function(id, nome) {
+    if (!confirm(`Eliminare il campo base "${nome}"? I personaggi vivi al suo interno torneranno "in attesa" nel menù del loro giocatore e dovranno scegliere un nuovo campo per rientrare in gioco. Il magazzino del campo verrà perso.`)) return;
+    try {
+        const res = await fetch(apiUrl(`/api/campi/${id}`), {
+            method: 'DELETE',
+            headers: buildAuthHeaders()
+        });
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error(err.error || 'Errore eliminazione campo base');
+        }
+        if (typeof window.mostraNotificaInAlto === 'function') {
+            window.mostraNotificaInAlto(`Campo base "${nome}" eliminato.`, 'avviso');
+        }
+        if (window.campoBaseCorrente && window.campoBaseCorrente.id === id) {
+            window.setCampoBaseCorrente({ id: 1, nome: 'Casa di Maria' });
+            if (typeof window.ricaricaCampoCorrente === 'function') await window.ricaricaCampoCorrente();
+        }
+        if (typeof window.renderCharacterList === 'function') window.renderCharacterList();
+        window.apriSelezioneCampoBase(window._callbackSelezioneCampoBase || (() => {}));
+    } catch (e) {
+        alert('Errore: ' + e.message);
+    }
+};
+
 window.getCampoBaseId = getCampoBaseId;
 window.setCampoBaseCorrente = setCampoBaseCorrente;
 window.fetchCampiBase = fetchCampiBase;

@@ -208,7 +208,7 @@ function checkInfectionRisk() {
     if (this.woundState !== 'Ferita lieve') return true;
     if (this.woundTreated) return true; // medicato → nessun rischio
 
-    const modCon = this.getStatDettagliata('Costituzione').mod || 0;
+    const modCon = this.getStatDettagliata('Costituzione').mod;
     const tiro = Math.floor(Math.random() * 20) + 1 + modCon;
     if (tiro >= 14) return true; // supera la CD → nessuna infezione
 

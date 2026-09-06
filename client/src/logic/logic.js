@@ -741,6 +741,9 @@ export class Personaggio {
         this.manaMax = 0;
         this.manaAttuale = 0;
         this.spellsKnown = {0: 0, 1: 0, 2: 0, 3: 0, 4: 0};
+        this.incantesimi = [];
+        this.origineDemonicaCaricheTimers = []; // ore residue (max 4) per ogni carica di fuoco attiva
+        this._comprensioneLinguaggioFinoA = null;
         this.piattiDeliziosi = 0;
         this.isRobot = false;
         this.robotPFMax = 50;
@@ -754,8 +757,9 @@ export class Personaggio {
         this.biocarburanteTimer = 0;
         this.biocarburanteDeficit = false;
         this.zainoEquipaggiato = null;
-        this.taserCaricato = false;
-        this.stivaliCariche = 0; // presente solo se possiede il perk/oggetto stivali a molla
+         this.taserCaricato = false;
+        this._corsaAQuattroZampeAttiva = false;
+        this.stivaliCariche = 0;// presente solo se possiede il perk/oggetto stivali a molla
         this.inRicaricaFinoA = null;
         this.inventario = null; // sarà inizializzato da initInventarioBase
         this.initInventarioBase();
@@ -819,6 +823,17 @@ export class Personaggio {
         const add = map[rarity] || 0;
         this.batteryHours = Math.min(this.batteryHoursMax, (this.batteryHours || 0) + add);
         return add;
+    }
+
+    get CA() {
+     let CA =10+Math.floor((this.destrezza-10)/2);
+     if (this.hasPerk('Cauto')) CA+=1;
+     if (this.hasPerk('Esoscheletro duro')) CA+=2;
+     if (this.hasPerk('Armatura del tenero')) 
+     {
+        CA = 8 + Math.floor((this.destrezza-10)/2) + Math.floor((this.carisma-10)/2);
+     }
+     return CA;CA
     }
 
     get capacitaMax() {
@@ -1068,9 +1083,74 @@ export class Personaggio {
         return this.spellsKnown && (this.spellsKnown[level] || 0) > 0;
     }
 
-    getSpellCost(level) {
-        const costs = {0: 1, 1: 3, 2: 7, 3: 14};
-        return costs[level] || 0;
+        getSpellCost(level) {
+        const costs = {0: 1, 1: 3, 2: 6, 3: 12};
+        let cost = costs[level] || 0;
+        if (this._nextCastIsCura && this.hasPerk && this.hasPerk('Magia benedetta')) {
+            cost = Math.max(1, cost - 1);
+        }
+        return cost;
+    }
+
+    getSpellSlotCost(level) {
+        // Trucchetto=1, Lv1=2, Lv2=3, Lv3=4 spazi occupati
+        const weights = {0: 1, 1: 2, 2: 3, 3: 4, 4: 5};
+        return weights[level] !== undefined ? weights[level] : (level + 1);
+    }
+
+      getTotalSpellSlots() {
+        return 6 + this.getCastingModifier();
+    }
+
+     getSpellDataByName(nome) {
+        const db = window.DATABASE_INCANTESIMI || {};
+        for (const cat in db) {
+            const trovato = (db[cat] || []).find(s => s.nome === nome);
+            if (trovato) return { ...trovato, categoria: cat };
+        }
+        return null;
+    }
+
+    // Verifica se il personaggio soddisfa il requisito di caratteristica dell'incantesimo:
+    // deve avere ALMENO 12 in una delle caratteristiche richieste (o nessun requisito se "Qualsiasi").
+    soddisfaRequisitoIncantesimo(spell) {
+        if (!spell || !Array.isArray(spell.modificatore) || spell.modificatore.length === 0) return true;
+        if (spell.modificatore.some(m => (m || '').toLowerCase() === 'qualsiasi')) return true;
+        return spell.modificatore.some(stat => {
+            const det = this.getStatDettagliata(stat);
+            return det && det.valore >= 12;
+        });
+    }
+
+    // Tra le caratteristiche richieste dall'incantesimo, ritorna quella con valore/mod più alto sul personaggio
+    // (usata per mostrare "(Attributo +mod)" nell'elenco). Se "Qualsiasi", usa la caratteristica incantatore.
+    getModificatorePiuAltoPerSpell(spell) {
+        if (!spell) return null;
+        let candidati = Array.isArray(spell.modificatore) ? spell.modificatore.filter(m => (m || '').toLowerCase() !== 'qualsiasi') : [];
+        if (candidati.length === 0) {
+            const attr = this.getCastingAttribute();
+            return { nome: attr, mod: this.getStatDettagliata(attr).mod };
+        }
+        let best = null;
+        candidati.forEach(stat => {
+            const det = this.getStatDettagliata(stat);
+            if (!det) return;
+            if (!best || det.mod > best.mod) best = { nome: stat, mod: det.mod };
+        });
+        return best;
+    }
+
+    getIncantesimiConosciutiData() {
+        return (this.incantesimi || []).map(n => this.getSpellDataByName(n)).filter(Boolean);
+    }
+
+    getUsedSpellSlots(escludiLivello = null) {
+        let used = 0;
+        for (const lv in (this.spellsKnown || {})) {
+            if (escludiLivello !== null && parseInt(lv, 10) === escludiLivello) continue;
+            used += (this.spellsKnown[lv] || 0) * this.getSpellSlotCost(parseInt(lv, 10));
+        }
+        return used;
     }
 
     getArcaneFatigueThreshold() {
@@ -1952,15 +2032,21 @@ export class Personaggio {
         return base + bonusPerk + (this.hasArcanoMastery() ? 2 : 0);
     }
 
-        getManaSpellCost(livelloIncantesimo) {
-        const costi = {0: 1, 1: 2, 2: 5, 3: 10};
-        return costi[Math.min(Math.max(0, livelloIncantesimo), 3)] || 0;
+    getManaSpellCost(livelloIncantesimo) {
+        return this.getSpellCost(livelloIncantesimo);
     }
 
     getMaxKnownSpells(livelloIncantesimo) {
-        if (this.livelloMagia < livelloIncantesimo) return 0;
-        const maxSpells = {0: 2, 1: 3, 2: 2, 3: 2};
-        return maxSpells[livelloIncantesimo] || 0;
+        // "Massimo" = quelli già conosciuti + quanti altri entrano nello spazio rimasto,
+        // secondo il peso per livello (spazio totale = 6 + mod. incantatore).
+        if (this.livelloMagia < livelloIncantesimo) return this.spellsKnown?.[livelloIncantesimo] || 0;
+        const weight = this.getSpellSlotCost(livelloIncantesimo);
+        const totalSlots = this.getTotalSpellSlots();
+        const usedAltrove = this.getUsedSpellSlots(livelloIncantesimo);
+        const current = this.spellsKnown?.[livelloIncantesimo] || 0;
+        const remaining = Math.max(0, totalSlots - usedAltrove);
+        const additional = Math.floor(remaining / weight);
+        return current + additional;
     }
 
     getManaOverloadPenalty() {
@@ -2710,8 +2796,14 @@ export class Personaggio {
             }
         }
 // ==================== 6. DECREMENTO TIMER ====================
-          for (let t in this.timers) {
+           for (let t in this.timers) {
             if (this.timers[t] > 0) this.timers[t] -= 1;
+        }
+        // Origine demoniaca: le cariche di fuoco si scaricano dopo 4 ore se non usate
+        if (this.origineDemonicaCaricheTimers && this.origineDemonicaCaricheTimers.length) {
+            this.origineDemonicaCaricheTimers = this.origineDemonicaCaricheTimers
+                .map(t => t - 1)
+                .filter(t => t > 0);
         }
                 if (this.buffCucinaMaestriaOreRestanti > 0) this.buffCucinaMaestriaOreRestanti -= 1;
         if (this._folliaBloccataPiattiDeliziosi && (window.oreTotali || 0) - (this._ultimoPiattoDeliziosoOra || 0) >= 48) {
@@ -2954,6 +3046,7 @@ export class Personaggio {
     get velocitaAttuale() {
         let v = this.velcotiaBase || 9;
         if (this.hasPerk('Grande taglia')) v -= 1;
+         if (this._corsaAQuattroZampeAttiva) v += 3;
         if (this.hasPerk('Piccola taglia')) v += 2;
         if (this.hasPerk('Corpo Leggero')) v += 1;
         if (this.hasPerk('Corridore')) v += 1;

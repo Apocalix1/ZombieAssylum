@@ -24,11 +24,16 @@ window.apriSelezioneCampoBase = async function(onSelezionato) {
             <h2 style="color:#f1c40f;">🏕️ Scegli Campo Base</h2>
             <div style="display:grid; gap:8px; margin:14px 0; max-height:300px; overflow-y:auto;">
                 ${campi.map(c => `
-                    <button class="btn-big" style="text-align:left; display:flex; justify-content:space-between;"
-                            onclick="window._confermaSelezioneCampoBase(${c.id}, '${c.nome.replace(/'/g, "\\'")}')">
-                        <span>${c.nome}</span>
-                        <span style="color:#888; font-size:0.8rem;">${c.pg_attivi} pg attivi</span>
-                    </button>
+                    <div style="display:flex; gap:6px; align-items:stretch;">
+                        <button class="btn-big" style="flex:1; text-align:left; display:flex; justify-content:space-between;"
+                                onclick="window._confermaSelezioneCampoBase(${c.id}, '${c.nome.replace(/'/g, "\\'")}')">
+                            <span>${c.nome}</span>
+                            <span style="color:#888; font-size:0.8rem;">${c.pg_attivi} pg attivi</span>
+                        </button>
+                        ${(window.getCurrentUser && window.getCurrentUser()?.role === 'master' && c.id !== 1) ? `
+                        <button class="btn-big" style="background:#c0392b;" title="Elimina campo base"
+                                onclick="window._eliminaCampoBase(${c.id}, '${c.nome.replace(/'/g, "\\'")}')">🗑️</button>` : ''}
+                    </div>
                 `).join('')}
             </div>
             <div style="border-top:1px solid #333; padding-top:12px;">

@@ -310,6 +310,21 @@ window.toggleCombattimento = function() {
     renderSpedizioneModal();
 };
 
+window.toggleCorsaAQuattroZampe = function(idx) {
+    const p = party[idx];
+    if (!p || !(window.hasPerk && window.hasPerk(p, 'Corsa a 4 zampe'))) return;
+    p._corsaAQuattroZampeAttiva = !p._corsaAQuattroZampeAttiva;
+    mostraNotificaInAlto(
+        p._corsaAQuattroZampeAttiva
+            ? `${p.nome} si getta a 4 zampe: +3m velocità, ma può solo consultare scheda/inventario.`
+            : `${p.nome} torna sulle due gambe.`,
+        p._corsaAQuattroZampeAttiva ? 'avviso' : 'info'
+    );
+    salvaPersonaggioCloud(p);
+    renderSpedizioneModal();
+    aggiornaInterfaccia();
+};
+
 const EXTRA_PERK_COMBATTIMENTO = ['Stress fisico', "Fino all'ultimo", 'Guerriero', 'Nato per combattere','Flusso magico','Incantesimo preferito','Trasmettitore magico','Voce calma','Vendicativo', 'Mente ferrea', 'Vicinanza', 'Carapace/Esoscheletro duro', 'Sensibilità alle temperature', 'Guida', 'Lingua prensile', 'Produrre veleni', 'Termoregolazione', 'Scivolata(Pinguinosa)', 'Volo', 'Uniti siamo più forti', 'Protocollo Overclock', 'Scudo Energetico','Corsa a quattro zampe'];
 
 async function renderSpedizioneModal() {
@@ -346,6 +361,8 @@ async function renderSpedizioneModal() {
 function renderSchedaCombattimentoMaster(p, idx) {
     const user = getCurrentUser();
     const isMaster = user && user.role === 'master';
+    const haCorsa4Zampe = window.hasPerk && window.hasPerk(p, 'Corsa a 4 zampe');
+    const attiva4Zampe = !!p._corsaAQuattroZampeAttiva;
     const perkList = (p.perks || [])
         .filter(perk => {
             const nome = typeof perk === 'string' ? perk : perk.nome;
@@ -410,8 +427,13 @@ function renderSchedaCombattimentoMaster(p, idx) {
                         extras += p.taserCaricato ? `<button onclick="useTaser(${idx})">⚡ Usa Taser</button>` : `<button onclick="ricaricaTaser(${idx})" ${((p.inventario?.batterie||0) > 0) ? '' : 'disabled'}>🔋 Ricarica Taser</button>`;
                     }
                     if (p.inventario?.proiettiliFrammentazione > 0) extras += `<button onclick="consumaProiettileFrammentazione(${idx})">💥 Proiettile Framment. (${p.inventario.proiettiliFrammentazione})</button>`;
-                    if (p.inventario?.armi?.includes('Stivali a Molla') && p.stivaliCariche > 0) extras += `<button onclick="useStivaliMolla(${idx})">🦵 Usa Stivali (${p.stivaliCariche}/3)</button>`;
+                     if (p.inventario?.armi?.includes('Stivali a Molla') && p.stivaliCariche > 0) extras += `<button onclick="useStivaliMolla(${idx})">🦵 Usa Stivali (${p.stivaliCariche}/3)</button>`;
                     else if (p.inventario?.armi?.includes('Stivali a Molla')) extras += `<button onclick="ricaricaStivali(${idx})" ${((p.inventario?.batterie||0) > 0) ? '' : 'disabled'}>🔋 Ricarica Stivali</button>`;
+                    if (typeof hasPerk === 'function' && hasPerk(p, 'Origine demoniaca')) {
+                        const nCariche = (p.origineDemonicaCaricheTimers || []).length;
+                        extras += `<button onclick="window.assorbiDannoFuocoDemoniaco(${idx})">🔥 Assorbi fuoco (reaz.)</button>`;
+                        extras += `<button onclick="window.usaCaricaFuocoDemoniaco(${idx})" ${nCariche > 0 ? '' : 'disabled'}>💥 Usa carica fuoco (${nCariche}/4)</button>`;
+                    }
                     return extras;
                 })()}
             </div>
@@ -419,11 +441,40 @@ function renderSchedaCombattimentoMaster(p, idx) {
                 <summary style="cursor:pointer; font-weight:bold;">Mostra perks di combattimento</summary>
                 <div style="margin-top:8px; color:#eee; font-size:0.9rem;">${perkList}</div>
             </details>
+            ${renderIncantesimiConosciutiHtml(p, idx)}
         </div>`;
 }
 
+window.assorbiDannoFuocoDemoniaco = function(idx) {
+    const p = party[idx];
+    if (!p || !(hasPerk && hasPerk(p, 'Origine demoniaca'))) return;
+    p.origineDemonicaCaricheTimers = p.origineDemonicaCaricheTimers || [];
+    if (p.origineDemonicaCaricheTimers.length >= 4) {
+        alert(`${p.nome} ha già il massimo di 4 cariche di fuoco.`);
+        return;
+    }
+    p.origineDemonicaCaricheTimers.push(4); // 4 ore prima che si scarichi
+    mostraNotificaInAlto(`${p.nome} assorbe fino a 2 danni da fuoco (reazione): +1 carica di fuoco (${p.origineDemonicaCaricheTimers.length}/4).`, 'successo');
+    salvaPersonaggioCloud(p);
+    renderSpedizioneModal();
+    aggiornaInterfaccia();
+};
+
+window.usaCaricaFuocoDemoniaco = function(idx) {
+    const p = party[idx];
+    if (!p || !(hasPerk && hasPerk(p, 'Origine demoniaca'))) return;
+    if (!(p.origineDemonicaCaricheTimers || []).length) return alert('Nessuna carica di fuoco disponibile.');
+    p.origineDemonicaCaricheTimers.shift();
+    mostraNotificaInAlto(`${p.nome} usa una reazione e una carica di fuoco: +2 danni da fuoco al prossimo attacco (${p.origineDemonicaCaricheTimers.length}/4 rimaste).`, 'successo');
+    salvaPersonaggioCloud(p);
+    renderSpedizioneModal();
+    aggiornaInterfaccia();
+};
+
 function renderSchedaSpedizioneRidotta(p, idx) {
     const statiPerTS = ["Forza", "Destrezza", "Costituzione", "Intelligenza", "Saggezza", "Carisma"];
+    const haCorsa4Zampe = window.hasPerk && window.hasPerk(p, 'Corsa a 4 zampe');
+    const attiva4Zampe = !!p._corsaAQuattroZampeAttiva;
     const statsHtml = statiPerTS.map(s => {
         const mod = p.getStatDettagliata(s).mod;
         return `<span style="display:inline-block; min-width:60px; color:${mod>=0?'#2ecc71':'#e74c3c'};">${s.slice(0,3).toUpperCase()} ${mod>=0?'+':''}${mod}</span>`;
@@ -463,10 +514,16 @@ function renderSchedaSpedizioneRidotta(p, idx) {
                 <button class="btn-big" style="flex:1;" onclick="apriScheda(${idx})">📋 Scheda</button>
                 <button class="btn-big" style="flex:1; background:#16a085;" onclick="apriInventario(${idx})">🎒 Inventario</button>
             </div>
-            <details style="background:#111; border:1px solid #333; padding:10px; border-radius:6px;">
+            ${haCorsa4Zampe ? `
+            <button class="btn-big" style="width:100%; margin-bottom:10px; background:${attiva4Zampe ? '#c0392b' : '#8e7a3f'};" onclick="toggleCorsaAQuattroZampe(${idx})">
+                🐾 ${attiva4Zampe ? 'Torna in piedi' : 'Corsa a 4 zampe (+3m, blocca altre azioni)'}
+            </button>` : ''}
+            ${attiva4Zampe ? `<div style="color:#e67e22; font-size:0.8rem; margin-bottom:10px;">A 4 zampe: nessun'altra azione disponibile a parte Scheda e Inventario.</div>` : ''}
+                 <details style="background:#111; border:1px solid #333; padding:10px; border-radius:6px;">
                 <summary style="cursor:pointer; font-weight:bold;">Perk di combattimento</summary>
                 <div style="margin-top:8px;">${perkConDesc}</div>
             </details>
+            ${renderIncantesimiConosciutiHtml(p, idx)}
         </div>`;
 }
 
@@ -547,6 +604,51 @@ function rollArmiTrovate(diffLevel = 0) {
 
     return armi;
 }
+function renderIncantesimiConosciutiHtml(p, idx) {
+    const elenco = (typeof p.getIncantesimiConosciutiData === 'function') ? p.getIncantesimiConosciutiData() : [];
+    if (!elenco.length) return '';
+    const righe = elenco.map(sp => {
+        const costo = p.getSpellCost ? p.getSpellCost(sp.livello) : 0;
+        const modInfo = p.getModificatorePiuAltoPerSpell ? p.getModificatorePiuAltoPerSpell(sp) : null;
+        const modLabel = modInfo ? ` (${modInfo.nome} ${modInfo.mod >= 0 ? '+' : ''}${modInfo.mod})` : '';
+        return `<div style="margin-bottom:8px; padding-bottom:8px; border-bottom:1px solid #222; display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">
+            <div>
+                <strong style="color:#9b59b6;">${sp.nome}</strong>... <span style="color:#888; font-size:0.75rem;">(${sp.livello === 0 ? 'Trucchetto' : 'Lv'+sp.livello}, ${sp.categoria === 'cura' ? 'Cura' : (sp.categoria === 'utilita' ? 'Utilità' : 'Danni')}, ${costo} mana)</span>
+                <span style="color:#aaa; font-size:0.8rem;">${sp.desc}</span>
+            </div>
+            <button class="btn-hero" style="padding:4px 8px; font-size:0.75rem; flex-shrink:0;" onclick="window.consumaIncantesimoNominato(${idx}, '${sp.nome.replace(/'/g, "\\'")}')">Consuma</button>
+        </div>`;
+    }).join('');
+    return `<details style="background:#111; border:1px solid #333; padding:10px; border-radius:6px; margin-top:10px;">
+        <summary style="cursor:pointer; font-weight:bold; color:#9b59b6;">🪄 Incantesimi conosciuti</summary>
+        <div style="margin-top:8px;">${righe}</div>
+    </details>`;
+}
+window.renderIncantesimiConosciutiHtml = renderIncantesimiConosciutiHtml;
+
+window.consumaIncantesimoNominato = function(idx, nomeIncantesimo) {
+    const p = party[idx];
+    if (!p) return;
+    const spell = (typeof p.getSpellDataByName === 'function') ? p.getSpellDataByName(nomeIncantesimo) : null;
+    if (!spell) return;
+    p._nextCastIsCura = (spell.categoria === 'cura');
+    const result = p.castSpell(spell.livello);
+    p._nextCastIsCura = false;
+    if (!result.success) { alert(result.message); return; }
+    let esitoExtra = '';
+    const eff = spell.effetto || {};
+    if (eff.danno) {
+        const danno = (typeof rollDiceNotation === 'function') ? rollDiceNotation(eff.danno) : 0;
+        esitoExtra = ` Effetto: ${danno} danni da ${eff.dannoTipo || ''} (da applicare manualmente al bersaglio).`;
+    } else if (eff.tipo === 'buff_resistenza') {
+        esitoExtra = ` Effetto: resistenza a danni contundenti/perforanti/taglienti fino alla fine del prossimo turno.`;
+    }
+    mostraNotificaInAlto(`${p.nome} lancia "${spell.nome}". ${result.message}${esitoExtra}`, 'successo');
+    if (document.getElementById('modal-consuma-incantesimi')?.style.display === 'block') {
+        window.renderConsumaIncantesimiModal(idx);
+    }
+    if (typeof window.aggiornaInterfaccia === 'function') window.aggiornaInterfaccia();
+};
 
 window.apriConsumaIncantesimi = function(idx) {
     const p = party[idx];

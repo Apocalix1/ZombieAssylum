@@ -88,7 +88,7 @@ app.get('/api/party', authenticateUser, async (req, res) => {
     let characters = await db.all(`
       SELECT p.*, u.username AS owner_username
       FROM personaggi p JOIN utenti u ON u.id = p.user_id
-      WHERE p.status != 'morto' ORDER BY p.created_at DESC`);
+      WHERE p.status = 'vivo' ORDER BY p.created_at DESC`);
 
     characters = characters.map(c => {
       if (c.data && typeof c.data === 'string') {
@@ -163,7 +163,7 @@ app.get('/api/campi', authenticateUser, async (req, res) => {
   try {
     const db = await dbPromise;
     const campi = await db.all(`
-      SELECT c.*, (SELECT COUNT(*) FROM personaggi p WHERE p.campo_base_id = c.id AND p.status != 'morto') AS pg_attivi
+      SELECT c.*, (SELECT COUNT(*) FROM personaggi p WHERE p.campo_base_id = c.id AND p.status = 'vivo') AS pg_attivi
       FROM campi_base c ORDER BY c.id ASC
     `);
     res.json({ campi });
@@ -172,13 +172,54 @@ app.get('/api/campi', authenticateUser, async (req, res) => {
   }
 });
 
+function magazzinoVuoto() {
+  return {
+    materialiAlchemici: 0,
+    erbe: 0,
+    componentiElettronici: 0,
+    rottami: 0,
+    legname: 0,
+    tessuto: 0,
+    cibo: 0,
+    acqua: 0,
+    medicine: 0,
+    conserve: 0,
+    oreTotali: 0,
+    ciboAvariato: 0,
+    piattiDeliziosi: 0,
+    piattiDeliziosiPotenziati: 0,
+    piattiDeliziosiMaestria: 0,
+    ingranaggi: 0,
+    materialiMedici: { base: 0, avanzati: 0, critici: 0 },
+    postazioneAlchemica: false,
+    compounds: [],
+    composti: [],
+    congegniFissi: [],
+    congegniConteggio: {},
+    oggettiMagici: { comuni: 0, nonComuni: 0, rari: 0, superRari: 0 },
+    oggettiMagiciIstanze: [],
+    munizioni: { gomma: 0, reale: 0 },
+    batterie: 0,
+    cadaveriRobot: 0,
+    cadaveriUmani: 0,
+    stazioneRicarica: null,
+    consumabili: [],
+    libri: [],
+    armiTrovate: [],
+    armi: [],
+    oggetti: [],
+    logMovimenti: [],
+    smembramentoAbilitato: false
+  };
+}
+
 app.post('/api/campi', authenticateUser, requireMaster, async (req, res) => {
   const { nome } = req.body;
   if (!nome || !nome.trim()) return res.status(400).json({ error: 'Nome campo base richiesto' });
   try {
     const db = await dbPromise;
     const result = await db.run('INSERT INTO campi_base (nome) VALUES (?)', nome.trim());
-    await db.run('INSERT INTO magazzini (campo_base_id, data) VALUES (?, ?)', result.lastID, JSON.stringify({}));
+    await db.run('INSERT INTO magazzini (campo_base_id, data) VALUES (?, ?)', result.lastID, JSON.stringify(magazzinoVuoto()));
     const campo = await db.get('SELECT * FROM campi_base WHERE id = ?', result.lastID);
     res.json({ campo });
   } catch (error) {
@@ -194,11 +235,14 @@ app.delete('/api/campi/:id', authenticateUser, requireMaster, async (req, res) =
   if (isNaN(id) || id === 1) return res.status(400).json({ error: 'Impossibile eliminare questo campo base' });
   try {
     const db = await dbPromise;
-    const abitanti = await db.get("SELECT COUNT(*) AS n FROM personaggi WHERE campo_base_id = ? AND status != 'morto'", id);
-    if (abitanti.n > 0) {
-      return res.status(409).json({ error: 'Il campo base ha ancora personaggi attivi: spostali prima di eliminarlo.' });
-    }
+    // I personaggi vivi nel campo eliminato non vengono cancellati: passano "in attesa"
+    // nel menù del loro giocatore, pronti a rientrare scegliendo un nuovo campo base.
+    await db.run(
+      "UPDATE personaggi SET status = 'in_attesa' WHERE campo_base_id = ? AND status = 'vivo'",
+      id
+    );
     await db.run('DELETE FROM campi_base WHERE id = ?', id);
+    await db.run('DELETE FROM magazzini WHERE campo_base_id = ?', id);
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -351,7 +395,7 @@ app.get('/api/party', authenticateUser, async (req, res) => {
       characters = await db.all(`
         SELECT p.*, u.username AS owner_username
         FROM personaggi p JOIN utenti u ON u.id = p.user_id
-        WHERE p.status != 'morto' ORDER BY p.created_at DESC`);
+        WHERE p.status = 'vivo' ORDER BY p.created_at DESC`);
     } else {
       characters = [];
     }
