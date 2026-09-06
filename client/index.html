@@ -305,10 +305,11 @@
 
     <script>
     // Carica prima i database (non-moduli)
-    const dbScripts = [
+       const dbScripts = [
         { src: '/src/database/perks.js', module: false },
         { src: '/src/database/ricette.js', module: false },
-          { src: '/src/database/oggetti_magici.js', module: false }
+          { src: '/src/database/oggetti_magici.js', module: false },
+          { src: '/src/database/incantesimi.js', module: false }
     ];
     for (const s of dbScripts) {
         const el = document.createElement('script');

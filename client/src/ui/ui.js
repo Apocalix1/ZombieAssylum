@@ -95,33 +95,28 @@ window.mandaInGiocoDaLobby = async function(nome) {
     try {
         const stats = JSON.parse(localDataRaw);
         const p = Object.assign(new Personaggio(stats.nome, stats.giornoInizio || 0), stats);
-
-        // Retrocompatibilità: personaggi creati prima di questa feature non hanno campoBaseId salvato
-        let campoBaseId = stats.campoBaseId;
-        if (!campoBaseId) {
-            const campoScelto = await window.chiediCampoBase();
-            if (!campoScelto) return;
-            campoBaseId = campoScelto.id;
-        }
+        const campoScelto = await window.chiediCampoBase();
+        if (!campoScelto) return;
+        const campoBaseId = campoScelto.id;
 
         // Se ha già un ID, proviamo PUT per evitare il limite
-        if (p.id) {
+         if (p.id) {
              const res = await fetch(apiUrl(`/api/personaggi/${p.id}`), {
                 method: 'PUT',
                 headers: buildAuthHeaders({ 'Content-Type': 'application/json' }),
                 body: JSON.stringify({ data: JSON.stringify(p), status: 'vivo', campoBaseId })
             });
             if (res.ok) {
-                window.setCampoBaseCorrente({ id: campoBaseId, nome: stats.campoBaseNome || '' });
-                alert(`✅ ${nome} è stato riattivato con successo!`);
+                window.setCampoBaseCorrente({ id: campoBaseId, nome: campoScelto.nome || '' });
+                alert(`✅ ${nome} è stato riattivato con successo in "${campoScelto.nome}"!`);
                 renderCharacterList();
                 return;
             }
         }
 
         await salvaPersonaggioCloud(p, campoBaseId);
-        window.setCampoBaseCorrente({ id: campoBaseId, nome: stats.campoBaseNome || '' });
-        alert(`✅ ${nome} è stato mandato in gioco con successo!`);
+        window.setCampoBaseCorrente({ id: campoBaseId, nome: campoScelto.nome || '' });
+        alert(`✅ ${nome} è stato mandato in gioco con successo in "${campoScelto.nome}"!`);
         renderCharacterList();
     } catch (e) {
         alert('Errore: ' + e.message);
@@ -1593,9 +1588,10 @@ export function aggiornaInterfaccia() {
                                         ${hasPerk(p, 'Musicista') ? `<button onclick="apriMusicistaModal(${idx})">🎵 Suona</button>` : ''}
                                         ${user && user.role === 'master' ? `<button onclick="apriAumentaFollia(${idx})" style="background:#c0392b; color:white;">🧠 Aumenta Follia</button>` : ''}
                                         ${hasPerk(p, 'Produrre veleni') ? `<button onclick="produciVeleno(${idx})">🧪 Produci Veleno</button>` : ''}
-                                        <button onclick="apriMedica(${idx})" ${canUseMedicalAction ? '' : 'disabled'}>🩹 Medica</button>
+                                         <button onclick="apriMedica(${idx})" ${canUseMedicalAction ? '' : 'disabled'}>🩹 Medica</button>
                                         <button onclick="apriDiagnosiMalattia(${idx})">🩺 Diagnostica</button>
                                         <button onclick="apriCuraMalattia(${idx})">💊 Cura</button>
+                                        ${(p.incantesimi || []).includes('Creare cibo e Acqua') ? `<button onclick="window.lanciaCreaCiboAcqua(${idx})">🍞💧 Crea Cibo e Acqua</button>` : ''}
                                     `}
                                 </div>
                             </details>
@@ -1609,12 +1605,20 @@ export function aggiornaInterfaccia() {
                                 </div>
                             </details>
 
+                              
+
                             <details class="action-dropdown">
+                                <summary>ESPLORA</summary>
+                                <div class="dropdown-buttons">
+                                    <button onclick="spedisciPersonaggio(${idx})">Spedisci</button>
+                                    <button onclick="esplora(${idx})">Esplora</button>
+                                </div><details class="action-dropdown">
                                 <summary>MIGLIORA</summary>
                                 <div class="dropdown-buttons">
                                     <button onclick="allenamento(${idx})">Allenamento</button>
                                     <button onclick="studio(${idx})">Studio</button>
                                     <button onclick="apriDecifra(${idx})">Decifra</button>
+                                    ${(p.incantesimi || []).includes('Comprensione del Linguaggio') ? `<button onclick="window.lanciaComprensioneLinguaggio(${idx})">🗣️ Comprensione${p._comprensioneLinguaggioFinoA && (window.oreTotali||0) < p._comprensioneLinguaggioFinoA ? ' (attiva)' : ''}</button>` : ''}
                                 </div>
                             </details>
 
@@ -2900,7 +2904,7 @@ function togglePerk(nomePerk, forceRemove = false) {
                 const spec = mappaSpec[scelta] || 'Musicista';
                 const nuovoPerk = {...perkDati, nome: 'Artista', specializzazione: spec};
                 if (spec === 'Musicista') {
-                    const orecchioDati = getGlobalPerkData('Orecchio Fino') || {
+                    const orecchioDati = findPerkData('Orecchio Fino') || {
                         nome: 'Orecchio Fino',
                         desc: '',
                         costo: 0
@@ -3386,6 +3390,8 @@ async function renderCharacterList() {
 
     // 2. Per i non-master, filtra comunque lato client come doppia sicurezza
     let userChars = isMaster ? allChars : allChars.filter(c => c.user_id === user.id);
+    window._lobbyCharsById = window._lobbyCharsById || {};
+    userChars.forEach(c => { if (c.id) window._lobbyCharsById[c.id] = c; });
 
     // 3. Aggiungi eventuali personaggi salvati SOLO in locale (mai mandati in gioco)
     const localKey = `user_chars_${user.username}`;
@@ -3420,8 +3426,9 @@ async function renderCharacterList() {
     let html = '';
 
     // 5. Render dei personaggi vivi
-    vivi.forEach(c => {
+     vivi.forEach(c => {
     const isLocale = c.status === 'locale';
+    const isInAttesa = c.status === 'in_attesa';
     const isOwner = c.user_id === user.id;
     const canControl = isMaster || isOwner;
     const isCaricatoOra = party.some(p => p.nome === c.nome);
@@ -3430,6 +3437,8 @@ async function renderCharacterList() {
     let statusBadge;
     if (isLocale) {
         statusBadge = '<div style="font-size:0.85rem;color:#f1c40f;">🏠 Locale (non ancora in gioco)</div>';
+    } else if (isInAttesa) {
+        statusBadge = '<div style="font-size:0.85rem;color:#e67e22;">⏳ In attesa (nessun campo base assegnato)</div>';
     } else if (isCaricatoOra) {
         statusBadge = '<div style="font-size:0.85rem;color:#2ecc71;">✅ Attivo e caricato</div>';
     } else {
@@ -3439,8 +3448,10 @@ async function renderCharacterList() {
     const ruoloDestinazione = isMaster ? 'Master' : (window.isGuestUser && window.isGuestUser() ? 'Ospite' : 'Giocatore');
     const enterAction = isCaricatoOra
         ? `showGameScreen('${ruoloDestinazione}')`
-        : (isLocale ? `mandaInGiocoDaLobby('${c.nome}')` : `entraInGiocoDaLobby('${c.nome}', ${c.id})`);
-    const btnLabel = isCaricatoOra ? 'In Gioco' : (isLocale ? 'Manda in gioco' : 'Entra in gioco');
+        : (isLocale ? `mandaInGiocoDaLobby('${c.nome}')`
+          : (isInAttesa ? `riattivaPersonaggioInAttesa('${c.nome}', ${c.id})`
+          : `entraInGiocoDaLobby('${c.nome}', ${c.id})`));
+    const btnLabel = isCaricatoOra ? 'In Gioco' : (isLocale || isInAttesa ? 'Manda in gioco' : 'Entra in gioco');
 
     html += `
         <div class="lobby-char" style="background:#0f0f0f; padding:8px; border:1px solid #222; display:flex; justify-content:space-between; align-items:center;">

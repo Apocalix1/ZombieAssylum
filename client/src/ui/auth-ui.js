@@ -341,6 +341,39 @@ async function caricaPartyOspite() {
     }
 }
 
+window.riattivaPersonaggioInAttesa = async function(nome, id) {
+    const user = getCurrentUser();
+    if (!user) return alert('Devi essere loggato.');
+    if (user.role !== 'master') {
+        const viviUser = party.filter(p => p.user_id === user.id);
+        if (viviUser.length >= 3) {
+            return alert('Puoi avere massimo 3 personaggi in gioco alla volta.');
+        }
+    }
+    const cached = window._lobbyCharsById && window._lobbyCharsById[id];
+    if (!cached) return alert('Dati del personaggio non disponibili, ricarica la lobby.');
+
+    const campoScelto = await window.chiediCampoBase();
+    if (!campoScelto) return;
+
+    try {
+        const res = await fetch(apiUrl(`/api/personaggi/${id}`), {
+            method: 'PUT',
+            headers: buildAuthHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify({ data: JSON.stringify(cached.data || {}), status: 'vivo', campoBaseId: campoScelto.id })
+        });
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error(err.error || 'Errore riattivazione personaggio');
+        }
+        window.setCampoBaseCorrente({ id: campoScelto.id, nome: campoScelto.nome });
+        alert(`✅ ${nome} è stato rimandato in gioco a "${campoScelto.nome}".`);
+        renderCharacterList();
+    } catch (e) {
+        alert('Errore: ' + e.message);
+    }
+};
+
 window.masterEliminaPersonaggio = async function(idx) {
     const p = party[idx];
     if (!p) return;

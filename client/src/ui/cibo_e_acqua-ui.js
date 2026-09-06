@@ -778,6 +778,42 @@ window.nutriBiocarburante = function(idx) {
     aggiornaInterfaccia();
 };
 
+window.lanciaCreaCiboAcqua = function(idx) {
+    const p = party[idx];
+    if (!p || !(p.incantesimi || []).includes('Creare cibo e Acqua')) return;
+    p._nextCastIsCura = false;
+    const check = p.canCastSpell ? p.canCastSpell(3) : { allowed: true, cost: p.getSpellCost(3) };
+    if (!check.allowed) { alert(check.reason); return; }
+
+    p.initInventarioBase();
+    const extraCiboStr = prompt(`${p.nome}: quante unità EXTRA di cibo vuoi creare oltre a quella base? (verranno prelevate dal tuo inventario personale, con perdita del 15%)`, '0');
+    const extraCibo = Math.max(0, parseFloat(extraCiboStr) || 0);
+    if (extraCibo > (p.inventario.cibo || 0)) return alert('Non hai abbastanza cibo personale da convertire.');
+
+    const extraAcquaStr = prompt(`Quante unità EXTRA di acqua vuoi creare oltre a quella base? (perdita 15%)`, '0');
+    const extraAcqua = Math.max(0, parseFloat(extraAcquaStr) || 0);
+    if (extraAcqua > (p.inventario.acqua || 0)) return alert('Non hai abbastanza acqua personale da convertire.');
+
+    const result = p.castSpell(3);
+    if (!result.success) { alert(result.message); return; }
+
+    let ciboCreato = 3; // base gratuita
+    let acquaCreata = 3; // base gratuita
+    if (extraCibo > 0) {
+        p.inventario.cibo -= extraCibo;
+        ciboCreato += extraCibo * 0.85;
+    }
+    if (extraAcqua > 0) {
+        p.inventario.acqua -= extraAcqua;
+        acquaCreata += extraAcqua * 0.85;
+    }
+    p.inventario.cibo = (p.inventario.cibo || 0) + ciboCreato;
+    p.inventario.acqua = (p.inventario.acqua || 0) + acquaCreata;
+
+    mostraNotificaInAlto(`${p.nome} crea ${ciboCreato.toFixed(2)} cibo e ${acquaCreata.toFixed(2)} acqua con "Creare cibo e Acqua". ${result.message}`, 'successo');
+    salvaPersonaggioCloud(p);
+    aggiornaInterfaccia();
+};
 
 window.riduciRisorsaMaster = riduciRisorsaMaster;
 window.openRisorsaModal = openRisorsaModal;

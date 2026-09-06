@@ -669,14 +669,35 @@ function completaStudioBookAction(p, action) {
                     p.sogliaIncantesimiRisposte[s.liv] = true;
                     const nomeLivello = s.liv === 0 ? 'un Trucchetto' : `un Incantesimo di Livello ${s.liv}`;
                     const vuole = confirm(`${p.nome} ha accumulato abbastanza ore di studio per imparare ${nomeLivello}. Vuoi impararlo ora?`);
-                    if (vuole) {
+                     if (vuole) {
                         if (p.livelloMagia === 0 && s.liv > 0) {
                             alert(`${p.nome} deve prima imparare un Trucchetto per sbloccare la magia. Riprova quando raggiungerai un'altra soglia.`);
                             p.sogliaIncantesimiRisposte[s.liv] = false;
                             return;
                         }
+                        if ((p.spellsKnown[s.liv] || 0) >= p.getMaxKnownSpells(s.liv)) {
+                            alert(`${p.nome} non ha più spazio per nuovi incantesimi/trucchetti (limite 6 + mod. incantatore, pesato per livello). Riprova dopo aver liberato spazio.`);
+                            p.sogliaIncantesimiRisposte[s.liv] = false;
+                            return;
+                        }
+                          const disponibiliLv = (window.getSpellDatabaseFlat ? window.getSpellDatabaseFlat() : [])
+                            .filter(sp => sp.livello === s.liv && !(p.incantesimi || []).includes(sp.nome)
+                                && (p.soddisfaRequisitoIncantesimo ? p.soddisfaRequisitoIncantesimo(sp) : true));
+                        let nomeScelto = null;
+                        if (disponibiliLv.length > 0) {
+                            const lista = disponibiliLv.map((sp, i) => `${i}) ${sp.nome} — ${sp.desc}`).join('\n');
+                            const sceltaStr = prompt(`Quale incantesimo/trucchetto vuoi imparare? (mostrati solo quelli per cui hai almeno 12 nella caratteristica richiesta)\n${lista}`, '0');
+                            const idxScelta = parseInt(sceltaStr);
+                            if (!isNaN(idxScelta) && disponibiliLv[idxScelta]) nomeScelto = disponibiliLv[idxScelta].nome;
+                        } else {
+                            mostraNotificaInAlto(`${p.nome} non soddisfa i requisiti di caratteristica (≥12) per nessun incantesimo/trucchetto disponibile a questo livello.`, 'avviso');
+                        }
+                        if (nomeScelto) {
+                            p.incantesimi = p.incantesimi || [];
+                            p.incantesimi.push(nomeScelto);
+                        }
                         p.spellsKnown[s.liv] = (p.spellsKnown[s.liv] || 0) + 1;
-                        const costoBase = p.getSpellCost ? p.getSpellCost(s.liv) : [1, 2, 4, 7, 11][s.liv];
+                        const costoBase = p.getSpellCost ? p.getSpellCost(s.liv) : [1, 3, 7, 14, 25][s.liv];
                         const puntiConoscenza = costoBase * 2;
                         p.puntiConoscenzaMagica = (p.puntiConoscenzaMagica || 0) + puntiConoscenza;
                         if (p.livelloMagia === 0) {
@@ -687,7 +708,7 @@ function completaStudioBookAction(p, action) {
                         if (typeof window.applicaScalataLivelloMagia === 'function') {
                             window.applicaScalataLivelloMagia(p);
                         }
-                        mostraNotificaInAlto(`✨ ${p.nome} ha imparato ${nomeLivello}! (+${puntiConoscenza} Punti Conoscenza Magica)`, 'successo');
+                         mostraNotificaInAlto(`✨ ${p.nome} ha imparato ${nomeScelto || nomeLivello}! (+${puntiConoscenza} Punti Conoscenza Magica)`, 'successo');
                     }
                 }
             });
@@ -1186,8 +1207,49 @@ function personaggioConosceLingua(p, lingua) {
     const l = lingua.toLowerCase();
     if (l === 'comune' || l === 'verbum') return true;
     if (p && p.hasPerk && p.hasPerk('Traduttore')) return true;
+    if (p && p._comprensioneLinguaggioFinoA && (window.oreTotali || 0) < p._comprensioneLinguaggioFinoA) return true;
     return !!(p && p.lingue && p.lingue.map(x => x.toLowerCase()).includes(l));
 }
+
+window.lanciaComprensioneLinguaggio = function(idx) {
+    const p = party[idx];
+    if (!p || !(p.incantesimi || []).includes('Comprensione del Linguaggio')) return;
+    p._nextCastIsCura = false;
+    const result = p.castSpell(1);
+    if (!result.success) { alert(result.message); return; }
+    p._comprensioneLinguaggioFinoA = (window.oreTotali || 0) + 1;
+    mostraNotificaInAlto(`${p.nome} lancia Comprensione del Linguaggio: per 1 ora comprende ogni lingua. ${result.message}`, 'successo');
+    salvaPersonaggioCloud(p);
+    aggiornaInterfaccia();
+};
+
+// Se il personaggio conosce l'incantesimo ma non conosce naturalmente la lingua richiesta da
+// un'azione lunga (più ore), tenta di far ricastare automaticamente la spell all'inizio
+// dell'azione stessa se il buff non è già attivo, invece di lasciarlo procedere alla cieca.
+function assicuraComprensioneLinguaggioPerAzioneLunga(p, lingua) {
+    if (!p || !lingua) return true;
+    if (personaggioConosceLingua(p, lingua)) return true; // già capisce (nativa o buff attivo)
+    if (!(p.incantesimi || []).includes('Comprensione del Linguaggio')) return false; // non può fare nulla
+    const check = p.canCastSpell ? p.canCastSpell(1) : { allowed: true };
+    if (!check.allowed) {
+        if (typeof window.mostraNotificaInAlto === 'function') {
+            window.mostraNotificaInAlto(`${p.nome} non conosce "${lingua}" e non può ricastare Comprensione del Linguaggio: ${check.reason}`, 'avviso');
+        }
+        return false;
+    }
+    p._nextCastIsCura = false;
+    const result = p.castSpell(1);
+    if (!result.success) {
+        if (typeof window.mostraNotificaInAlto === 'function') window.mostraNotificaInAlto(result.message, 'avviso');
+        return false;
+    }
+    p._comprensioneLinguaggioFinoA = (window.oreTotali || 0) + 1;
+    if (typeof window.mostraNotificaInAlto === 'function') {
+        window.mostraNotificaInAlto(`${p.nome} ricasta automaticamente Comprensione del Linguaggio per continuare a capire "${lingua}".`, 'info');
+    }
+    return true;
+}
+window.assicuraComprensioneLinguaggioPerAzioneLunga = assicuraComprensioneLinguaggioPerAzioneLunga;
 
 function partyConosceLingua(lingua, extra = []) {
     const lingue = [lingua, ...(extra || [])];
