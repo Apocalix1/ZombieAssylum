@@ -222,10 +222,11 @@ function avviaCreazione_Alchimia(idx, nomeRicetta, grado) {
     }
 
     const candidatiCollab = window.party.filter((q, i) => {
-        if (i === idx) return false;
-        const rating = q.getSkillRating ? q.getSkillRating('Natura') : 0;
-        return rating >= 1;
-    });
+    if (i === idx) return false;
+    if (!!q.inSpedizione !== !!p.inSpedizione) return false;
+    const rating = q.getSkillRating ? q.getSkillRating('Natura') : 0;
+    return rating >= 1;
+});
 
     let collaboratore = null;
     let cdRiduzione = 0;

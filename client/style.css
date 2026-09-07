@@ -961,19 +961,22 @@ button[style*="c0392b"], button[onclick*="elimina" i], button[onclick*="Elimina"
     *, *::before, *::after { max-width: 100%; }
 
     .modal-content.creatore-fullscreen {
-        padding: 0.8rem 0.6rem;
-        max-height: 96dvh;
-        width: 98vw;
-    }
-    .creazione-grid {
-        grid-template-columns: 1fr;
-        gap: 0.8rem;
-        max-height: 70vh;
-        overflow-y: auto;
-    }
-    .stats-panel { max-height: 40vh; }
-    .perks-panel { max-height: 50vh; }
-    #perks-setup-container { height: auto; max-height: 50vh; }
+    padding: 0.6rem 0.5rem;
+    max-height: 98dvh;
+    height: 98dvh;
+    width: 99vw;
+    min-height: 0;
+}
+.creazione-grid {
+    grid-template-columns: 1fr;
+    gap: 0.6rem;
+    max-height: none;
+    height: 100%;
+    overflow-y: visible;
+}
+.stats-panel { max-height: 38vh; min-height: 0; }
+.perks-panel { max-height: 48vh; min-height: 0; }
+#perks-setup-container { height: auto; max-height: 48vh; min-height: 0; }
 }
 
 /* =============================================================

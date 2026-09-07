@@ -413,6 +413,7 @@ function renderSchedaCombattimentoMaster(p, idx) {
                 <button onclick="segnaVittoria(${idx})">Segna vittoria</button>
               ${isMaster ? `<button onclick="masterAggiungiOggetto(${idx})" style="background:#8e44ad;">🎁 Dai loot</button>` : ''}
                 ${(p.livelloMagia > 0 && Object.values(p.spellsKnown || {}).some(v => v > 0)) ? `<button onclick="apriConsumaIncantesimi(${idx})">🪄 Magia</button>` : ''}
+                ${(p.livelloMagia > 0) ? `<button onclick="apriElencoIncantesimi(${idx})">📖 Elenco Incantesimi</button>` : ''}
                 ${(p.inventario && p.inventario.composti && p.inventario.composti.length > 0) ? `<button onclick="apriConsumaComposti(${idx})">🧪 Composti</button>` : ''}
                 ${(() => {
                     let extras = '';
@@ -469,6 +470,52 @@ window.usaCaricaFuocoDemoniaco = function(idx) {
     salvaPersonaggioCloud(p);
     renderSpedizioneModal();
     aggiornaInterfaccia();
+};
+
+window.apriElencoIncantesimi = function(idx) {
+    const p = party[idx];
+    if (!p) return;
+    let modal = document.getElementById('modal-elenco-incantesimi');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'modal-elenco-incantesimi';
+        modal.className = 'modal';
+        modal.innerHTML = `
+            <div class="modal-content" style="max-width:560px;">
+                <h2 style="color:#8e44ad;">📖 Tutti gli Incantesimi</h2>
+                <div id="elenco-incantesimi-content" style="text-align:left; max-height:480px; overflow-y:auto; background:#111; padding:10px; border:1px solid #333;"></div>
+                <div class="modal-footer">
+                    <button class="btn-big btn-cancel" onclick="chiudiModal('modal-elenco-incantesimi')">CHIUDI</button>
+                </div>
+            </div>`;
+        document.body.appendChild(modal);
+    }
+    const container = document.getElementById('elenco-incantesimi-content');
+    const db = window.DATABASE_INCANTESIMI || {};
+    const conosciuti = p.incantesimi || [];
+    let html = '';
+    Object.entries(db).forEach(([categoria, elenco]) => {
+        (elenco || []).forEach(sp => {
+            const isConosciuto = conosciuti.includes(sp.nome);
+            let extra = '';
+            if (isConosciuto) {
+                const { cd, tiro } = p.getSpellCDeTiroAbilita(sp);
+                if (sp.cd === true) extra += `<span style="color:#e67e22;">CD ${cd}</span> `;
+                if (sp.tiro_abilita === true) extra += `<span style="color:#3498db;">Tiro abilità ${tiro >= 0 ? '+' : ''}${tiro}</span>`;
+            }
+            html += `
+                <div style="background:${isConosciuto ? '#1a1a2e' : '#161616'}; padding:8px; margin-bottom:6px; border-left:3px solid ${isConosciuto ? '#9b59b6' : '#444'}; border-radius:4px;">
+                    <div style="display:flex; justify-content:space-between; gap:8px;">
+                        <strong style="color:${isConosciuto ? '#fff' : '#888'};">${sp.nome}</strong>
+                        <span style="font-size:0.78rem; color:#888;">(${sp.livello === 0 ? 'Trucchetto' : 'Lv'+sp.livello}, ${categoria})</span>
+                    </div>
+                    <div style="color:#aaa; font-size:0.8rem; margin-top:2px;">${sp.desc}</div>
+                    ${isConosciuto ? `<div style="margin-top:4px; font-size:0.85rem;">${extra}</div>` : `<div style="margin-top:4px; font-size:0.75rem; color:#555;">Non conosciuto</div>`}
+                </div>`;
+        });
+    });
+    container.innerHTML = html || '<p style="color:#aaa;">Nessun incantesimo nel database.</p>';
+    modal.style.display = 'block';
 };
 
 function renderSchedaSpedizioneRidotta(p, idx) {

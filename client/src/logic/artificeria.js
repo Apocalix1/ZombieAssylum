@@ -237,6 +237,17 @@ export const ARTIFICER_RECIPES = [
         time: { hours: 4 },
         specialization: { Balistica: 3 }
     },
+    {
+         id: 'lingua_di_fuoco',
+        name: 'Lingua di Fuoco',
+        category: 'Potenziamento Armi',
+        difficulty: 'Difficile',
+        outerHeight: 'equipaggiamento',
+        description:'Puoi implementare in un arma da mischia la capacità di andare a fuoco con una reazione. L arma ha 3 cariche, le quali ognuna fa durare la fiamma per  1 minuto.  Quando l arma è in fiamme infligge 1d4 danni da fuoco in più',
+        cost:{ingranggi : 60},
+        time:{hours: 6},
+        specialization:{Balistica: 4}
+    },
 
     // === ROBOT & MECCANICA AVANZATA ===
     {
@@ -330,7 +341,7 @@ export const ARTIFICER_RECIPES = [
         cost: { ingranaggi: 10 },
         time: { hours: 1 },
         specialization: { Balistica: 2 }
-    }
+    },
 ];
 
 
