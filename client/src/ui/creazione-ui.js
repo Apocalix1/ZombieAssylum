@@ -523,17 +523,20 @@ async function confermaCreazione(directAdd = window._directAdd || false) {
 
     // Se è Master, crea sempre direttamente (senza limiti)
         if (isMasterUser) {
-        try {
-            const response = await fetch(apiUrl('/api/characters'), {
-                method: 'POST',
-                headers: buildAuthHeaders({ 'Content-Type': 'application/json' }),
-                body: JSON.stringify({
-                    nome: window.tempP.nome,
-                    classe: window.tempP.classe || 'Sopravvissuto',
-                    data: JSON.stringify(window.tempP),
-                    updated_at: new Date().toISOString()
-                })
-            });
+    try {
+        const campoAttuale = window.getCampoBaseId ? window.getCampoBaseId() : 1;
+        window.tempP.campoBaseId = campoAttuale;
+        const response = await fetch(apiUrl('/api/characters'), {
+            method: 'POST',
+            headers: buildAuthHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify({
+                nome: window.tempP.nome,
+                classe: window.tempP.classe || 'Sopravvissuto',
+                data: JSON.stringify(window.tempP),
+                updated_at: new Date().toISOString(),
+                campoBaseId: campoAttuale
+            })
+        });
             if (!response.ok) {
                 const errData = await response.json().catch(() => ({}));
                 throw new Error(errData.error || 'Errore sconosciuto durante la creazione');
@@ -657,6 +660,54 @@ function eseguiRicercaPerkSuInvio(evento, valore) {
         renderSetupPerks();
     }
 
+    function renderIncantesimiTab(p) {
+    if (!p) return '';
+    const puoScegliere = !p.isRobot || hasGlobalPerk(p, 'Incantatore');
+    if (!puoScegliere) {
+        return `<div style="padding:14px; background:#111; border:1px solid #333; border-radius:8px; color:#ddd;">
+            I robot possono conoscere incantesimi solo con il perk "Incantatore".
+        </div>`;
+    }
+    if ((p.livelloMagia || 0) < 1) {
+        return `<div style="padding:14px; background:#111; border:1px solid #333; border-radius:8px; color:#e67e22;">
+            Devi avere almeno 1 Livello di Magia (sezione Magia e Mana) per poter scegliere incantesimi.
+        </div>`;
+    }
+    const conosciuti = p.incantesimi || [];
+    const disponibili = getSpellDatabaseFlat().filter(sp => sp.livello <= p.livelloMagia);
+    let html = `<div style="background:#111; border:1px solid #333; border-radius:8px; padding:12px;">
+        <div style="font-size:0.95rem; margin-bottom:12px; color:#f1c40f; font-weight:bold;">INCANTESIMI (Lv ≤ ${p.livelloMagia})</div>
+        <div style="display:grid; gap:10px;">`;
+    disponibili.forEach(sp => {
+        const conosciuto = conosciuti.includes(sp.nome);
+        const costo = SPELL_KNOWLEDGE_COST[sp.livello] || 0;
+        const maxKnow = p.getMaxKnownSpells ? p.getMaxKnownSpells(sp.livello) : 0;
+        const attuali = (p.spellsKnown && p.spellsKnown[sp.livello]) || 0;
+        const soddisfaReq = p.soddisfaRequisitoIncantesimo ? p.soddisfaRequisitoIncantesimo(sp) : true;
+        const canAfford = !conosciuto && p.puntiCreazione >= costo && attuali < maxKnow && soddisfaReq;
+        html += `
+            <div class="stat-row" style="font-size:0.82rem; padding:12px; background:#161616; border:1px solid #222; border-radius:6px; display:flex; gap:12px; align-items:flex-start; justify-content:space-between;">
+                <div style="flex:1; text-align:left;">
+                    <div style="font-weight:bold; color:#fff;">${sp.nome} <span style="font-size:0.8rem; color:#aaa;">(${sp.livello === 0 ? 'Trucchetto' : 'Lv'+sp.livello}, ${costo} PT)</span></div>
+                    <div style="color:#ccc; margin-top:4px; line-height:1.4;">${sp.desc || ''}</div>
+                    <div style="color:${soddisfaReq ? '#666' : '#e74c3c'}; font-size:0.75rem; margin-top:4px;">Richiede: ${(sp.modificatore || []).join(' o ')} ≥ 12${soddisfaReq ? '' : ' — NON SODDISFATTO'}</div>
+                </div>
+                <div style="display:flex; gap:8px; align-items:center; flex-shrink:0;">
+                    ${!conosciuto ? `
+                        <button onclick="aggiungiIncantesimoScelta('${sp.nome.replace(/'/g, "\\'")}')"
+                                style="padding:10px 14px !important; min-width:100px; background:#27ae60; color:#fff !important; border:none !important; border-radius:6px; opacity:${canAfford ? '1' : '0.45'}; cursor:${canAfford ? 'pointer' : 'not-allowed'};"
+                                ${canAfford ? '' : 'disabled'}>PRENDI</button>
+                    ` : `
+                        <button onclick="rimuoviIncantesimoScelta('${sp.nome.replace(/'/g, "\\'")}')"
+                                style="padding:10px 14px !important; min-width:100px; background:#c0392b; color:#fff !important; border:none !important; border-radius:6px;">RIMUOVI</button>
+                    `}
+                </div>
+            </div>`;
+    });
+    html += `</div></div>`;
+    return html;
+}
+
 export function renderSetupPerks() {
     const container = document.getElementById('perks-setup-container');
     if (!container) return;
@@ -672,7 +723,7 @@ export function renderSetupPerks() {
         const categoryOrder = [
         'background', 'competenze base', 'carisma e sociale', 'combattimento',
         'fisico e salute', 'Personalità e Fobie', 'magici', 'razziali',
-        'sopravvivenza', 'studio', 'medicina'
+        'sopravvivenza', 'studio', 'medicina','incantesimi'
     ];
     const isOktavia = !!(window.tempP && window.tempP.nome && window.tempP.nome.trim().toLowerCase() === 'oktavia');
     if (isOktavia) categoryOrder.push('oktavia');
@@ -687,6 +738,7 @@ export function renderSetupPerks() {
         magici: 'MAGICI',
         razziali: 'RAZZIALI',
         sopravvivenza: 'SOPRAVVIVENZA',
+        incantesimi: 'INCANTESIMI',
         studio: 'STUDIO',
         medicina: 'MEDICINA',
         robotici: 'ROBOTICI',
@@ -712,7 +764,7 @@ export function renderSetupPerks() {
         }).join('');
     } else {
         categoryOrder.forEach(cat => {
-            if (!perkDb[cat] || perkDb[cat].length === 0) return;
+            if (cat !== 'incantesimi' && (!perkDb[cat] || perkDb[cat].length === 0)) return;
             const active = (cat === categoriaCorrente && !searchQuery) ? 'background:#27ae60; color:#111;' : 'background:#222; color:#fff;';
             categoryButtonsHtml += `
                 <button class="btn-big" style="padding:8px 10px; font-size:0.8rem; ${active} border:1px solid #333;"
@@ -734,7 +786,8 @@ export function renderSetupPerks() {
             categoriesToRender = categoriesToRender.filter(c => c === categoriaCorrente);
         }
     } else {
-        categoriesToRender = categoryOrder.filter(cat => {
+         categoriesToRender = categoryOrder.filter(cat => {
+            if (cat === 'incantesimi') return !searchQuery && cat === categoriaCorrente;
             if (!perkDb[cat] || perkDb[cat].length === 0) return false;
             if (!searchQuery) return cat === categoriaCorrente;
             return perkDb[cat].some(p =>
@@ -787,6 +840,7 @@ export function renderSetupPerks() {
         `;
     } else {
         categoriesToRender.forEach(cat => {
+            if (cat === 'incantesimi') { html += renderIncantesimiTab(window.tempP); return; }
             const categoryTitle = labelMap[cat] || cat.toUpperCase();
             let perks = perkDb[cat] || [];
 
@@ -1076,14 +1130,18 @@ function gestisciDigitazionePerk(valore) {
     }
     window.getSpellDatabaseFlat = getSpellDatabaseFlat;
 
-     function aggiungiIncantesimoScelta(nome) {
-        const p = window.tempP;
-        if (!p) return;
-        if (p.isRobot && !hasGlobalPerk(p, 'Incantatore')) {
-            alert('I robot possono conoscere incantesimi solo con il perk "Incantatore".');
-            return;
-        }
-        const spell = getSpellDatabaseFlat().find(s => s.nome === nome);
+    function aggiungiIncantesimoScelta(nome) {
+    const p = window.tempP;
+    if (!p) return;
+    if (p.isRobot && !hasGlobalPerk(p, 'Incantatore')) {
+        alert('I robot possono conoscere incantesimi solo con il perk "Incantatore".');
+        return;
+    }
+    if (!p.isRobot && (p.livelloMagia || 0) < 1) {
+        alert('Devi avere almeno 1 Livello di Magia per poter scegliere un incantesimo.');
+        return;
+    }
+    const spell = getSpellDatabaseFlat().find(s => s.nome === nome);
         if (!spell) return;
         if (spell.livello > p.livelloMagia) { alert('Devi sbloccare un livello di magia più alto per poter scegliere questo incantesimo.'); return; }
         if (p.soddisfaRequisitoIncantesimo && !p.soddisfaRequisitoIncantesimo(spell)) {

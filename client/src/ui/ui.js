@@ -2237,7 +2237,7 @@ function visualizzaPerk(idx) {
     html += `<div style="margin-bottom:14px; background:#1a1a1a; padding:10px; border:1px solid #333; border-radius:6px;">
         <div style="color:#f1c40f; font-weight:bold; margin-bottom:8px;">MEDICINA</div>
         <div style="color:#aaa; font-size:0.9rem; margin-bottom:8px;">La tabella Medicina mostra i progressi di trattamento curativo.</div>`;
-    MEDICINA_LIVELLI.forEach(entry => {
+      MEDICINA_LIVELLI.filter(entry => entry.livello <= (p.livelloMedicina || 0)).forEach(entry => {
         html += `<div style="background:#111; padding:8px; margin-bottom:6px; border-left:3px solid #16a085; border-radius:3px; text-align:left;">
             <div style="color:#16a085; font-weight:bold;">Livello ${entry.livello}</div>
             <div style="color:#ccc; font-size:0.9rem;">${entry.effetto}</div>

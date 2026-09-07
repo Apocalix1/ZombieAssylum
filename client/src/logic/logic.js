@@ -1099,7 +1099,10 @@ export class Personaggio {
     }
 
       getTotalSpellSlots() {
-        return 6 + this.getCastingModifier();
+        if (this.hasPerk('Pessima memoria')) {
+            return 2 + this.getCastingModifier() + this.livelloMagia;
+        }
+        return 4 + this.getCastingModifier()+this.livelloMagia;
     }
 
      getSpellDataByName(nome) {
@@ -1111,11 +1114,16 @@ export class Personaggio {
         return null;
     }
 
-    // Verifica se il personaggio soddisfa il requisito di caratteristica dell'incantesimo:
-    // deve avere ALMENO 12 in una delle caratteristiche richieste (o nessun requisito se "Qualsiasi").
+     _spellRichiedeQualsiasi(spell) {
+        if (!spell || !Array.isArray(spell.modificatore)) return false;
+        const mods = spell.modificatore.map(m => (m || '').toLowerCase());
+        if (mods.includes('qualsiasi')) return true;
+        return ['intelligenza', 'saggezza', 'carisma'].every(r => mods.includes(r));
+    }
+
     soddisfaRequisitoIncantesimo(spell) {
         if (!spell || !Array.isArray(spell.modificatore) || spell.modificatore.length === 0) return true;
-        if (spell.modificatore.some(m => (m || '').toLowerCase() === 'qualsiasi')) return true;
+        if (this._spellRichiedeQualsiasi(spell)) return true;
         return spell.modificatore.some(stat => {
             const det = this.getStatDettagliata(stat);
             return det && det.valore >= 12;
@@ -1124,9 +1132,10 @@ export class Personaggio {
 
     // Tra le caratteristiche richieste dall'incantesimo, ritorna quella con valore/mod più alto sul personaggio
     // (usata per mostrare "(Attributo +mod)" nell'elenco). Se "Qualsiasi", usa la caratteristica incantatore.
-    getModificatorePiuAltoPerSpell(spell) {
+        getModificatorePiuAltoPerSpell(spell) {
         if (!spell) return null;
-        let candidati = Array.isArray(spell.modificatore) ? spell.modificatore.filter(m => (m || '').toLowerCase() !== 'qualsiasi') : [];
+        let candidati = this._spellRichiedeQualsiasi(spell)
+            ? [] : (Array.isArray(spell.modificatore) ? spell.modificatore.filter(m => (m || '').toLowerCase() !== 'qualsiasi') : []);
         if (candidati.length === 0) {
             const attr = this.getCastingAttribute();
             return { nome: attr, mod: this.getStatDettagliata(attr).mod };
@@ -2025,6 +2034,17 @@ export class Personaggio {
         return this.livelloMagia >= 5 || normalized.includes('arcano');
     }
 
+    getBonusIncantatoreArcano() {
+        return (this.livelloMagia || 0) >= 5 ? this.getBonusCompetenza() : 0;
+    }
+
+    getSpellCDeTiroAbilita(spell) {
+        const modInfo = this.getModificatorePiuAltoPerSpell(spell);
+        const modBase = modInfo ? modInfo.mod : 0;
+        const bonusArcano = this.getBonusIncantatoreArcano();
+        return { modInfo, cd: 8 + modBase + bonusArcano, tiro: modBase + bonusArcano };
+    }
+
     getManaMaxFromLevel(livello) {
         const manaPerLivello = [0, 4, 6, 9, 12, 16];
         const base = manaPerLivello[Math.min(Math.max(0, livello), manaPerLivello.length - 1)] || 0;
@@ -2181,6 +2201,9 @@ export class Personaggio {
                     }
                 }
             });
+        }
+        if (skillKey === 'arcano' && (this.livelloMagia || 0) >= 3) {
+            punteggioAbilita += 1;
         }
             if (this.competenze && Array.isArray(this.competenze)) {
             if (this.competenze.map(c => c.toLowerCase().trim()).includes(skillKey)) {

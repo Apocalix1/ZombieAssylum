@@ -318,6 +318,11 @@ window.aiutoMedico_ChiediAltro = function() {
 window.curaTarget = function(targetIdx, tipo = 'cura') {
     const medico = window.party[medicoCorrente];
     const target = window.party[targetIdx];
+    if (!medico || !target) return;
+    if (!!medico.inSpedizione !== !!target.inSpedizione) {
+        alert('Puoi curare solo chi si trova nel tuo stesso luogo (entrambi in spedizione o entrambi in campo base).');
+        return;
+    }
     const req = getMedicalData(target.woundState, tipo, target);
     if (!req) return;
     if (medico.livelloMedicina < req.lvReq) {

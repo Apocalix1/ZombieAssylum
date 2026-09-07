@@ -12,6 +12,8 @@ const RICETTE = {
     media: [
         { nome: "Unguento Coagulante", cd: 16, costo: 12, tempo: 6, desc: "Rimuove l'effetto Sanguinante. Durante medicazione su ferita grave riduce la CD della prova di 4.", effetto: { tipo: 'rimuovi_sanguinante', bonus_med: -4 } },
         { nome: "Bendaggio Coagulante", cd: 16, costo: 12, tempo: 6, desc: "Bende che riducono del 20% il tempo di rigenerazione del prossimo PF Reale.", effetto: { tipo: 'riduzione_tempo_rigenerazione', percent: 20 } },
+        {nome:"Pillole della memoria pessima", cd: 16, costo: 12, tempo: 6, desc: "Puoi dimenticare instantaneamente un incantesimo. Riduce il tuo modificatore da incantatore di -1 per due ore.", effetto:{tipo:'pessima_memoria'}},
+        {nome:"Pillore della memoria ottima", cd: 16, costo: 12, tempo: 6, desc: "Puoi ressettare il tempo in cui stavi per dimenticare i tuoi incantesimi", effetto:{tipo:'ottima_memoria'}},
         { nome: "Tonico Rigenerante", cd: 16, costo: 12, tempo: 6, desc: "Rigenera 1d4 Punti Mana.", effetto: { tipo: 'rigenera_mana', dado: '1d4' } },
         { nome: "Tonico dei Riflessi", cd: 16, costo: 12, tempo: 6, desc: "+3 Iniziativa, +1 CA e +5 PF Fortuna temporanei per 1 ora.", effetto: { tipo: 'bonus_iniziativa_ca_pf', iniziativa: 3, ca: 1, pf: 5, durata: 1 } },
         { nome: "Crema Pietrosa", cd: 16, costo: 12, tempo: 6, desc: "+3 CA contro il prossimo attacco, ma -3m movimento per il turno successivo.", effetto: { tipo: 'crema_pietrosa', ca: 3, slow: 3 } },
