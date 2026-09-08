@@ -574,6 +574,24 @@ function depositaRisorsa(idx, key) {
     depositaInMagazzino(idx, key, amount);
 }
 
+window.usaCaricaFuocoCucina = function(idx) {
+    const p = party[idx];
+    if (!p || !(window.hasPerk && window.hasPerk(p, 'Origine demoniaca'))) return;
+    if (!(p.origineDemonicaCaricheTimers || []).length) {
+        alert('Nessuna carica di fuoco demoniaco disponibile.');
+        return;
+    }
+    p.origineDemonicaCaricheTimers.shift();
+    p._fiammaDemoniacaCucinaAttiva = true;
+    mostraNotificaInAlto(
+        `${p.nome} usa una carica di fuoco demoniaco per accendere le fiamme: la prossima cucina sarà accelerata del 20% (${p.origineDemonicaCaricheTimers.length}/4 cariche rimaste).`,
+        'successo'
+    );
+    salvaPersonaggioCloud(p);
+    if (document.getElementById('modal-cucina')?.style.display === 'block') openCucinaModal(idx);
+    aggiornaInterfaccia();
+};
+
 export async function updateMagazzinoFields(fields) {
     try {
         const campoId = window.getCampoBaseId ? window.getCampoBaseId() : 1;

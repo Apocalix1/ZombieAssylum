@@ -482,10 +482,31 @@ function applicaEffettoComposto(target, c) {
             target.puntiFortunaTemp = (target.puntiFortunaTemp || 0) + pf;
             return `+${pf} PF Fortuna temporanei.`;
         }
-        case 'adrenalina': {
+                case 'adrenalina': {
             const postOre = effetto.post_incapacita_h || 1;
             target._incapacitatoFinoA = (window.oreTotali || 0) + postOre;
             return `Ignora ferite e debuff fisici per pochi minuti. Al termine sarà incapace di agire per ${postOre}h.`;
+        }
+        case 'pessima_memoria': {
+            const conosciuti = target.incantesimi || [];
+            if (conosciuti.length === 0) return 'Non conosce alcun incantesimo da dimenticare.';
+            const lista = conosciuti.map((n, i) => `${i}) ${n}`).join('\n');
+            const scelta = parseInt(prompt(`Quale incantesimo vuole far dimenticare a ${target.nome}?\n${lista}`, '0'));
+            const nomeScelto = conosciuti[scelta];
+            if (!nomeScelto) return null;
+            const spellData = target.getSpellDataByName ? target.getSpellDataByName(nomeScelto) : null;
+            target.incantesimi = target.incantesimi.filter(n => n !== nomeScelto);
+            if (spellData) target.spellsKnown[spellData.livello] = Math.max(0, (target.spellsKnown[spellData.livello] || 0) - 1);
+            if (target.incantesimiUltimoLancio) delete target.incantesimiUltimoLancio[nomeScelto];
+            target.timers = target.timers || {};
+            target.timers.pessimaMemoria = isInstabile ? 1 : 2;
+            return `Dimentica istantaneamente "${nomeScelto}" (spazio liberato). -1 al modificatore da incantatore per ${target.timers.pessimaMemoria}h.`;
+        }
+        case 'ottima_memoria': {
+            target.incantesimiUltimoLancio = target.incantesimiUltimoLancio || {};
+            const oraCorrente = window.oreTotali || 0;
+            (target.incantesimi || []).forEach(nome => { target.incantesimiUltimoLancio[nome] = oraCorrente; });
+            return `Il timer di dimenticanza di tutti gli incantesimi conosciuti è stato azzerato.`;
         }
         default:
             return null;

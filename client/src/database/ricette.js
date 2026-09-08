@@ -22,7 +22,17 @@ const RICETTE = {
     ],
     difficile: [
         { nome: "Adrenalina", cd: 22, costo: 24, tempo: 12, desc: "Ignora debuff/ferite/malus per 2 minuti; al termine incapacitato per 1 ora.", effetto: { tipo: 'adrenalina', durata_min: 2, post_incapacita_h: 1 } },
-        { nome: "Allucinogeno", cd: 22, costo: 24, tempo: 12, desc: "Gas/liquido: TS Costituzione CD18 o svantaggio a tutte le prove e +1 Fatica.", effetto: { tipo: 'allucinogeno', ts: { abilita: 'Costituzione', cd: 18 }, fatica: 1 } },
+        { nome: "Allucinogeno", cd: 22, costo: 24, tempo: 12, desc: "Gas/liquido: TS Costituzione CD18 o svantaggio a tutte le prove e +1 Fatica.", effetto: { tipo: 'allucinogeno', ts: { abilita: 'Costituzione', cd: 18 }, fatica: 1 } },    {
+        id: 'pergamena_vuota',
+        name: 'Pergamena Vuota',
+        category: 'Sopravvivenza & Conservazione',
+        difficulty: 'Molto difficile',
+        outputType: 'pergamena',
+        description: 'Crea una pergamena vuota, pronta per essere trascritta da un incantatore con un incantesimo che conosce (nessun limite di livello).',
+        cost: { ingranaggi: 70 },
+        time: { hours: 14 },
+        specialization: { AG: 3 }
+    },
         { nome: "Risveglio Bestiale", cd: 22, costo: 24, tempo: 12, desc: "Raddoppia gli effetti benefici dei Perk Razziali per 1 ora.", effetto: { tipo: 'risveglio_razziale', durata: 1 } },
         { nome: "Essenza di Invisibilità", cd: 22, costo: 24, tempo: 12, desc: "Nuvola gas 1.5m: invisibilità finché non esci o attacchi (3 turni). Percezione/Investigare CD18 per vedere.", effetto: { tipo: 'invisibilita', raggio_m: 1.5, durata_turni: 3, ts_percezione: 18 } },
         { nome: "Neuro-Bloccante", cd: 22, costo: 24, tempo: 12, desc: "Tossina: TS Costituzione CD18 o non può usare Reazioni/Azioni Bonus per 1 ora.", effetto: { tipo: 'neuro_bloccante', ts: { abilita: 'Costituzione', cd: 18 }, durata_h: 1 } },
