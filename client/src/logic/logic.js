@@ -1100,9 +1100,9 @@ export class Personaggio {
 
       getTotalSpellSlots() {
         if (this.hasPerk('Pessima memoria')) {
-            return 2 + this.getCastingModifier() + this.livelloMagia;
+            return 1 + this.getCastingModifier() + this.livelloMagia;
         }
-        return 4 + this.getCastingModifier()+this.livelloMagia;
+        return 3 + this.getCastingModifier()+this.livelloMagia;
     }
 
      getSpellDataByName(nome) {
@@ -1114,17 +1114,18 @@ export class Personaggio {
         return null;
     }
 
-     _spellRichiedeQualsiasi(spell) {
+        _spellRichiedeQualsiasi(spell) {
         if (!spell || !Array.isArray(spell.modificatore)) return false;
         const mods = spell.modificatore.map(m => (m || '').toLowerCase());
-        if (mods.includes('qualsiasi')) return true;
-        return ['intelligenza', 'saggezza', 'carisma'].every(r => mods.includes(r));
+        return mods.includes('qualsiasi');
     }
 
     soddisfaRequisitoIncantesimo(spell) {
         if (!spell || !Array.isArray(spell.modificatore) || spell.modificatore.length === 0) return true;
-        if (this._spellRichiedeQualsiasi(spell)) return true;
-        return spell.modificatore.some(stat => {
+        const candidati = this._spellRichiedeQualsiasi(spell)
+            ? ['Intelligenza', 'Saggezza', 'Carisma']
+            : spell.modificatore;
+        return candidati.some(stat => {
             const det = this.getStatDettagliata(stat);
             return det && det.valore >= 12;
         });
@@ -1271,6 +1272,11 @@ export class Personaggio {
         if (this._arcaneFatigueApplied) message += ' (Affaticato arcano)';
         if (this._magicExhausted) message += ' (Esaurito magicamente)';
 
+        this.incantesimiUltimoLancio = this.incantesimiUltimoLancio || {};
+        if (this._nextCastSpellName) {
+            this.incantesimiUltimoLancio[this._nextCastSpellName] = window.oreTotali || 0;
+        }
+
         if (typeof window.aggiornaInterfaccia === 'function') {
             window.aggiornaInterfaccia();
         }
@@ -1344,6 +1350,11 @@ export class Personaggio {
         }
         if (this._magicExhausted) {
             message += ' (Esaurito magicamente)';
+        }
+
+        this.incantesimiUltimoLancio = this.incantesimiUltimoLancio || {};
+        if (this._nextCastSpellName) {
+            this.incantesimiUltimoLancio[this._nextCastSpellName] = window.oreTotali || 0;
         }
 
         // Aggiorna interfaccia
@@ -2026,7 +2037,9 @@ export class Personaggio {
     }
 
     getCastingModifier() {
-        return this.getStatDettagliata(this.getCastingAttribute()).mod;
+        let mod = this.getStatDettagliata(this.getCastingAttribute()).mod;
+        if (this.timers && this.timers.pessimaMemoria > 0) mod -= 1;
+        return mod;
     }
 
     hasArcanoMastery() {
@@ -2887,6 +2900,30 @@ export class Personaggio {
                 }
             }
         }
+                // ==================== 6b. DIMENTICANZA INCANTESIMI ====================
+        if (!this.isRobot || (this.hasPerk && this.hasPerk('Incantatore'))) {
+            this.incantesimiUltimoLancio = this.incantesimiUltimoLancio || {};
+            const oraCorrente = window.oreTotali || 0;
+            (this.incantesimi || []).slice().forEach(nomeSpell => {
+                const spellData = this.getSpellDataByName ? this.getSpellDataByName(nomeSpell) : null;
+                if (!spellData) return;
+                const ultimoLancio = this.incantesimiUltimoLancio[nomeSpell];
+                if (ultimoLancio === undefined) {
+                    this.incantesimiUltimoLancio[nomeSpell] = oraCorrente;
+                    return;
+                }
+                const sogliaOre = (spellData.livello + 1) * 7 * 24;
+                if (oraCorrente - ultimoLancio >= sogliaOre) {
+                    this.incantesimi = this.incantesimi.filter(n => n !== nomeSpell);
+                    this.spellsKnown[spellData.livello] = Math.max(0, (this.spellsKnown[spellData.livello] || 0) - 1);
+                    delete this.incantesimiUltimoLancio[nomeSpell];
+                    if (typeof window.mostraNotificaInAlto === 'function') {
+                        window.mostraNotificaInAlto(`${this.nome} ha dimenticato "${nomeSpell}" per mancanza di pratica. Spazio incantesimi liberato.`, 'avviso');
+                    }
+                }
+            });
+        }
+
         // ==================== 7. NORMALIZZA PF FORTUNA ====================
         this.normalizePuntiFortuna();
 

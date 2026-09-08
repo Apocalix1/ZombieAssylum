@@ -278,6 +278,27 @@ function openCucinaModal(idx) {
             <button class="btn-big" style="background:#27ae60;" onclick="scheduleCucina(${idx})">Cucina ${cucinaCost.ore} ore</button>
             <div style="color:#aaa; font-size:0.9rem;">${cucinaCost.ore} ore, ${cucinaCost.cibo} cibo, ${cucinaCost.acqua} acqua → 12 piatti deliziosi</div>
         </div>`;
+
+    if (hasPerk(p, 'Origine demoniaca')) {
+        const nCariche = (p.origineDemonicaCaricheTimers || []).length;
+        const attiva = !!p._fiammaDemoniacaCucinaAttiva;
+        html += `<div style="margin-top:10px;">
+            <button class="btn-big" style="background:#c0392b;" onclick="usaCaricaFuocoCucina(${idx})" ${(nCariche > 0 && !attiva) ? '' : 'disabled'}>
+                🔥 Accendi le fiamme (carica) ${attiva ? '— già attiva' : `(${nCariche}/4)`}
+            </button>
+            <div style="color:#aaa; font-size:0.85rem;">Consuma 1 carica di fuoco demoniaco: la prossima cucina è accelerata del 20% (come Controllare Fiamme).</div>
+        </div>`;
+            if ((p.incantesimi || []).includes('Controllare fiamme')) {
+        const attivaCF = !!p._controllareFiammeCucinaAttiva;
+        const attivaAltra = !!p._fiammaDemoniacaCucinaAttiva;
+        html += `<div style="margin-top:10px;">
+            <button class="btn-big" style="background:#e67e22;" onclick="lanciaControllareFiammeCucina(${idx})" ${(attivaCF || attivaAltra) ? 'disabled' : ''}>
+                🔥 Lancia Controllare Fiamme ${attivaCF ? '— già attiva' : ''}
+            </button>
+            <div style="color:#aaa; font-size:0.85rem;">Trucchetto: la prossima cucina è accelerata del 20%.</div>
+        </div>`;
+    }
+    }
     if (!haCucina) {
         html += `<div style="color:#e74c3c; margin-top:8px;">Non hai passato abbastanza ore in cucina da giustificare l'uso delle risorse.</div>`;
     }
@@ -366,8 +387,14 @@ function scheduleCucina(idx) {
         alert('Non hai passato abbastanza ore in cucina da giustificare l\'uso delle risorse.');
         return;
     }
-    const cucinaCost = hasPerk(p, 'Casalinga esperta') ? { ore: 2, cibo: 4, acqua: 0.5 } : { ore: 3, cibo: 5, acqua: 1 };
-    const oreFinali = Math.ceil(cucinaCost.ore * p.getModificatoreTempoAzione('cucina'));
+        const cucinaCost = hasPerk(p, 'Casalinga esperta') ? { ore: 2, cibo: 4, acqua: 0.5 } : { ore: 3, cibo: 5, acqua: 1 };
+        let oreFinali = Math.ceil(cucinaCost.ore * p.getModificatoreTempoAzione('cucina'));
+    const usaAccelerazioneFuoco = !!(p._fiammaDemoniacaCucinaAttiva || p._controllareFiammeCucinaAttiva);
+    if (usaAccelerazioneFuoco) {
+        oreFinali = Math.max(1, Math.ceil(oreFinali * 0.8));
+        p._fiammaDemoniacaCucinaAttiva = false;
+        p._controllareFiammeCucinaAttiva = false;
+    }
     if (magazzino.cibo < cucinaCost.cibo || magazzino.acqua < cucinaCost.acqua) {
         alert(`Non hai risorse sufficienti per cucinare. Servono ${cucinaCost.cibo} cibo e ${cucinaCost.acqua} acqua.`);
         return;
@@ -396,6 +423,23 @@ function scheduleCucina(idx) {
     document.getElementById('modal-cucina').style.display = 'none';
     aggiornaInterfaccia();
 }
+
+window.lanciaControllareFiammeCucina = function(idx) {
+    const p = party[idx];
+    if (!p || !(p.incantesimi || []).includes('Controllare fiamme')) return;
+    if (p._controllareFiammeCucinaAttiva || p._fiammaDemoniacaCucinaAttiva) {
+        alert('Le fiamme sono già pronte per la prossima cucina.');
+        return;
+    }
+    p._nextCastIsCura = false;
+    const result = p.castSpell(0);
+    if (!result.success) { alert(result.message); return; }
+    p._controllareFiammeCucinaAttiva = true;
+    mostraNotificaInAlto(`${p.nome} lancia Controllare Fiamme: la prossima cucina sarà accelerata del 20%. ${result.message}`, 'successo');
+    salvaPersonaggioCloud(p);
+    if (document.getElementById('modal-cucina')?.style.display === 'block') openCucinaModal(idx);
+    aggiornaInterfaccia();
+};
 
 function scheduleConserva(idx) {
     const p = party[idx];

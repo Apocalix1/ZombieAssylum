@@ -497,11 +497,15 @@ function renderStudioModal() {
     const content = document.getElementById('studio-content');
     if (!content) return;
     const selezionato = party[studioPersonaggioSelezionato] || party[0];
-        let html = `<div style="margin-bottom:14px; font-size:0.9rem; color:#ddd;">
+            let html = `<div style="margin-bottom:14px; font-size:0.9rem; color:#ddd;">
         <strong>Studente:</strong> ${selezionato.nome}<br>
         <strong>Medicina:</strong> Livello ${selezionato.livelloMedicina} - PM ${selezionato.pmMedicina}/${getStudyPMCap(selezionato)}<br>
       <strong>Ore studiosi oggi:</strong> ${selezionato.oreStudioGiornaliere}/${selezionato.getSogliaStudioGiornaliero()} ${selezionato.studyOverload ? '(<span style="color:#e74c3c">Sovraccarico</span>)' : ''}
     </div>`;
+    if (selezionato.studioIncantesimoTarget) {
+        const t = selezionato.studioIncantesimoTarget;
+        html += `<div style="margin-bottom:10px; color:#9b59b6; font-size:0.85rem;">🪄 Obiettivo magico: <strong>${t.nome}</strong> — sessione ${t.sessioniFatte}/${t.sessioniRichieste}</div>`;
+    }
     html += '<div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:12px;">';
     party.forEach((p, idx) => {
         html += `<button class="btn-big" style="flex:1; min-width:140px; ${idx === studioPersonaggioSelezionato ? 'background:#2980b9;' : ''}" onclick="switchStudioPersonaggio(${idx})">${p.nome}</button>`;
@@ -540,6 +544,44 @@ function selezionaLibroStudio(bookIdx) {
         alert('Questo libro è stato già studiato fino al limite.');
         return;
     }
+
+    if (book.subject === 'Incantesimi') {
+        const puoSceglierIncantesimi = !p.isRobot || (typeof window.hasPerk === 'function' && window.hasPerk(p, 'Incantatore'));
+        if (!puoSceglierIncantesimi) {
+            alert('I robot possono conoscere incantesimi solo con il perk "Incantatore".');
+            return;
+        }
+        let target = p.studioIncantesimoTarget;
+        if (target && (p.incantesimi || []).includes(target.nome)) target = null;
+        if (!target) {
+            const db = window.getSpellDatabaseFlat ? window.getSpellDatabaseFlat() : [];
+            const candidati = db.filter(sp => {
+                if ((p.incantesimi || []).includes(sp.nome)) return false;
+                if (p.livelloMagia === 0 && sp.livello !== 0) return false;
+                if (p.livelloMagia > 0 && sp.livello > p.livelloMagia) return false;
+                if (p.soddisfaRequisitoIncantesimo && !p.soddisfaRequisitoIncantesimo(sp)) return false;
+                const maxKnown = p.getMaxKnownSpells ? p.getMaxKnownSpells(sp.livello) : 0;
+                const attuali = (p.spellsKnown && p.spellsKnown[sp.livello]) || 0;
+                if (attuali >= maxKnown) return false;
+                return true;
+            });
+            if (candidati.length === 0) {
+                alert(`${p.nome} non ha nessun incantesimo disponibile da imparare al momento (livello di magia insufficiente, requisiti di caratteristica non soddisfatti, o spazio incantesimi pieno).`);
+                return;
+            }
+            const lista = candidati.map((sp, i) => `${i}) ${sp.nome} (${sp.livello === 0 ? 'Trucchetto' : 'Lv' + sp.livello}) — ${sp.desc}`).join('\n');
+            const sceltaStr = prompt(`Quale incantesimo vuoi iniziare a studiare?\n${lista}`, '0');
+            const idxScelta = parseInt(sceltaStr);
+            if (isNaN(idxScelta) || !candidati[idxScelta]) return;
+            const spellScelto = candidati[idxScelta];
+            target = { nome: spellScelto.nome, livello: spellScelto.livello, sessioniFatte: 0, sessioniRichieste: getSessioniRichieste(spellScelto.livello) };
+            p.studioIncantesimoTarget = target;
+            mostraNotificaInAlto(`${p.nome} si dedica allo studio di "${spellScelto.nome}": richiede ${target.sessioniRichieste} sessioni di studio potenziate.`, 'info');
+        } else {
+            mostraNotificaInAlto(`${p.nome} continua a studiare "${target.nome}" (sessione ${target.sessioniFatte}/${target.sessioniRichieste}).`, 'info');
+        }
+    }
+
     const currentPoints = p.getStudyPoints(book.subject);
     if (currentPoints >= 210) {
         alert('Non puoi studiare una materia in cui hai già maestria.');
@@ -549,9 +591,12 @@ function selezionaLibroStudio(bookIdx) {
     const maxAllowed = remaining;
     let suggested = Math.min(maxAllowed, 4);
     let input = prompt(`Quante ore vuoi dedicare a studiare "${book.title}"? (1-${maxAllowed})`, `${suggested}`);
-    let ore = parseInt(input);
+        let ore = parseInt(input);
     if (isNaN(ore) || ore <= 0) return;
     ore = Math.ceil(ore * p.getModificatoreTempoAzione('studio-libro', book.subject));
+    if (book.subject === 'Incantesimi' && p.studioIncantesimoTarget && p._pergamenaStudioBonus && p._pergamenaStudioBonus[p.studioIncantesimoTarget.nome]) {
+        ore = Math.max(1, Math.ceil(ore * (1 - p._pergamenaStudioBonus[p.studioIncantesimoTarget.nome].riduzioneTempo)));
+    }
     ore = Math.min(ore, maxAllowed);
 
     let teacherName = null;
@@ -654,65 +699,64 @@ function completaStudioBookAction(p, action) {
             mostraNotificaInAlto(`${p.nome} ha studiato Medicina per ${effectiveHours}h ma ha già raggiunto il limite attuale di PM.`, 'warning');
         }
     }
-    else if (book.subject === 'Incantesimi') {
-            p.oreStudioIncantesimi = (p.oreStudioIncantesimi || 0) + effectiveHours;
-            p.sogliaIncantesimiRisposte = p.sogliaIncantesimiRisposte || {};
-            const soglie = [
-                {liv: 0, soglia: 8},
-                {liv: 1, soglia: 16},
-                {liv: 2, soglia: 32},
-                {liv: 3, soglia: 64},
-                {liv: 4, soglia: 120}
-            ];
-            soglie.forEach(s => {
-                if (p.oreStudioIncantesimi >= s.soglia && !p.sogliaIncantesimiRisposte[s.liv]) {
-                    p.sogliaIncantesimiRisposte[s.liv] = true;
-                    const nomeLivello = s.liv === 0 ? 'un Trucchetto' : `un Incantesimo di Livello ${s.liv}`;
-                    const vuole = confirm(`${p.nome} ha accumulato abbastanza ore di studio per imparare ${nomeLivello}. Vuoi impararlo ora?`);
-                     if (vuole) {
-                        if (p.livelloMagia === 0 && s.liv > 0) {
-                            alert(`${p.nome} deve prima imparare un Trucchetto per sbloccare la magia. Riprova quando raggiungerai un'altra soglia.`);
-                            p.sogliaIncantesimiRisposte[s.liv] = false;
-                            return;
-                        }
-                        if ((p.spellsKnown[s.liv] || 0) >= p.getMaxKnownSpells(s.liv)) {
-                            alert(`${p.nome} non ha più spazio per nuovi incantesimi/trucchetti (limite 6 + mod. incantatore, pesato per livello). Riprova dopo aver liberato spazio.`);
-                            p.sogliaIncantesimiRisposte[s.liv] = false;
-                            return;
-                        }
-                          const disponibiliLv = (window.getSpellDatabaseFlat ? window.getSpellDatabaseFlat() : [])
-                            .filter(sp => sp.livello === s.liv && !(p.incantesimi || []).includes(sp.nome)
-                                && (p.soddisfaRequisitoIncantesimo ? p.soddisfaRequisitoIncantesimo(sp) : true));
-                        let nomeScelto = null;
-                        if (disponibiliLv.length > 0) {
-                            const lista = disponibiliLv.map((sp, i) => `${i}) ${sp.nome} — ${sp.desc}`).join('\n');
-                            const sceltaStr = prompt(`Quale incantesimo/trucchetto vuoi imparare? (mostrati solo quelli per cui hai almeno 12 nella caratteristica richiesta)\n${lista}`, '0');
-                            const idxScelta = parseInt(sceltaStr);
-                            if (!isNaN(idxScelta) && disponibiliLv[idxScelta]) nomeScelto = disponibiliLv[idxScelta].nome;
-                        } else {
-                            mostraNotificaInAlto(`${p.nome} non soddisfa i requisiti di caratteristica (≥12) per nessun incantesimo/trucchetto disponibile a questo livello.`, 'avviso');
-                        }
-                        if (nomeScelto) {
-                            p.incantesimi = p.incantesimi || [];
-                            p.incantesimi.push(nomeScelto);
-                        }
-                        p.spellsKnown[s.liv] = (p.spellsKnown[s.liv] || 0) + 1;
-                        const costoBase = p.getSpellCost ? p.getSpellCost(s.liv) : [1, 3, 7, 14, 25][s.liv];
-                        const puntiConoscenza = costoBase * 2;
-                        p.puntiConoscenzaMagica = (p.puntiConoscenzaMagica || 0) + puntiConoscenza;
-                        if (p.livelloMagia === 0) {
-                            p.livelloMagia = 1;
-                            p.updateManaFromMagiaLevel();
-                            mostraNotificaInAlto(`${p.nome} sblocca il Livello di Magia 1!`, 'successo');
-                        }
-                        if (typeof window.applicaScalataLivelloMagia === 'function') {
-                            window.applicaScalataLivelloMagia(p);
-                        }
-                         mostraNotificaInAlto(`✨ ${p.nome} ha imparato ${nomeScelto || nomeLivello}! (+${puntiConoscenza} Punti Conoscenza Magica)`, 'successo');
-                    }
+        else if (book.subject === 'Incantesimi') {
+        const target = p.studioIncantesimoTarget;
+        if (!target) {
+            mostraNotificaInAlto(`${p.nome} ha studiato ${effectiveHours}h di teoria arcana, ma senza un incantesimo specifico in mente il progresso non conta ai fini dell'apprendimento.`, 'avviso');
+        } else {
+                    const spellData = (window.getSpellDatabaseFlat ? window.getSpellDatabaseFlat() : []).find(sp => sp.nome === target.nome);
+            if (!spellData || (p.incantesimi || []).includes(target.nome)) {
+                p.studioIncantesimoTarget = null;
+            } else {
+                const bonusPergamena = (p._pergamenaStudioBonus && p._pergamenaStudioBonus[target.nome]) || null;
+                const modStudio = getIncantesimoStudyMod(p, spellData);
+                const nextHourTotal = (p.oreStudioPerMateria['Incantesimi'] || 0) + 1;
+                p.oreStudioPerMateria['Incantesimi'] = nextHourTotal;
+                const die = getStudyDieByTotalHours(nextHourTotal, p);
+                let roll = rollDiceNotation(die) + modStudio;
+                if (p.hasPerk && p.hasPerk('Apprendimento accellerato')) roll += 3;
+                if (p.timers && p.timers.buffIntegratori > 0) roll += (p._integratoriBonus || 3);
+                let candelaBonus = 0;
+                if (typeof window.applicaBonusCandelaNeraStudio === 'function') {
+                    candelaBonus = window.applicaBonusCandelaNeraStudio(p);
                 }
-            });
-        }     else {
+                if (candelaBonus > 0 && p.hasPerk && p.hasPerk('Metodo di studio')) candelaBonus += 2;
+                if (p.timers && p.timers.buffIntegratori > 0 && p.hasPerk && p.hasPerk('Metodo di studio')) roll += 2;
+                roll += candelaBonus;
+                let pergamenaLabel = '';
+                if (bonusPergamena) {
+                    const bonusDado = rollDiceNotation(bonusPergamena.bonusDado);
+                    roll += bonusDado;
+                    pergamenaLabel = ` +${bonusDado} (pergamena)`;
+                    delete p._pergamenaStudioBonus[target.nome];
+                }
+                if (p.studyOverload) roll = Math.max(0, roll - 2);
+
+                target.sessioniFatte = (target.sessioniFatte || 0) + 1;
+                mostraNotificaInAlto(`${p.nome} dedica una sessione allo studio di "${target.nome}" (${die}+${modStudio}${pergamenaLabel}=${roll}). Sessione ${target.sessioniFatte}/${target.sessioniRichieste}.`, 'successo');
+
+                if (target.sessioniFatte >= target.sessioniRichieste) {
+                    const livelloTarget = spellData.livello;
+                    p.incantesimi = p.incantesimi || [];
+                    p.incantesimi.push(target.nome);
+                    p.spellsKnown[livelloTarget] = (p.spellsKnown[livelloTarget] || 0) + 1;
+                    const costoBase = SPELL_KNOWLEDGE_COST_TABLE[livelloTarget] || 1;
+                    const puntiConoscenza = costoBase * 2;
+                    p.puntiConoscenzaMagica = (p.puntiConoscenzaMagica || 0) + puntiConoscenza;
+                    if (p.livelloMagia === 0 && livelloTarget === 0) {
+                        p.livelloMagia = 1;
+                        p.updateManaFromMagiaLevel();
+                        mostraNotificaInAlto(`${p.nome} sblocca il Livello di Magia 1!`, 'successo');
+                    }
+                    if (typeof window.applicaScalataLivelloMagia === 'function') {
+                        window.applicaScalataLivelloMagia(p);
+                    }
+                    mostraNotificaInAlto(`✨ ${p.nome} ha imparato "${target.nome}"! (+${puntiConoscenza} Punti Conoscenza Magica)`, 'successo');
+                    p.studioIncantesimoTarget = null;
+                }
+            }
+        }
+    }     else {
         let currentPoints = p.getStudyPoints(book.subject);
         const stat = STUDY_SUBJECT_ABILITY[book.subject] || 'Intelligenza';
         const attrMod = p.getStatDettagliata(stat).mod;
@@ -749,13 +793,14 @@ function completaStudioBookAction(p, action) {
                 const roll2 = rollDiceNotation(die) + attrMod;
                 roll = Math.max(roll, roll2);
             }
+            const haMetodoStudio = p.hasPerk && p.hasPerk('Metodo di studio');
             if (teacherObj && teacherObj.hasPerk && teacherObj.hasPerk('Insegnante')) {
-                roll += rollDiceNotation('1d6');
+                roll += rollDiceNotation('1d6') + (haMetodoStudio ? 2 : 0);
             }
             // Applica bonus Studio in compagnia (se attivo)
             roll += studioBonus;
-            if (p.timers && p.timers.buffIntegratori > 0) roll += (p._integratoriBonus || 3);
-            if (i === 0) roll += candelaBonus;
+            if (p.timers && p.timers.buffIntegratori > 0) roll += (p._integratoriBonus || 3) + (haMetodoStudio ? 2 : 0);
+            if (i === 0) roll += candelaBonus + (candelaBonus > 0 && haMetodoStudio ? 2 : 0);
             if (p.studyOverload) roll = Math.max(0, roll - 2);
             if (rancoreAttivo) roll = Math.floor(roll * 0.6);
             currentPoints += roll;
@@ -947,6 +992,22 @@ function caricaDocumentiArchiviati() {
         });
 }
 
+function getIncantesimoStudyMod(p, spellData) {
+    if (!spellData) return p.getStatDettagliata('Intelligenza').mod;
+    const mods = Array.isArray(spellData.modificatore) ? spellData.modificatore.map(m => (m || '').toLowerCase()) : [];
+    const candidati = mods.includes('qualsiasi') ? ['Intelligenza', 'Saggezza', 'Carisma'] : (spellData.modificatore || ['Intelligenza']);
+    let best = -Infinity;
+    candidati.forEach(stat => {
+        const det = p.getStatDettagliata(stat);
+        if (det && det.mod > best) best = det.mod;
+    });
+    return best === -Infinity ? 0 : best;
+}
+
+function getSessioniRichieste(livello) {
+    return Math.max(1, livello || 0);
+}
+
 function renderDocumentiPersonaggio(p) {
     let modal = document.getElementById('modal-documenti-personaggio');
     if (!modal) {
@@ -1010,6 +1071,24 @@ function renderDocumentiPersonaggio(p) {
         </div>`;
 
     modal.style.display = 'block';
+}
+
+const SPELL_KNOWLEDGE_COST_TABLE = { 0: 1, 1: 2, 2: 3, 3: 4};
+
+function getIncantesimoStudyMod(p, spellData) {
+    if (!spellData) return p.getStatDettagliata('Intelligenza').mod;
+    const mods = Array.isArray(spellData.modificatore) ? spellData.modificatore.map(m => (m || '').toLowerCase()) : [];
+    const candidati = mods.includes('qualsiasi') ? ['Intelligenza', 'Saggezza', 'Carisma'] : (spellData.modificatore || ['Intelligenza']);
+    let best = -Infinity;
+    candidati.forEach(stat => {
+        const det = p.getStatDettagliata(stat);
+        if (det && det.mod > best) best = det.mod;
+    });
+    return best === -Infinity ? 0 : best;
+}
+
+function getSessioniRichieste(livello) {
+    return Math.max(1, livello || 0);
 }
 
 window.apriDocumentiPersonaggio = function(idx) {

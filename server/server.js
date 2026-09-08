@@ -204,6 +204,7 @@ function magazzinoVuoto() {
     cadaveriUmani: 0,
     stazioneRicarica: null,
     consumabili: [],
+    pergamene: [],
     libri: [],
     armiTrovate: [],
     armi: [],
@@ -546,18 +547,18 @@ app.post('/api/characters', authenticateUser, requireNotGuest, async (req, res) 
     const existing = await db.get('SELECT * FROM personaggi WHERE user_id = ? AND nome = ?', req.user.id, nome);
     if (existing) {
       await db.run(
-          'UPDATE personaggi SET data = ?, updated_at = ?, classe = ?, campo_base_id = ? WHERE id = ?',
+          'UPDATE personaggi SET data = ?, updated_at = ?, classe = ?, campo_base_id = ?, status = ? WHERE id = ?',
           typeof data === 'string' ? data : JSON.stringify(data || {}),
-          updated_at || new Date().toISOString(), classe, campoFinale, existing.id
+          updated_at || new Date().toISOString(), classe, campoFinale, 'vivo', existing.id
       );
       const character = await db.get('SELECT * FROM personaggi WHERE id = ?', existing.id);
       return res.json({ character });
     }
     const result = await db.run(
-        'INSERT INTO personaggi (user_id, nome, classe, data, updated_at, campo_base_id) VALUES (?, ?, ?, ?, ?, ?)',
+        'INSERT INTO personaggi (user_id, nome, classe, data, updated_at, campo_base_id, status) VALUES (?, ?, ?, ?, ?, ?, ?)',
         req.user.id, nome, classe,
         typeof data === 'string' ? data : JSON.stringify(data || {}),
-        updated_at || new Date().toISOString(), campoFinale
+        updated_at || new Date().toISOString(), campoFinale, 'vivo'
     );
     const character = await db.get('SELECT * FROM personaggi WHERE id = ?', result.lastID);
     res.json({ character });

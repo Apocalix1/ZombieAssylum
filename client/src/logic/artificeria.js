@@ -400,12 +400,15 @@ function calcolaCrafting(leader, collaboratori, ricetta, isSmontaggio = false) {
     const reqSpec = ricetta.specialization[specPrincipale];
     const senzaCompetenza = lvSpec_Leader < reqSpec;
 
-    // 1. CALCOLO DELLA CLASSE DIFFICOLTÀ (CD)
+        // 1. CALCOLO DELLA CLASSE DIFFICOLTÀ (CD)
     let cdFinale;
     if (senzaCompetenza) {
         cdFinale = diff.cdBase + 6 - (lvAG_Leader * 1) - (lvSpec_Leader * 2);
     } else {
         cdFinale = diff.cdBase - lvAG_Leader - (lvSpec_Leader * 2);
+    }
+    if (leader._ripareBonusCrea && !isSmontaggio) {
+        cdFinale -= 1;
     }
     collaboratori.forEach(collab => {
         if (leader.rancoreTargetId === collab.id || collab.rancoreTargetId === leader.id) {
@@ -453,6 +456,22 @@ function risolviAzioneArtificeria(leaderIdx, collaboratoriIdxs, ricettaId, isSmo
     const leader = window.party[leaderIdx];
     const ricettaBase = getArtificerRecipeById(ricettaId);
     if (!leader || !ricettaBase) return;
+
+    // Riparare: cantrip pre-azione, stessa logica di Controllare Fiamme
+    if ((leader.incantesimi || []).includes('Riparare') && !leader._ripareBonusCrea && !leader._ripareBonusSmonta) {
+        const vuoleLanciare = confirm(`${leader.nome} conosce "Riparare": vuoi lanciarlo prima di iniziare?\n${isSmontaggio ? '(+5% ingranaggi recuperati allo smontaggio)' : '(-1 al CD della creazione)'}`);
+        if (vuoleLanciare) {
+            leader._nextCastIsCura = false;
+            const risultatoCast = leader.castSpell(0);
+            if (!risultatoCast.success) {
+                alert(risultatoCast.message);
+            } else {
+                if (isSmontaggio) leader._ripareBonusSmonta = true;
+                else leader._ripareBonusCrea = true;
+                mostraNotificaInAlto(`${leader.nome} lancia Riparare. ${risultatoCast.message}`, 'successo');
+            }
+        }
+    }
 
     // Potenzia/Depotenzia Robot: flusso immediato dedicato, non passa dalla coda azioni
     if (ricettaId === 'potenzia_robot' && !isSmontaggio) {
@@ -711,6 +730,7 @@ function risolviEsitoArtificeria(leader, collaboratori, ricetta, costoIngranaggi
         if (isSmontaggio) {
             let resaPercentuale = YIELD_SMONTAGGIO[leader.artificeria.generale.livello] || 0;
             if (leader.hasPerk && leader.hasPerk('Riciclatore disperato')) resaPercentuale += 0.20;
+            if (leader._ripareBonusSmonta) resaPercentuale += 0.05;
             const ingranaggiRecuperati = Math.floor(costoBase * resaPercentuale);
             window.magazzino.ingranaggi += ingranaggiRecuperati;
             alert(`Recuperati ${ingranaggiRecuperati} ingranaggi.`);
@@ -799,6 +819,19 @@ function risolviEsitoArtificeria(leader, collaboratori, ricetta, costoIngranaggi
                     }
                     break;
                 }
+                   case 'lingua_di_fuoco': {
+                    const armiMischia = ['Armi in asta', 'Lame leggere', 'Mazze e armi contundenti', 'Rampini e fruste'];
+                    const nomeArma = prompt(`Su quale arma da mischia nel tuo inventario vuoi impiantare la Lingua di Fuoco?\n(${armiMischia.join(', ')})`);
+                    if (!nomeArma) { alert('Operazione annullata: nessuna arma scelta.'); break; }
+                    leader.initInventarioBase();
+                    const idxArma = leader.inventario.armi.findIndex(a => a.toLowerCase().includes(nomeArma.toLowerCase()));
+                    if (idxArma === -1) { alert(`Arma "${nomeArma}" non trovata nel tuo inventario.`); break; }
+                    leader.linguaDiFuoco = leader.linguaDiFuoco || {};
+                    leader.linguaDiFuoco[leader.inventario.armi[idxArma]] = { cariche: 3, caricheMax: 3 };
+                    salvaPersonaggioCloud(leader);
+                    alert(`"${leader.inventario.armi[idxArma]}" ora ha la Lingua di Fuoco (3/3 cariche). Come reazione puoi attivarla: la fiamma dura 1 minuto e infligge 1d4 danni da fuoco extra.`);
+                    break;
+                }
                 case 'fabbisogno_robot':
                     alert(`Azione su robot completata.`);
                     break;
@@ -824,9 +857,11 @@ function risolviEsitoArtificeria(leader, collaboratori, ricetta, costoIngranaggi
         alert(isSmontaggio ? "❌ SMONTAGGIO FALLITO! Non hai recuperato nulla e l'oggetto è andato distrutto." : "❌ FALLIMENTO TOTALE! Tutto il materiale e il tempo sono persi.");
     }
 
-    if (typeof window.updateMagazzinoFields === 'function') {
+        if (typeof window.updateMagazzinoFields === 'function') {
         window.updateMagazzinoFields({ ingranaggi: window.magazzino.ingranaggi });
     }
+    leader._ripareBonusCrea = false;
+    leader._ripareBonusSmonta = false;
     window.aggiornaInterfaccia();
 }
 

@@ -19,6 +19,7 @@ export let magazzino = {
     compounds: [],
     composti: [],
     congegniFissi: [],
+    pergamene: [],
     congegniConteggio: {},
     oggettiMagici: { comuni: 0, nonComuni: 0, rari: 0, superRari: 0 },
         oggettiMagiciIstanze: [], 

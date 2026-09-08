@@ -5,6 +5,15 @@ window.tempP = window.tempP || null;
 let categoriaCorrente = "competenze base";
 let perkSearchQuery = "";
 let perkFilterAffordableOnly = false;
+let incantesimiFiltri = { livelli: new Set(), tipi: new Set(), stats: new Set() };
+
+function toggleFiltroIncantesimo(gruppo, valore) {
+    const set = incantesimiFiltri[gruppo];
+    if (!set) return;
+    if (set.has(valore)) set.delete(valore); else set.add(valore);
+    renderSetupPerks();
+}
+window.toggleFiltroIncantesimo = toggleFiltroIncantesimo;
 
 function getPerkDatabase() {
     return window.DATABASE_PERK || (typeof DATABASE_PERK !== 'undefined' ? DATABASE_PERK : {});
@@ -660,7 +669,7 @@ function eseguiRicercaPerkSuInvio(evento, valore) {
         renderSetupPerks();
     }
 
-    function renderIncantesimiTab(p) {
+   function renderIncantesimiTab(p) {
     if (!p) return '';
     const puoScegliere = !p.isRobot || hasGlobalPerk(p, 'Incantatore');
     if (!puoScegliere) {
@@ -674,10 +683,52 @@ function eseguiRicercaPerkSuInvio(evento, valore) {
         </div>`;
     }
     const conosciuti = p.incantesimi || [];
-    const disponibili = getSpellDatabaseFlat().filter(sp => sp.livello <= p.livelloMagia);
+    let disponibili = getSpellDatabaseFlat().filter(sp => sp.livello <= p.livelloMagia);
+
+    if (incantesimiFiltri.livelli.size > 0) {
+        disponibili = disponibili.filter(sp => incantesimiFiltri.livelli.has(String(sp.livello)));
+    }
+    if (incantesimiFiltri.tipi.size > 0) {
+        disponibili = disponibili.filter(sp => incantesimiFiltri.tipi.has(sp.categoria));
+    }
+    if (incantesimiFiltri.stats.size > 0) {
+        disponibili = disponibili.filter(sp => {
+            const mods = Array.isArray(sp.modificatore) ? sp.modificatore.map(m => (m || '').toLowerCase()) : [];
+            if (mods.includes('qualsiasi')) return true;
+            return [...incantesimiFiltri.stats].some(s => mods.includes(s));
+        });
+    }
+
+    const filtriBtns = [
+        { grp: 'livelli', val: '0', label: 'Trucchetto' },
+        { grp: 'livelli', val: '1', label: 'Livello 1' },
+        { grp: 'livelli', val: '2', label: 'Livello 2' },
+        { grp: 'livelli', val: '3', label: 'Livello 3' },
+        { grp: 'stats', val: 'intelligenza', label: 'Intelligenza' },
+        { grp: 'stats', val: 'saggezza', label: 'Saggezza' },
+        { grp: 'tipi', val: 'danni', label: 'Combattimento' },
+        { grp: 'tipi', val: 'cura', label: 'Cura' },
+        { grp: 'tipi', val: 'utilita', label: 'Utilità' }
+    ];
+    const filtriHtml = `<div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:12px;">
+        ${filtriBtns.map(b => {
+            const attivo = incantesimiFiltri[b.grp].has(b.val);
+            return `<button onclick="toggleFiltroIncantesimo('${b.grp}', '${b.val}')"
+                        style="padding:6px 12px; font-size:0.78rem; border-radius:6px; border:1px solid ${attivo ? '#9b59b6' : '#333'}; background:${attivo ? '#9b59b6' : '#222'}; color:#fff; cursor:pointer;">
+                        ${b.label}
+                    </button>`;
+        }).join('')}
+    </div>`;
+
     let html = `<div style="background:#111; border:1px solid #333; border-radius:8px; padding:12px;">
-        <div style="font-size:0.95rem; margin-bottom:12px; color:#f1c40f; font-weight:bold;">INCANTESIMI (Lv ≤ ${p.livelloMagia})</div>
+        <div style="font-size:0.95rem; margin-bottom:8px; color:#f1c40f; font-weight:bold;">INCANTESIMI (Lv ≤ ${p.livelloMagia})</div>
+        ${filtriHtml}
         <div style="display:grid; gap:10px;">`;
+
+    if (disponibili.length === 0) {
+        html += `<div style="color:#888; font-size:0.85rem;">Nessun incantesimo corrisponde ai filtri selezionati.</div>`;
+    }
+
     disponibili.forEach(sp => {
         const conosciuto = conosciuti.includes(sp.nome);
         const costo = SPELL_KNOWLEDGE_COST[sp.livello] || 0;
@@ -1051,10 +1102,7 @@ function gestisciDigitazionePerk(valore) {
      const totSlots = (typeof p.getTotalSpellSlots === 'function') ? p.getTotalSpellSlots() : (6 + modMagia);
     const usedSlots = (typeof p.getUsedSpellSlots === 'function') ? p.getUsedSpellSlots() : 0;
     const conosciuti = (typeof p.getIncantesimiConosciutiData === 'function') ? p.getIncantesimiConosciutiData() : [];
-    const nomiConosciuti = (p.incantesimi || []);
     const puoSceglierIncantesimi = !p.isRobot || hasGlobalPerk(p, 'Incantatore');
-    const disponibili = getSpellDatabaseFlat().filter(sp => sp.livello <= livello && !nomiConosciuti.includes(sp.nome));
-
     container.innerHTML = `
     <div class="stat-row" style="display:grid; grid-template-columns: 1fr auto; gap:8px; background:#111; padding:10px; border-radius:6px; margin-top:10px;">
         <div>
@@ -1072,11 +1120,10 @@ function gestisciDigitazionePerk(valore) {
             <button onclick="modificaMagicLevel(1)" style="padding:6px 10px;">+</button>
         </div>
     </div>
-
-    ${!puoSceglierIncantesimi ? `<div style="margin-top:10px; color:#e67e22; font-size:0.85rem;">I robot possono conoscere incantesimi solo con il perk "Incantatore".</div>` : `
+        ${!puoSceglierIncantesimi ? `<div style="margin-top:10px; color:#e67e22; font-size:0.85rem;">I robot possono conoscere incantesimi solo con il perk "Incantatore".</div>` : `
     <div style="margin-top:10px; background:#111; padding:10px; border-radius:6px;">
         <div style="font-weight:bold; color:#9b59b6; margin-bottom:6px;">INCANTESIMI CONOSCIUTI</div>
-             ${conosciuti.length === 0 ? '<div style="color:#888; font-size:0.85rem;">Nessuno.</div>' : conosciuti.map(sp => {
+             ${conosciuti.length === 0 ? '<div style="color:#888; font-size:0.85rem;">Nessuno. Scegli i tuoi incantesimi dalla tab "INCANTESIMI" qui sotto.</div>' : conosciuti.map(sp => {
             const modInfo = p.getModificatorePiuAltoPerSpell ? p.getModificatorePiuAltoPerSpell(sp) : null;
             const modLabel = modInfo ? ` (${modInfo.nome} ${modInfo.mod >= 0 ? '+' : ''}${modInfo.mod})` : '';
             return `
@@ -1086,27 +1133,6 @@ function gestisciDigitazionePerk(valore) {
                     <span style="color:#aaa; font-size:0.78rem;">${sp.desc}</span>
                 </div>
                 <button onclick="rimuoviIncantesimoScelta('${sp.nome.replace(/'/g, "\\'")}')" style="padding:4px 8px; background:#c0392b; color:white; border:none; border-radius:4px; flex-shrink:0;">Rimuovi</button>
-            </div>`;
-        }).join('')}
-
-        <div style="font-weight:bold; color:#f1c40f; margin-top:12px; margin-bottom:6px;">INCANTESIMI DISPONIBILI (Lv ≤ ${livello})</div>
-        ${livello === 0 && disponibili.filter(s => s.livello === 0).length === 0 ? '' : ''}
-        ${disponibili.length === 0 ? '<div style="color:#888; font-size:0.85rem;">Nessun incantesimo disponibile (aumenta il livello di magia o hai già scelto tutto).</div>' : disponibili.map(sp => {
-            const costo = SPELL_KNOWLEDGE_COST[sp.livello] || 0;
-            const maxKnow = p.getMaxKnownSpells ? p.getMaxKnownSpells(sp.livello) : 0;
-            const attuali = (p.spellsKnown && p.spellsKnown[sp.livello]) || 0;
-            const soddisfaReq = p.soddisfaRequisitoIncantesimo ? p.soddisfaRequisitoIncantesimo(sp) : true;
-            const canAfford = p.puntiCreazione >= costo && attuali < maxKnow && soddisfaReq;
-            const modInfo = p.getModificatorePiuAltoPerSpell ? p.getModificatorePiuAltoPerSpell(sp) : null;
-            const modLabel = modInfo ? ` (${modInfo.nome} ${modInfo.mod >= 0 ? '+' : ''}${modInfo.mod})` : '';
-            return `
-            <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px; background:#1a1a1a; padding:8px; border-radius:4px; margin-bottom:6px; opacity:${canAfford ? 1 : 0.6};">
-                <div>
-                    <strong style="color:#fff;">${sp.nome}</strong><span style="color:#7df9ff; font-size:0.78rem;">${modLabel}</span> <span style="color:#888; font-size:0.75rem;">(${sp.livello === 0 ? 'Trucchetto' : 'Lv'+sp.livello}, ${sp.categoria === 'cura' ? 'Cura' : 'Danni'}, ${costo}pt)</span><br>
-                    <span style="color:#aaa; font-size:0.78rem;">${sp.desc}</span>
-                    <div style="color:${soddisfaReq ? '#666' : '#e74c3c'}; font-size:0.72rem; margin-top:2px;">Richiede: ${(sp.modificatore || []).join(' o ')} ≥ 12${soddisfaReq ? '' : ' — NON SODDISFATTO'}</div>
-                </div>
-                <button onclick="aggiungiIncantesimoScelta('${sp.nome.replace(/'/g, "\\'")}')" ${canAfford ? '' : 'disabled'} style="padding:4px 8px; background:#27ae60; color:white; border:none; border-radius:4px; flex-shrink:0;">Prendi</button>
             </div>`;
         }).join('')}
     </div>`}
@@ -1155,10 +1181,11 @@ function gestisciDigitazionePerk(valore) {
         if (attuali >= maxKnown) { alert('Hai già raggiunto il massimo numero di incantesimi/trucchetti conoscibili per questo livello.'); return; }
         const costo = SPELL_KNOWLEDGE_COST[spell.livello] || 0;
         if (p.puntiCreazione < costo) { alert(`Punti insufficienti: conoscere questo incantesimo costa ${costo} punti.`); return; }
-        p.puntiCreazione -= costo;
+             p.puntiCreazione -= costo;
         p.incantesimi.push(nome);
         p.spellsKnown[spell.livello] = attuali + 1;
         renderSetupStats();
+        renderSetupPerks();
     }
     window.aggiungiIncantesimoScelta = aggiungiIncantesimoScelta;
 
@@ -1172,6 +1199,7 @@ function gestisciDigitazionePerk(valore) {
         const costo = SPELL_KNOWLEDGE_COST[spell.livello] || 0;
         p.puntiCreazione += costo;
         renderSetupStats();
+        renderSetupPerks();
     }
     window.rimuoviIncantesimoScelta = rimuoviIncantesimoScelta;
 

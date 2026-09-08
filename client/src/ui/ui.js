@@ -1602,6 +1602,7 @@ export function aggiornaInterfaccia() {
                                     <button onclick="openCucinaModal(${idx})">Cucina</button>
                                     <button onclick="alchimiaPersonaggio(${idx})">Alchimia</button>
                                     <button onclick="artificeriaPersonaggio(${idx})">Artificeria</button>
+                                    <button onclick="apriPergamene(${idx})">📜 Pergamene</button>
                                 </div>
                             </details>
 
