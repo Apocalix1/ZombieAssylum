@@ -1075,22 +1075,6 @@ function renderDocumentiPersonaggio(p) {
 
 const SPELL_KNOWLEDGE_COST_TABLE = { 0: 1, 1: 2, 2: 3, 3: 4};
 
-function getIncantesimoStudyMod(p, spellData) {
-    if (!spellData) return p.getStatDettagliata('Intelligenza').mod;
-    const mods = Array.isArray(spellData.modificatore) ? spellData.modificatore.map(m => (m || '').toLowerCase()) : [];
-    const candidati = mods.includes('qualsiasi') ? ['Intelligenza', 'Saggezza', 'Carisma'] : (spellData.modificatore || ['Intelligenza']);
-    let best = -Infinity;
-    candidati.forEach(stat => {
-        const det = p.getStatDettagliata(stat);
-        if (det && det.mod > best) best = det.mod;
-    });
-    return best === -Infinity ? 0 : best;
-}
-
-function getSessioniRichieste(livello) {
-    return Math.max(1, livello || 0);
-}
-
 window.apriDocumentiPersonaggio = function(idx) {
     const p = party[idx];
     if (!p) return;

@@ -669,7 +669,7 @@ function eseguiRicercaPerkSuInvio(evento, valore) {
         renderSetupPerks();
     }
 
-   function renderIncantesimiTab(p) {
+function renderIncantesimiTab(p) {
     if (!p) return '';
     const puoScegliere = !p.isRobot || hasGlobalPerk(p, 'Incantatore');
     if (!puoScegliere) {
@@ -706,22 +706,25 @@ function eseguiRicercaPerkSuInvio(evento, valore) {
         { grp: 'livelli', val: '3', label: 'Livello 3' },
         { grp: 'stats', val: 'intelligenza', label: 'Intelligenza' },
         { grp: 'stats', val: 'saggezza', label: 'Saggezza' },
+        { grp: 'stats', val: 'carisma', label: 'Carisma' },
         { grp: 'tipi', val: 'danni', label: 'Combattimento' },
         { grp: 'tipi', val: 'cura', label: 'Cura' },
         { grp: 'tipi', val: 'utilita', label: 'Utilità' }
     ];
+
     const filtriHtml = `<div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:12px;">
         ${filtriBtns.map(b => {
             const attivo = incantesimiFiltri[b.grp].has(b.val);
             return `<button onclick="toggleFiltroIncantesimo('${b.grp}', '${b.val}')"
                         style="padding:6px 12px; font-size:0.78rem; border-radius:6px; border:1px solid ${attivo ? '#9b59b6' : '#333'}; background:${attivo ? '#9b59b6' : '#222'}; color:#fff; cursor:pointer;">
-                        ${b.label}
+                        ${b.label} ${attivo ? '✓' : ''}
                     </button>`;
         }).join('')}
     </div>`;
 
     let html = `<div style="background:#111; border:1px solid #333; border-radius:8px; padding:12px;">
         <div style="font-size:0.95rem; margin-bottom:8px; color:#f1c40f; font-weight:bold;">INCANTESIMI (Lv ≤ ${p.livelloMagia})</div>
+        <div style="font-size:0.8rem; color:#aaa; margin-bottom:8px;">Puoi selezionare più pulsanti contemporaneamente per combinare i filtri.</div>
         ${filtriHtml}
         <div style="display:grid; gap:10px;">`;
 

@@ -189,7 +189,7 @@ function useStressFisico(idx) {
 }
 window.useStressFisico = useStressFisico;
 
-function segnaVittoria(idx) {
+export function segnaVittoria(idx) {
     const p = party[idx];
     p.registraVittoriaCombattimento();
     renderSpedizioneModal();
@@ -740,6 +740,130 @@ window.renderElencoIncantesimiList = function(idx) {
         });
     });
     container.innerHTML = html || `<p style="color:#aaa;">${conosciuti.length === 0 ? 'Non conosci ancora nessun incantesimo.' : 'Nessun incantesimo corrisponde ai filtri selezionati.'}</p>`;
+};
+
+function assegnaMetodiMagiaSeMancanti(p) {
+    if (!p) return;
+    if (typeof p.canCastSpell !== 'function') {
+        p.canCastSpell = function(level) {
+            const cost = this.getSpellCost ? this.getSpellCost(level) : (level === 0 ? 0 : level * 2);
+            if ((this.manaAttuale || 0) < cost && !this._magicExhausted) {
+                return { allowed: false, reason: 'Mana insufficiente' };
+            }
+            return { allowed: true };
+        };
+    }
+    if (typeof p.castSpell !== 'function') {
+        p.castSpell = function(level) {
+            const check = this.canCastSpell(level);
+            if (!check.allowed) return { success: false, message: check.reason };
+            const cost = this.getSpellCost ? this.getSpellCost(level) : (level === 0 ? 0 : level * 2);
+            this.manaAttuale = (this.manaAttuale || 0) - cost;
+            return { success: true, message: `Lanciato incantesimo di livello ${level} (-${cost} mana).` };
+        };
+    }
+    if (typeof p.getSpellCost !== 'function') {
+        p.getSpellCost = function(level) {
+            return level === 0 ? 0 : level * 2;
+        };
+    }
+    if (typeof p.getIncantesimiConosciutiData !== 'function') {
+        p.getIncantesimiConosciutiData = function() {
+            const conosciuti = this.incantesimi || [];
+            const flatDb = window.getSpellDatabaseFlat ? window.getSpellDatabaseFlat() : [];
+            return flatDb.filter(sp => conosciuti.includes(sp.nome));
+        };
+    }
+    if (typeof p.getSpellDataByName !== 'function') {
+        p.getSpellDataByName = function(nome) {
+            const flatDb = window.getSpellDatabaseFlat ? window.getSpellDatabaseFlat() : [];
+            return flatDb.find(sp => sp.nome === nome);
+        };
+    }
+}
+
+window.consumaIncantesimoNominato = function(idx, nomeIncantesimo) {
+    const p = party[idx];
+    if (!p) return;
+    assegnaMetodiMagiaSeMancanti(p);
+    const spell = (typeof p.getSpellDataByName === 'function') ? p.getSpellDataByName(nomeIncantesimo) : null;
+    if (!spell) return;
+    p._nextCastIsCura = (spell.categoria === 'cura');
+    p._nextCastSpellName = spell.nome;
+    const result = p.castSpell(spell.livello);
+    p._nextCastIsCura = false;
+    if (!result.success) { alert(result.message); return; }
+    let esitoExtra = '';
+    const eff = spell.effetto || {};
+    if (eff.danno) {
+        const danno = (typeof rollDiceNotation === 'function') ? rollDiceNotation(eff.danno) : 0;
+        esitoExtra = ` Effetto: ${danno} danni da ${eff.dannoTipo || ''} (da applicare manualmente al bersaglio).`;
+    } else if (eff.tipo === 'buff_resistenza') {
+        esitoExtra = ` Effetto: resistenza a danni contundenti/perforanti/taglienti fino alla fine del prossimo turno.`;
+    }
+    mostraNotificaInAlto(`${p.nome} lancia "${spell.nome}". ${result.message}${esitoExtra}`, 'successo');
+    if (document.getElementById('modal-consuma-incantesimi')?.style.display === 'block') {
+        window.renderConsumaIncantesimiModal(idx);
+    }
+    if (typeof window.aggiornaInterfaccia === 'function') window.aggiornaInterfaccia();
+};
+
+window.renderConsumaIncantesimiModal = function(idx) {
+    const p = party[idx];
+    const container = document.getElementById('consuma-incantesimi-content');
+    if (!container || !p) return;
+    assegnaMetodiMagiaSeMancanti(p);
+
+    const spellLevels = Object.keys(p.spellsKnown || {}).filter(lv => p.spellsKnown[lv] > 0);
+    if (spellLevels.length === 0) {
+        container.innerHTML = `<p style="color:#aaa;">Non conosci alcun incantesimo.</p>`;
+        return;
+    }
+
+    let html = `
+        <div style="margin-bottom:12px; color:#ddd;">
+            <strong>${p.nome}</strong> - Mana: ${p.manaAttuale}/${p.manaMax} 
+            ${p.manaAttuale < 0 ? `<span style="color:#e74c3c;">(Sovraccarico: ${Math.abs(p.manaAttuale)})</span>` : ''}
+            ${p._arcaneFatigueApplied ? '<span style="color:#e74c3c;">⚠️ Affaticato arcano</span>' : ''}
+            ${p._magicExhausted ? '<span style="color:#e74c3c;">⛔ Esaurito magicamente</span>' : ''}
+        </div>
+        <div style="display:grid; gap:8px;">`;
+
+    spellLevels.forEach(lv => {
+        const levelNum = parseInt(lv);
+        const cost = p.getSpellCost(levelNum);
+        const canCast = p.canCastSpell(levelNum);
+        const disabled = !canCast.allowed ? 'disabled' : '';
+        const reason = !canCast.allowed ? `title="${canCast.reason}"` : '';
+        html += `
+            <div style="background:#111; padding:10px; border:1px solid #333; border-radius:4px; display:flex; justify-content:space-between; align-items:center;">
+                <div>
+                    <strong>Livello ${lv}</strong> 
+                    <span style="color:#aaa;">(${p.spellsKnown[lv]} incantesimi conosciuti)</span>
+                    <span style="color:#888;">Costo: ${cost} mana</span>
+                </div>
+                <button onclick="window.consumaIncantesimo(${idx}, ${lv})" ${disabled} ${reason} class="btn-hero" style="padding:6px 12px;">
+                    Lancia
+                </button>
+            </div>`;
+    });
+
+    html += `</div>`;
+    container.innerHTML = html;
+};
+
+window.consumaIncantesimo = function(idx, level) {
+    const p = party[idx];
+    if (!p) return;
+    assegnaMetodiMagiaSeMancanti(p);
+    const result = p.castSpell(level);
+    alert(result.message);
+    if (result.success) {
+        window.renderConsumaIncantesimiModal(idx);
+        if (typeof window.aggiornaInterfaccia === 'function') window.aggiornaInterfaccia();
+    } else {
+        window.renderConsumaIncantesimiModal(idx);
+    }
 };
 
 window.useInizioCombattimento = useInizioCombattimento;

@@ -4,7 +4,7 @@
 // (informativo: il sistema usa comunque la caratteristica incantatore più alta del personaggio).
 
 window.DATABASE_INCANTESIMI = {
-    combattimento: [
+    danni: [
         {
             nome: "Arma Magica",
             livello: 2,
@@ -107,6 +107,19 @@ window.DATABASE_INCANTESIMI = {
             effetto:{tipo:'ts_danno', ts:'Forza', danno:'1d8', dannoTipo:'fulmine'},
             cd:true,
             tiro_abilita:false
+        },
+        {
+            nome: "Falsa Vita",
+            livello: 1,
+            modificatore: ["Intelligenza", "Carisma"],
+            azione: "Azione",
+            raggio: "Se stesso",
+            durata: "1 ora",
+            concentrazione: false,
+            desc: "Rafforzandoti con una simulazione necromantica della vita, ottieni 1d4 + 4 punti ferita temporanei per la durata dell'incantesimo.",
+            effetto: { tipo: 'buff_pf_temp', pfTemp: '1d4+4', durataOre: 1 },
+            cd: false,
+            tiro_abilita: false
         },
           {
             nome:"Fiamma sacra",
@@ -404,6 +417,19 @@ window.DATABASE_INCANTESIMI = {
             desc: "Il tuo corpo diventa sfocato, alterandosi e ondeggiando agli occhi di chiunque possa vederti. Per la durata dell'incantesimo, qualsiasi creatura ha svantaggio ai tiri per colpire contro di te. Un attaccante è immune a questo effetto se non fa affidamento sulla vista, come con la vista cieca, o se può vedere attraverso le illusioni, come con la vista autentica.",
             effetto: { tipo: 'sfocatura', durataTurni: 10 },
             cd: false,
+            tiro_abilita: false
+        },
+        {
+            nome: "Sfera Infuocata",
+            livello: 2,
+            modificatore: ["Carisma","Sggezza"],
+            azione: "Azione",
+            raggio: "18 metri",
+            durata: "1 minuto",
+            concentrazione: true,
+            desc: "Una sfera di fuoco del diametro di 1,5 metri appare in uno spazio libero a tua scelta entro il raggio d'azione e dura per la durata dell'incantesimo. Qualsiasi creatura che termini il suo turno entro 1,5 metri dalla sfera deve effettuare un tiro salvezza su Destrezza. La creatura subisce 2d6 danni da fuoco se fallisce il tiro salvezza, o la metà di questi danni se lo supera. Come azione bonus, puoi spostare la sfera fino a 9 metri. Se fai scontrare la sfera con una creatura, questa deve effettuare il tiro salvezza contro i danni della sfera, e la sfera smette di muoversi per questo turno. Quando muovi la sfera, puoi dirigerla oltre barriere alte fino a 1,5 metri e farle saltare fosse larghe fino a 3 metri. La sfera incendia gli oggetti infiammabili non indossati o trasportati ed emette luce intensa in un raggio di 6 metri e luce fioca per altri 6 metri.",
+            effetto: { tipo: 'area_danno_mobile', ts: 'Destrezza', danno: '2d6', dannoTipo: 'fuoco', durataTurni: 10 },
+            cd: true,
             tiro_abilita: false
         },
         {
