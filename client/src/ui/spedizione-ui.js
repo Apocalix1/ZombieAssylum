@@ -2,6 +2,7 @@
 import { party } from '../state.js';
 import { magazzino, setMagazzino } from '../state.js'; // oppure importa da dove viene esportato
 import { apiUrl, buildAuthHeaders, salvaPersonaggioCloud } from '../logic/logic.js';
+import {segnaVittoria} from '../ui/combattimento-ui.js';
 import { mostraNotificaInAlto } from '../ui/ui.js';
 import{puoIniziareAzione} from "./cibo_e_acqua-ui.js";
 
