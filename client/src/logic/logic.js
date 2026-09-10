@@ -626,9 +626,8 @@ export class Personaggio {
         this.pesoCorporeo = { usiCuscinetto: null, benNutritoOreAccumulate: 0 };
         this.puntiFortunaTemp = 0;
         this.buffCucinaMaestriaOreRestanti = 0;
-        this.piattiDeliziosiLog = [];
-        this._ultimoPiattoDeliziosoOra = 0;
-        this._folliaBloccataPiattiDeliziosi = false;
+        this._folliaResistenza = null; // { giornoCorrente, ridottoOggi, giorniConsecutivi, ultimoGiornoUso }
+        this.cariche = {}; 
         this.fame = 14;
         this.sete = 4;
         this.sonno = 8;
@@ -1714,7 +1713,7 @@ export class Personaggio {
     }
 
 
-    aggiornaSintomiFollia() {
+        aggiornaSintomiFollia() {
         if (this.follia >= 20) {
             this.folliaSintomi = "20+ Impazzito, irrecuperabile. Cambia personaggio.";
         } else if (this.follia >= 18) {
@@ -1726,6 +1725,57 @@ export class Personaggio {
         } else {
             this.folliaSintomi = "1-8 nessun sintomo";
         }
+    }
+
+    /**
+     * Resistenza alla Follia (rework):
+     * - Max 10 punti di Follia riducibili al giorno (somma di tutte le fonti: preghiere, cerimonie, piatti, ecc.)
+     * - Se usata per 3 giorni consecutivi, dal 4° giorno l'efficacia si dimezza (arrotondata per difetto)
+     * - Un giorno intero (24h) senza alcuna riduzione azzera l'assuefazione
+     * Ritorna la quantità di Follia EFFETTIVAMENTE rimossa.
+     */
+    riduciFollia(quantitaRichiesta, causa = '') {
+        if (!quantitaRichiesta || quantitaRichiesta <= 0) return 0;
+        const oraAttuale = window.oreTotali || 0;
+        const giornoAttuale = Math.floor(oraAttuale / 24);
+
+        if (!this._folliaResistenza) {
+            this._folliaResistenza = {
+                giornoCorrente: giornoAttuale,
+                ridottoOggi: 0,
+                giorniConsecutivi: 0,
+                ultimoGiornoUso: null
+            };
+        }
+        const r = this._folliaResistenza;
+
+        if (giornoAttuale !== r.giornoCorrente) {
+            const giorniPassati = giornoAttuale - r.giornoCorrente;
+            if (giorniPassati === 1 && r.ultimoGiornoUso === r.giornoCorrente) {
+                // ha usato riduzione ieri: la serie continua
+                r.giorniConsecutivi += 1;
+            } else {
+                // salto di giorno/i senza uso: l'assuefazione si resetta
+                r.giorniConsecutivi = 0;
+            }
+            r.giornoCorrente = giornoAttuale;
+            r.ridottoOggi = 0;
+        }
+
+        const assuefatto = r.giorniConsecutivi >= 3; // dal 4° giorno consecutivo
+        let quantitaEffettiva = assuefatto ? Math.floor(quantitaRichiesta / 2) : quantitaRichiesta;
+
+        const residuoGiornaliero = Math.max(0, 10 - r.ridottoOggi);
+        quantitaEffettiva = Math.min(quantitaEffettiva, residuoGiornaliero);
+
+        if (quantitaEffettiva > 0) {
+            this.follia = Math.max(0, this.follia - quantitaEffettiva);
+            if (typeof this.aggiornaSintomiFollia === 'function') this.aggiornaSintomiFollia();
+            r.ridottoOggi += quantitaEffettiva;
+            r.ultimoGiornoUso = giornoAttuale;
+        }
+
+        return quantitaEffettiva;
     }
 
     get staminaMax() {
@@ -1907,6 +1957,15 @@ export class Personaggio {
                     motivi.push("Scienziato Pazzo (+2)");
                 }
         }
+        }
+        if (statNome === "Carisma" && this.hasPerk && this.hasPerk('Leader nato')) {
+            // Conta i compagni nello stesso "luogo": in spedizione con lui, oppure in base con lui.
+            const compagni = (window.party || []).filter(m => m !== this && !!m.inSpedizione === !!this.inSpedizione);
+            const bonusLeader = Math.min(3, Math.floor(compagni.length / 2));
+            if (bonusLeader > 0) {
+                modFinale += bonusLeader;
+                motivi.push(`Leader nato (+${bonusLeader}, ${compagni.length} compagni)`);
+            }
         }
         let eccedenza = 0;
         if (valoreBase > 20) {
@@ -2291,6 +2350,16 @@ export class Personaggio {
             svantaggioDoppio = true;
         }
 
+                // Malus generici dichiarati sui perk (es. Cicatrici: -3 a tutte le prove Carisma tranne Intimidire)
+        (this.perks || []).forEach(perk => {
+            const pData = typeof perk === 'string' ? (window.findPerkData ? window.findPerkData(perk) : null) : perk;
+            const malus = pData && pData.malusAbilita;
+            if (!malus || malus.stat !== attr) return;
+            const eccezioni = (malus.eccetto || []).map(s => s.toLowerCase().trim());
+            if (eccezioni.includes(skillKey)) return;
+            modifier += malus.valore;
+        });
+
         const advantage = !!(this.vantaggi && (this.vantaggi[attr] || this.vantaggi[skillKey]));
         const disadvantageFromFlags = !!(this.svantaggi && (this.svantaggi[attr] || this.svantaggi[skillKey]));
         const overloadDisadvantage = this.studyOverload && ['Intelligenza', 'Saggezza', 'Carisma'].includes(attr);
@@ -2450,27 +2519,16 @@ export class Personaggio {
                 this.contatoreCiboAvariato = 0;
                 this.aggiungiFolliaPerEvento('avariato');
             }
-        } else if (tipoCibo === 'delizioso') {
-            const oraCorrente = window.oreTotali || 0;
-            this.deliziosoLog = (this.deliziosoLog || []).filter(t => (oraCorrente - t) <= 72); // ultimi 3 giorni
-            this.deliziosoLog.push(oraCorrente);
-
-            if (this.deliziosoLog.length >= 10) {
-                this.deliziosoBloccoFinoA = oraCorrente + 48; // bloccato per 2 giorni
-            }
-
-            const bloccato = oraCorrente < (this.deliziosoBloccoFinoA || 0);
-            if (!bloccato) {
-                // Probabilità 65% di ridurre di 1, 35% di ridurre di 2
-                const rand = Math.random();
-                const cura = rand < 0.65 ? 1 : 2;
-                this.follia = Math.max(0, this.follia - cura);
-                if (typeof window.mostraNotificaInAlto === 'function') {
-                    window.mostraNotificaInAlto(`✨ Il morale di ${this.nome} migliora grazie ai piatti prelibati! Follia ridotta di -${cura}.`, "successo");
-                }
-            } else {
-                if (typeof window.mostraNotificaInAlto === 'function') {
-                    window.mostraNotificaInAlto(`⚠️ ${this.nome} ha mangiato troppi piatti deliziosi ultimamente: la mente è satura, la follia non scende.`, "avviso");
+            } else if (tipoCibo === 'delizioso') {
+            // Probabilità 65% di ridurre di 1, 35% di ridurre di 2 (soggetto a Resistenza alla Follia)
+            const rand = Math.random();
+            const cura = rand < 0.65 ? 1 : 2;
+            const ridotto = this.riduciFollia(cura, 'piatto_delizioso');
+            if (typeof window.mostraNotificaInAlto === 'function') {
+                if (ridotto > 0) {
+                    window.mostraNotificaInAlto(`✨ Il morale di ${this.nome} migliora grazie ai piatti prelibati! Follia ridotta di -${ridotto}.`, "successo");
+                } else {
+                    window.mostraNotificaInAlto(`⚠️ ${this.nome} ha già raggiunto il limite giornaliero di riduzione della Follia: nessun effetto.`, "avviso");
                 }
             }
         }
@@ -2841,10 +2899,7 @@ export class Personaggio {
                 .map(t => t - 1)
                 .filter(t => t > 0);
         }
-                if (this.buffCucinaMaestriaOreRestanti > 0) this.buffCucinaMaestriaOreRestanti -= 1;
-        if (this._folliaBloccataPiattiDeliziosi && (window.oreTotali || 0) - (this._ultimoPiattoDeliziosoOra || 0) >= 48) {
-            this._folliaBloccataPiattiDeliziosi = false;
-        }
+        if (this.buffCucinaMaestriaOreRestanti > 0) this.buffCucinaMaestriaOreRestanti -= 1;
 
         // Spada della Follia: maledizione passiva se portata nell'inventario personale
         if (!this.isRobot) {
@@ -3430,6 +3485,12 @@ Personaggio.prototype.hasPerk = function (nome) {
     return this.perks.some(p => (typeof p === 'string' ? p : p?.nome) === nome);
 };
 
+Personaggio.prototype.puoOttenereMaestria = function (materiaNuova) {
+    const attuali = (this.masteries || []).map(m => m.toLowerCase());
+    if (attuali.includes((materiaNuova || '').toLowerCase())) return true; // già la possiede, non conta come nuova
+    return attuali.length < 3;
+};
+
 Personaggio.prototype.getModificatoreTempoAzione = function (tipoAzione, materia = null) {
     let mult = 1;
 
@@ -3495,6 +3556,24 @@ Personaggio.prototype.hasDisadvantageCostituzioneTS = function () {
     return !!(this.hasPerk && this.hasPerk('Asmatico') && this.staminaAttuale <= 2);
 };
 
+Personaggio.prototype.getCaricheInfo = function (nomeAbilita, maxCariche) {
+    if (!this.cariche) this.cariche = {};
+    const giornoAttuale = Math.floor((window.oreTotali || 0) / 24);
+    if (!this.cariche[nomeAbilita] || this.cariche[nomeAbilita].giorno !== giornoAttuale) {
+        this.cariche[nomeAbilita] = { giorno: giornoAttuale, usate: 0 };
+    }
+    const max = Math.max(0, typeof maxCariche === 'function' ? maxCariche(this) : (maxCariche || 0));
+    const usate = this.cariche[nomeAbilita].usate;
+    return { usate, max, residue: Math.max(0, max - usate) };
+};
+
+Personaggio.prototype.usaCarica = function (nomeAbilita, maxCariche) {
+    const info = this.getCaricheInfo(nomeAbilita, maxCariche);
+    if (info.residue <= 0) return false;
+    this.cariche[nomeAbilita].usate += 1;
+    return true;
+};
+
 Personaggio.prototype.getPerfezionistaTimeModifier = function (rollTotale) {
     if (!this.hasPerk || !this.hasPerk('Perfezionista')) return 1;
     return rollTotale >= 20 ? 0.9 : 1.2;
@@ -3518,7 +3597,7 @@ Personaggio.prototype.getModificatoreTempoAzione = function (tipoAzione, materia
 
     // ARTIGIANO ALIMENTARE: -20% tempo su ogni azione in corso (incluse guarigione e riposo) per 2h dopo cucina
     if (this.timers && this.timers.buffArtigianoAlimentare > 0) {
-        mult *= 0.8;
+        mult *= 0.9;
     }
 
     if (this.isRobot && this.biocarburanteDeficit) {

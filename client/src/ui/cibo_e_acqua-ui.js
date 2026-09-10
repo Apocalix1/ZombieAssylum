@@ -652,22 +652,15 @@ function eseguiNutrizione(p, dati) {
         if (hasAngelo && eraGiaBenNutrito) p._angeloCasaBonus = true;
         if (gain >= 0.25) p.timers.fameSoddisfatta = durataFameSoddisfatta;
 
-        // --- Overdose piatti deliziosi: 10 in 3 giorni blocca la riduzione di follia ---
-        const oraAttuale = window.oreTotali || 0;
-        p.piattiDeliziosiLog = (p.piattiDeliziosiLog || []).filter(t => (oraAttuale - t) < 72);
-        p.piattiDeliziosiLog.push(oraAttuale);
-        p._ultimoPiattoDeliziosoOra = oraAttuale;
-        if (p.piattiDeliziosiLog.length >= 10 && !p._folliaBloccataPiattiDeliziosi) {
-            p._folliaBloccataPiattiDeliziosi = true;
-            mostraNotificaInAlto(`${p.nome} ha esagerato con i piatti deliziosi: la Follia non si riduce più mangiandone, finché non si astiene per 2 giorni.`, 'pericolo');
+        // Riduzione della Follia soggetta alla Resistenza alla Follia (limite giornaliero + assuefazione)
+        let riduzione = Math.random() < 0.65 ? 1 : 2;
+        if (typeof window.chiediUsoOggettoMagico === 'function') {
+            const effetto = window.chiediUsoOggettoMagico(p, 'bonus_follia_deliziosi', `${p.nome} sta mangiando un piatto delizioso`);
+            if (effetto) riduzione = Math.ceil(riduzione * (1 + effetto.percentuale));
         }
-        if (!p._folliaBloccataPiattiDeliziosi) {
-            let riduzione = Math.random() < 0.65 ? 1 : 2;
-            if (typeof window.chiediUsoOggettoMagico === 'function') {
-                const effetto = window.chiediUsoOggettoMagico(p, 'bonus_follia_deliziosi', `${p.nome} sta mangiando un piatto delizioso`);
-                if (effetto) riduzione = Math.ceil(riduzione * (1 + effetto.percentuale));
-            }
-            p.follia = Math.max(0, p.follia - riduzione);
+        const folliaRidotta = p.riduciFollia(riduzione, 'piatto_delizioso');
+        if (folliaRidotta <= 0) {
+            mostraNotificaInAlto(`${p.nome} ha già raggiunto il limite giornaliero di riduzione della Follia: nessun effetto sulla mente.`, 'avviso');
         }
 
         // --- Cucina Maestria: buff attivabile entro 8h se si parte in spedizione ---

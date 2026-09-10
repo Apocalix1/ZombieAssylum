@@ -158,11 +158,10 @@ function completaCerimoniaBecchino(idCerimonia) {
     const cerimonia = window._cerimonieBecchino && window._cerimonieBecchino[idCerimonia];
     if (!cerimonia) return;
     const becchino = party.find(p => p.id === cerimonia.becchinoId);
-    if (becchino && cerimonia.partecipanti.size > 0) {
+        if (becchino && cerimonia.partecipanti.size > 0) {
         const modCar = becchino.getStatDettagliata('Carisma').mod;
-        const riduzione = Math.max(0, rollDice(1, 4) + modCar);
-        becchino.follia = Math.max(0, becchino.follia - riduzione);
-        if (typeof becchino.aggiornaSintomiFollia === 'function') becchino.aggiornaSintomiFollia();
+        const riduzioneRichiesta = Math.max(0, rollDice(1, 4) + modCar);
+        const riduzione = becchino.riduciFollia(riduzioneRichiesta, 'cerimonia_becchino');
         mostraNotificaInAlto(`La cerimonia di ${becchino.nome} si conclude: Follia -${riduzione} (${cerimonia.partecipanti.size} partecipanti).`, 'successo');
         salvaPersonaggioCloud(becchino);
     } else if (becchino) {

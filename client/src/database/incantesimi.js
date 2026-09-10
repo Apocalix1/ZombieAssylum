@@ -6,6 +6,45 @@
 window.DATABASE_INCANTESIMI = {
     danni: [
         {
+            nome: "Aiuto",
+            livello: 2,
+            modificatore: ["Carisma"],
+            azione: "Azione",
+            raggio: "9 metri",
+            durata: "20 minuti",
+            concentrazione: false,
+            desc: "Rafforzi la tempra di un massimo di tre creature. Il massimo dei punti ferita e i punti ferita attuali di ciascun bersaglio aumentano di 5 per la durata.",
+            effetto: { tipo: 'buff_pf', bonusPf: 5, durataOre: 1 },
+            cd: false,
+            tiro_abilita: false
+        },
+        {
+            nome: "Antagonizzare",
+            livello: 3,
+            modificatore: ["Carisma"],
+            azione: "Azione",
+            raggio: "9 metri",
+            durata: "Istantanea",
+            concentrazione: false,
+            desc: "Bisbigli parole magiche che irritano una creatura a tua scelta. Il bersaglio deve effettuare un tiro salvezza su Saggezza. Se fallisce, subisce 3d4 danni psichici e deve usare immediatamente la sua reazione per effettuare un attacco in mischia contro un'altra creatura a tua scelta. Se nessuna creatura è a portata, ha svantaggio al prossimo tiro per colpire.",
+            effetto: { tipo: 'ts_danno_reazione', ts: 'Saggezza', danno: '3d4', dannoTipo: 'psichici' },
+            cd: true,
+            tiro_abilita: false
+        },
+        {
+            nome: "Arma Elementale",
+            livello: 3,
+            modificatore: ["Intelligenza"],
+            azione: "Azione",
+            raggio: "A contatto",
+            durata: "10 minuti",
+            concentrazione: true,
+            desc: "Un'arma non magica che tocchi diventa magica. Scegli tra: acido, freddo, fuoco, fulmine o tuono. Per la durata dell'incantesimo, l'arma ottiene un bonus di +1 ai tiri per colpire e infligge 1d4 danni extra del tipo scelto.",
+            effetto: { tipo: 'buff_arma', bonus: 1, dannoExtra: '1d4', durataOre: 1 },
+            cd: false,
+            tiro_abilita: false
+        },
+        {
             nome: "Arma Magica",
             livello: 2,
             modificatore: ["Intelligenza"],
@@ -45,6 +84,45 @@ window.DATABASE_INCANTESIMI = {
             tiro_abilita:false
         },
         {
+            nome: "Armatura magica",
+            livello: 1,
+            modificatore: ["Intelligenza"],
+            azione: "Azione",
+            raggio: "A contatto",
+            durata: "8 ore",
+            concentrazione: false,
+            desc: "Una forza protettiva circonda una creatura non armata, portando la sua CA base a 13 + il suo modificatore di Destrezza.",
+            effetto: { tipo: 'buff_ca_base', caBase: 13, durataOre: 8 },
+            cd: false,
+            tiro_abilita: false
+        },
+        {
+            nome: "Aura di fuoco",
+            livello: 3,
+            modificatore: ["Carisma"],
+            azione: "Azione bonus",
+            raggio: "Se stesso",
+            durata: "1 minuto",
+            concentrazione: true,
+            desc: "Fiamme ruggenti eruttano dai tuoi piedi, donandoti velocità esplosiva. La tua velocità aumenta di 6 metri e il movimento non provoca attacchi di opportunità. Quando ti muovi entro 1,5 metri da una creatura o oggetto non trasportato, subisce 1d6 danni da fuoco.",
+            effetto: { tipo: 'buff_velocita_scia', bonusMetri: 6, danno: '1d6', dannoTipo: 'fuoco', durataTurni: 10 },
+            cd: false,
+            tiro_abilita: false
+        },
+        {
+            nome: "Benedizione",
+            livello: 1,
+            modificatore: ["Saggezza", "Carisma"],
+            azione: "Azione",
+            raggio: "9 metri",
+            durata: "1 minuto",
+            concentrazione: true,
+            desc: "Benedici fino a tre creature a tua scelta entro il raggio d'azione. Ogni volta che un bersaglio effettua un tiro per colpire o un tiro salvezza per la durata dell'incantesimo, può tirare un d4 e aggiungere il risultato al tiro.",
+            effetto: { tipo: 'buff_benedizione', bonus: '1d4', durataTurni: 10 },
+            cd: false,
+            tiro_abilita: false
+        },
+        {
             nome:"Blocca persone",
             livello:2,
             modificatore:["Carisma","Saggezza"],
@@ -55,6 +133,71 @@ window.DATABASE_INCANTESIMI = {
             effetto:{tipo:'blocca_persone', ts:'Saggezza', durataTurni:10},
             cd:true,
             tiro_abilita:false
+        },
+        {
+            nome: "Catapulta",
+            livello: 1,
+            modificatore: ["Intelligenza"],
+            azione: "Azione",
+            raggio: "18 metri",
+            durata: "Istantanea",
+            concentrazione: false,
+            desc: "Scegli un oggetto del peso compreso tra 0,5 e 2,5 kg entro il raggio d'azione che non sia indossato o trasportato. L'oggetto vola in linea retta fino a 27 metri in una direzione a tua scelta prima di cadere. Se l'oggetto sta per colpire una creatura, quest'ultima deve effettuare un tiro salvezza su Destrezza. Se fallisce, l'oggetto colpisce il bersaglio e si ferma. L'oggetto e ciò che colpisce subiscono entrambi 3d8 danni contundenti.",
+            effetto: { tipo: 'attacco_ts_danno', ts: 'Destrezza', danno: '3d8', dannoTipo: 'contundenti', gittataMetri: 27 },
+            cd: true,
+            tiro_abilita: false
+        },
+        {
+            nome: "Colpo accurato",
+            livello: 0,
+            modificatore: ["Intelligenza"],
+            azione: "Azione",
+            raggio: "9 metri",
+            durata: "1 round",
+            concentrazione: true,
+            desc: "Ottieni una breve intuizione sulle difese del bersaglio: nel tuo turno successivo ottieni vantaggio al primo tiro per colpire contro di esso.",
+            effetto: { tipo: 'vantaggio_attacco', durataTurni: 1 },
+            cd: false,
+            tiro_abilita: false
+        },
+        {
+            nome: "Colpo stregato",
+            livello: 1,
+            modificatore: ["Intelligenza"],
+            azione: "Azione",
+            raggio: "9 metri",
+            durata: "1 minuto",
+            concentrazione: true,
+            desc: "Un raggio di energia blu collega te e il bersaglio (attacco a distanza). Infligge 1d12 danni da fulmine alla connessione e nei turni successivi puoi usare un'azione per infliggere automaticamente altri 1d12 danni.",
+            effetto: { tipo: 'attacco_fulmine_continuo', danno: '1d12', dannoTipo: 'fulmine', durataTurni: 10 },
+            cd: false,
+            tiro_abilita: true
+        },
+        {
+            nome: "Colpo tracciante",
+            livello: 1,
+            modificatore: ["Intelligenza", "Saggezza"],
+            azione: "Azione",
+            raggio: "36 metri",
+            durata: "1 round",
+            concentrazione: false,
+            desc: "Un lampo di luce colpisce un bersaglio tramite un attacco a distanza, infliggendo 4d6 danni radianti e conferendo vantaggio al prossimo attacco contro di esso.",
+            effetto: { tipo: 'attacco_distanza_vantaggio', danno: '4d6', dannoTipo: 'radianti' },
+            cd: false,
+            tiro_abilita: true
+        },
+        {
+            nome: "Colpo Zeffiro",
+            livello: 1,
+            modificatore: ["Intelligenza", "Saggezza"],
+            azione: "Azione bonus",
+            raggio: "Se stesso",
+            durata: "1 minuto",
+            concentrazione: true,
+            desc: "Ti muovi come il vento: non provochi attacchi di opportunità. Una volta prima che termini, puoi dare vantaggio a un attacco con arma (infliggendo 1d8 danni da forza extra) e aumentare la velocità di 9 metri per quel turno.",
+            effetto: { tipo: 'buff_movimento_attacco', dannoExtra: '1d8', dannoTipo: 'forza', durataTurni: 10 },
+            cd: false,
+            tiro_abilita: false
         },
         {
             nome: "Cecità/Sordità",
@@ -70,6 +213,84 @@ window.DATABASE_INCANTESIMI = {
             tiro_abilita: false
         },
         {
+            nome: "Coltello di ghiaccio",
+            livello: 1,
+            modificatore: ["Intelligenza", "Saggezza"],
+            azione: "Azione",
+            raggio: "18 metri",
+            durata: "Istantanea",
+            concentrazione: false,
+            desc: "Scagli una scheggia di ghiaccio (attacco a distanza, 1d10 perforanti). Che colpisca o manchi, esplode costringendo le creature vicine a un TS su Destrezza o subire 2d6 danni da freddo.",
+            effetto: { tipo: 'attacco_esplosione_ghiaccio', ts: 'Destrezza', danno1: '1d10', danno2: '2d6', dannoTipo2: 'freddo' },
+            cd: true,
+            tiro_abilita: true
+        },
+        {
+            nome: "Commando",
+            livello: 1,
+            modificatore: ["Carisma", "Saggezza"],
+            azione: "Azione",
+            raggio: "18 metri",
+            durata: "1 round",
+            concentrazione: false,
+            desc: "Pronunci un comando di una sola parola a una creatura visibile. Il bersaglio deve superare un tiro salvezza su Saggezza o obbedire al comando nel suo turno successivo.",
+            effetto: { tipo: 'comando', ts: 'Saggezza' },
+            cd: true,
+            tiro_abilita: false
+        },
+        {
+            nome: "Condanna infernale",
+            livello: 1,
+            modificatore: ["Carisma"],
+            azione: "Reazione",
+            raggio: "18 metri",
+            durata: "Istantanea",
+            concentrazione: false,
+            desc: "Reazione quando subisci danni: circondi l'aggressore di fiamme infernali che infliggono 2d10 danni da fuoco (TS Destrezza per dimezzare).",
+            effetto: { tipo: 'reazione_danno', ts: 'Destrezza', danno: '2d10', dannoTipo: 'fuoco' },
+            cd: true,
+            tiro_abilita: false
+        },
+        {
+            nome: "Corona di follia",
+            livello: 2,
+            modificatore: ["Carisma"],
+            azione: "Azione",
+            raggio: "36 metri",
+            durata: "1 minuto",
+            concentrazione: true,
+            desc: "Un umanoide visibile deve superare un TS su Saggezza o essere affascinato, indossando una corona di ferro contorta e costretto a sferrare attacchi in mischia scelto da te nei suoi turni.",
+            effetto: { tipo: 'charme_controllo', ts: 'Saggezza', durataTurni: 10 },
+            cd: true,
+            tiro_abilita: false
+        },
+        {
+            nome: "Dardo Cromatico",
+            livello: 1,
+            modificatore: ["Intelligenza"],
+            azione: "Azione",
+            raggio: "18 metri",
+            durata: "Istantanea",
+            concentrazione: false,
+            desc: "Scagli una sfera di energia del diametro di 10 cm contro una creatura che vedi entro il raggio d'azione. Scegli acido, freddo, fuoco, fulmine, veleno o tuono per il tipo di globo che crei, quindi effettua un attacco con incantesimo a distanza. Se colpisci, la creatura subisce 3d8 danni del tipo scelto.",
+            effetto: { tipo: 'attacco_distanza', danno: '3d8', dannoTipo: 'scelta' },
+            cd: false,
+            tiro_abilita: true
+        },
+        {
+            nome: "Dardo incantato",
+            livello: 1,
+            modificatore: ["Intelligenza"],
+            azione: "Azione",
+            raggio: "36 metri",
+            durata: "Istantanea",
+            concentrazione: false,
+            desc: "Crea tre dardi di forza luminosi che colpiscono infallibilmente i bersagli scelti, infliggendo ciascuno 1d4 + 1 danni da forza.",
+            effetto: { tipo: 'dardi_infallibili', dardi: 3, danno: '1d4+1', dannoTipo: 'forza' },
+            cd: false,
+            tiro_abilita: false
+        },
+        {
             nome: "Dardo di Fuoco",
             livello: 0,
             modificatore: ["Qualsiasi"],
@@ -81,6 +302,19 @@ window.DATABASE_INCANTESIMI = {
             effetto: { tipo: 'attacco_distanza', danno: '1d10', dannoTipo: 'fuoco' },
             cd: false,
             tiro_abilita:true
+        },
+        {
+            nome: "Demone della polvere",
+            livello: 2,
+            modificatore: ["Carisma", "Intelligenza"],
+            azione: "Azione",
+            raggio: "18 metri",
+            durata: "1 minuto",
+            concentrazione: true,
+            desc: "Curi un piccolo turbine di sabbia in uno spazio libero. Le creature che terminano il turno vicine subiscono 1d8 danni contundenti e vengono spinte. Puoi muovere il turbine come azione bonus.",
+            effetto: { tipo: 'evocazione_mobile', danno: '1d8', dannoTipo: 'contundenti', spintaMetri: 3, durataTurni: 10 },
+            cd: false,
+            tiro_abilita: false
         },
         {
             nome: "Detonazione Psionica",
@@ -135,6 +369,19 @@ window.DATABASE_INCANTESIMI = {
             tiro_abilita:false
         },
         {
+            nome: "Fiamma verde",
+            livello: 0,
+            modificatore: ["Carisma", "Intelligenza"],
+            azione: "Azione",
+            raggio: "Se stesso (5 piedi)",
+            durata: "Istantanea",
+            concentrazione: false,
+            desc: "Effettui un attacco in mischia con un'arma: in caso di successo, fai saltare fiamme verdi verso un secondo nemico visibile entro 1,5 metri, infliggendo danni da fuoco pari al tuo modificatore.",
+            effetto: { tipo: 'attacco_arma_fiamme', dannoTipo: 'fuoco' },
+            cd: false,
+            tiro_abilita: false
+        },
+        {
             nome: "Fiotto Acido",
             livello: 0,
             modificatore: ["Intelligenza", "Saggezza"],
@@ -148,6 +395,71 @@ window.DATABASE_INCANTESIMI = {
             tiro_abilita:true
         },
         {
+            nome: "Flagello",
+            livello: 1,
+            modificatore: ["Carisma", "Intelligenza", "Saggezza"],
+            azione: "Azione",
+            raggio: "9 metri",
+            durata: "1 minuto",
+            concentrazione: true,
+            desc: "Fino a tre creature a tua scelta devono effettuare tiri salvezza su Carisma. Se falliscono, ogni volta che effettuano un tiro per colpire o un tiro salvezza prima che l'incantesimo termini, devono tirare un d4 e sottrarre il risultato dal tiro.",
+            effetto: { tipo: 'debuff_maledizione', ts: 'Carisma', penalita: '1d4', durataTurni: 10 },
+            cd: true,
+            tiro_abilita: false
+        },
+        {
+            nome: "Flusso Acido",
+            livello: 1,
+            modificatore: ["Intelligenza", "Saggezza"],
+            azione: "Azione",
+            raggio: "Se stesso (linea di 9 metri)",
+            durata: "1 minuto",
+            concentrazione: true,
+            desc: "Un flusso di acido fuoriesce da te in una linea lunga 9 metri e larga 1,5 metri. Ogni creatura nella linea deve superare un tiro salvezza su Destrezza o essere coperta di acido per la durata dell'incantesimo, subendo 3d4 danni da acido all'inizio di ogni suo turno.",
+            effetto: { tipo: 'ts_danno_continuo', ts: 'Destrezza', danno: '3d4', dannoTipo: 'acido', durataTurni: 10 },
+            cd: true,
+            tiro_abilita: false
+        },
+        {
+            nome: "Frantumare",
+            livello: 2,
+            modificatore: ["Carisma"],
+            azione: "Azione",
+            raggio: "18 metri",
+            durata: "Istantanea",
+            concentrazione: false,
+            desc: "Un rumore assordante erutta in una sfera con raggio di 3 metri. Le creature subiscono 3d8 danni da tuono (TS Costituzione dimezza); gli oggetti inorganici hanno svantaggio.",
+            effetto: { tipo: 'area_tuono', ts: 'Costituzione', danno: '3d8', dannoTipo: 'tuono' },
+            cd: true,
+            tiro_abilita: false
+        },
+        {
+            nome: "Freddo mortale",
+            livello: 2,
+            modificatore: ["Intelligenza"],
+            azione: "Azione",
+            raggio: "Se stesso (cono di 9 metri)",
+            durata: "Istantanea",
+            concentrazione: false,
+            desc: "Un'esplosione di freddo in un cono di 9 metri infligge 3d8 danni da freddo e copre di ghiaccio le creature (velocità ridotta a 0) se falliscono un TS su Costituzione.",
+            effetto: { tipo: 'cono_gelo_blocco', ts: 'Costituzione', danno: '3d8', dannoTipo: 'freddo', condizione: 'velocita_zero' },
+            cd: true,
+            tiro_abilita: false
+        },
+        {
+        nome: "Frusta di Spine",
+        livello: 0,
+        modificatore: ["Saggezza"],
+        azione: "Azione",
+        raggio: "9 metri",
+        durata: "Istantanea",
+        concentrazione: false,
+        desc: "Crea una frusta di viticci spinati (attacco in mischia con incantesimo). Se colpisci, infliggi 1d6 danni perforanti e, se la creatura è di taglia Grande o inferiore, la trascini fino a 3 metri verso di te.",
+        effetto: { tipo: 'attacco_mischia_trazione', danno: '1d6', dannoTipo: 'perforanti', trazioneMetri: 3 },
+        cd: false,
+        tiro_abilita: true
+    },
+        {
             nome: "Fulmine",
             livello: 3,
             modificatore: ["Intelligenza"],
@@ -155,7 +467,7 @@ window.DATABASE_INCANTESIMI = {
             raggio: "Se stesso (linea di 30 metri)",
             durata: "Istantanea",
             concentrazione: false,
-            desc: "Un raggio di fulmine che forma una linea lunga 30 metri e larga 1,5 metri scaturisce da te in una direzione a tua scelta. Ogni creatura nella linea deve effettuare un tiro salvezza su Destrezza. Una creatura subisce 8d6 danni da fulmine se fallisce il tiro salvezza, o la metà di questi danni se lo supera. Il fulmine incendia gli oggetti infiammabili nell'area che non sono indossati o trasportati.",
+            desc: "Un raggio di fulmine che forma una linea lunga 30 metri e larga 1,5 metri scaturisce da te in una direzione a tua scelta. Ogni creatura nella linea deve effettuare un tiro salvezza su Destrezza. Una creatura subisce 6d6 danni da fulmine se fallisce il tiro salvezza, o la metà di questi danni se lo supera. Il fulmine incendia gli oggetti infiammabili nell'area che non sono indossati o trasportati.",
             effetto: { tipo: 'ts_danno', ts: 'Destrezza', danno: '8d6', dannoTipo: 'fulmine' },
             cd: true,
             tiro_abilita: false
@@ -186,6 +498,32 @@ window.DATABASE_INCANTESIMI = {
             tiro_abilita:false
         },
         {
+            nome: "Immagine Speculare",
+            livello: 2,
+            modificatore: ["Carisma", "Intelligenza"],
+            azione: "Azione",
+            raggio: "Se stesso",
+            durata: "1 minuto",
+            concentrazione: false,
+            desc: "Tre duplicati illusori di te stesso appaiono nel tuo spazio. Finché l'incantesimo non termina, i duplicati si muovono con te e imitano le tue azioni, rendendo impossibile capire quale immagine sia reale. Ogni volta che una creatura ti bersaglia con un attacco, tira un d20: con tre duplicati, con un 6 o più l'attacco colpisce un duplicato; con due duplicati, serve un 8 o più; con un duplicato, serve un 11 o più. La CA di un duplicato è 10 + il tuo modificatore di Destrezza. Un colpo a segno distrugge il duplicato. L'incantesimo termina quando tutti e tre i duplicati sono distrutti. Creature che non si basano sulla vista sono immuni all'effetto.",
+            effetto: { tipo: 'difesa_illusione', durataTurni: 10 },
+            cd: false,
+            tiro_abilita: false
+        },
+        {
+            nome: "Incita Paura",
+            livello: 1,
+            modificatore: ["Carisma"],
+            azione: "Azione",
+            raggio: "18 metri",
+            durata: "1 minuto",
+            concentrazione: true,
+            desc: "Risvegli il senso di mortalità in una creatura che vedi entro il raggio d'azione (costrutti e non morti sono immuni). Il bersaglio deve superare un tiro salvezza su Saggezza o essere spaventato da te fino al termine dell'incantesimo. Il bersaglio può ripetere il tiro salvezza alla fine di ogni suo turno, terminando l'effetto in caso di successo.",
+            effetto: { tipo: 'ts_debuff', ts: 'Saggezza', condizione: 'spaventato', durataTurni: 10 },
+            cd: true,
+            tiro_abilita: false
+        },
+        {
             nome:"Infestazione",
             livello:0,
             modificatore:["Saggezza","Carisma"],
@@ -197,6 +535,45 @@ window.DATABASE_INCANTESIMI = {
             effetto:{tipo:'ts_danno', ts:'Costituzione', danno:'1d6', dannoTipo:'veleno'},
             cd:true,
             tiro_abilita:false
+        },
+        {
+            nome: "Infliggi ferite",
+            livello: 1,
+            modificatore: ["Intelligenza"],
+            azione: "Azione",
+            raggio: "A contatto",
+            durata: "Istantanea",
+            concentrazione: false,
+            desc: "Effettua un attacco con incantesimo in mischia: se colpisci, infliggi 3d10 danni necrotici.",
+            effetto: { tipo: 'attacco_mischia', danno: '3d10', dannoTipo: 'necrotici' },
+            cd: false,
+            tiro_abilita: true
+        },
+        {
+            nome: "Intermittenza",
+            livello: 3,
+            modificatore: ["Intelligenza"],
+            azione: "Azione",
+            raggio: "Se stesso",
+            durata: "1 minuto",
+            concentrazione: false,
+            desc: "Tira un d20 alla fine di ogni tuo turno. Con un 11 o più, svanisci dal tuo piano di esistenza e appari nel Piano Etereo. All'inizio del tuo prossimo turno, torni in uno spazio libero a tua scelta entro 3 metri dallo spazio in cui sei svanito. Mentre sei sul Piano Etereo, puoi vedere e sentire il piano di origine (in scala di grigi e fino a 18 metri), ma puoi interagire solo con altre creature sul Piano Etereo.",
+            effetto: { tipo: 'difesa_intermittenza', raggioMetri: 3, durataTurni: 10 },
+            cd: false,
+            tiro_abilita: false
+        },
+        {
+            nome: "Intrattenere",
+            livello: 1,
+            modificatore: ["Saggezza"],
+            azione: "Azione",
+            raggio: "27 metri",
+            durata: "1 minuto",
+            concentrazione: true,
+            desc: "Erbe e viticci spuntano dal terreno in un'area di 6 metri quadrati, trasformandola in terreno difficile e trattenendo le creature che falliscono un tiro salvezza su Forza.",
+            effetto: { tipo: 'area_terreno_difficile', ts: 'Forza', condizione: 'trattenuto', durataTurni: 10 },
+            cd: true,
+            tiro_abilita: false
         },
         {
             nome: "Lama Infuocata",
@@ -225,6 +602,58 @@ window.DATABASE_INCANTESIMI = {
 
         },
         {
+            nome: "Legata a terra",
+            livello: 2,
+            modificatore: ["Qualsiasi"],
+            azione: "Azione",
+            raggio: "90 metri",
+            durata: "1 minuto",
+            concentrazione: true,
+            desc: "Strisce di energia magica avvolgono una creatura. Il bersaglio deve superare un tiro salvezza su Forza o la sua velocità di volo si riduce a 0 metri per la durata.",
+            effetto: { tipo: 'blocco_volo', ts: 'Forza', durataTurni: 10 },
+            cd: true,
+            tiro_abilita: false
+        },
+        {
+            nome: "Lentezza",
+            livello: 3,
+            modificatore: ["Qualsiasi"],
+            azione: "Azione",
+            raggio: "36 metri",
+            durata: "1 minuto",
+            concentrazione: true,
+            desc: "Alteri il tempo attorno a un massimo di sei creature in un cubo di 12 metri. Se falliscono un TS su Saggezza, la loro velocità si dimezza, subiscono penalità a CA e TS, perdono le reazioni e subiscono limitazioni nelle azioni e negli incantesimi.",
+            effetto: { tipo: 'area_rallentamento', ts: 'Saggezza', durataTurni: 10 },
+            cd: true,
+            tiro_abilita: false
+        },
+        {
+            nome: "Luce diurna",
+            livello: 3,
+            modificatore: ["Qualsiasi"],
+            azione: "Azione",
+            raggio: "18 metri",
+            durata: "1 ora",
+            concentrazione: false,
+            desc: "Crea una sfera di luce intensa con raggio di 18 metri (e luce fioca per altri 18 metri). Dissipa l'oscurità creata da incantesimi di livello 3 o inferiore.",
+            effetto: { tipo: 'luce_intensa', raggioMetri: 18, durataOre: 1 },
+            cd: false,
+            tiro_abilita: false
+        },
+        {
+            nome: "Luminescenza",
+            livello: 1,
+            modificatore: ["Carisma", "Saggezza"],
+            azione: "Azione",
+            raggio: "18 metri",
+            durata: "1 minuto",
+            concentrazione: true,
+            desc: "Oggetti e creature in un cubo di 6 metri sono delineati da luce colorata se falliscono un tiro salvezza su Destrezza. Gli attacchi contro di loro hanno vantaggio.",
+            effetto: { tipo: 'area_luce_vantaggio', ts: 'Destrezza', durataTurni: 10 },
+            cd: true,
+            tiro_abilita: false
+        },
+        {
             nome: "Mano di Carte",
             livello: 2,
             modificatore: ["Carisma"],
@@ -250,6 +679,19 @@ window.DATABASE_INCANTESIMI = {
             tiro_abilita:false
         },
         {
+            nome: "Marchio del cacciatore",
+            livello: 1,
+            modificatore: ["Saggezza"],
+            azione: "Azione bonus",
+            raggio: "27 metri",
+            durata: "1 ora",
+            concentrazione: true,
+            desc: "Segni una creatura come tua preda: infliggi 1d6 danni extra con gli attacchi con arma e hai vantaggio alle prove di Percezione o Sopravvivenza per trovarla.",
+            effetto: { tipo: 'segno_preda', danno: '1d6', durataOre: 1 },
+            cd: false,
+            tiro_abilita: false
+        },
+        {
             nome:"Morsa congelante",
             livello:0,
             modificatore:["Intelligenza","Saggezza"],
@@ -262,6 +704,32 @@ window.DATABASE_INCANTESIMI = {
             cd:true,
             tiro_abilita:false
 
+        },
+        {
+            nome: "Muro di sabbia",
+            livello: 3,
+            modificatore: ["Intelligenza", "Saggezza"],
+            azione: "Azione",
+            raggio: "27 metri",
+            durata: "10 minuti",
+            concentrazione: true,
+            desc: "Evochi un muro di sabbia turbinante lungo fino a 4,5 metri, alto 1,5 metri e spesso 1,5 metri. Blocca la linea di vista, acceca chi vi passa dentro e raddoppia il costo del movimento.",
+            effetto: { tipo: 'muro_sabbia', condizione: 'accecato', durataTurni: 100 },
+            cd: false,
+            tiro_abilita: false
+        },
+        {
+            nome: "Muro di vento",
+            livello: 3,
+            modificatore: ["Intelligenza", "Saggezza"],
+            azione: "Azione",
+            raggio: "18 metri",
+            durata: "1 minuto",
+            concentrazione: true,
+            desc: "Un muro di vento forte lungo fino a 7,5 metri solleva detriti, devia le normali frecce e proiettili, impedisce alle creature di taglia Piccola o inferiore di passare e infligge 3d8 danni contundenti (TS Forza dimezza).",
+            effetto: { tipo: 'muro_vento', ts: 'Forza', danno: '3d8', dannoTipo: 'contundenti', durataTurni: 10 },
+            cd: true,
+            tiro_abilita: false
         },
         {
             nome:"Nebbia",
@@ -287,6 +755,32 @@ window.DATABASE_INCANTESIMI = {
             desc: "Riempi l'aria di pugnali rotanti in un cubo di 1,5 metri di lato, centrato su un punto a tua scelta entro il raggio d'azione. Una creatura subisce 4d4 danni taglienti quando entra nell'area dell'incantesimo per la prima volta in un turno o quando vi inizia il suo turno.",
             effetto: { tipo: 'area_danno', danno: '4d4', dannoTipo: 'taglienti', areaMetri: 1.5, durataTurni: 10 },
             cd: false,
+            tiro_abilita: false
+        },
+        {
+            nome: "Nube velenosa",
+            livello: 3,
+            modificatore: ["Intelligenza", "Saggezza"],
+            azione: "Azione",
+            raggio: "27 metri",
+            durata: "1 minuto",
+            concentrazione: true,
+            desc: "Crea una sfera di gas nauseante gialla di 6 metri di raggio. Le creature completamente all'interno devono effettuare un TS su Costituzione o sprecare l'azione per i conati.",
+            effetto: { tipo: 'area_gas_nauseante', ts: 'Costituzione', durataTurni: 10 },
+            cd: true,
+            tiro_abilita: false
+        },
+        {
+            nome: "Onda tonante",
+            livello: 1,
+            modificatore: ["Qualsiasi"],
+            azione: "Azione",
+            raggio: "Se stesso (cubo di 4,5 metri)",
+            durata: "Istantanea",
+            concentrazione: false,
+            desc: "Un'onda di forza tuonante spazza via da te in un cubo di 4,5 metri. Le creature subiscono 2d8 danni da tuono e sono spinte di 3 metri (TS Costituzione dimezza e nega spinta).",
+            effetto: { tipo: 'cubo_tuono', ts: 'Costituzione', danno: '2d8', dannoTipo: 'tuono', spintaMetri: 3 },
+            cd: true,
             tiro_abilita: false
         },
         {
@@ -316,6 +810,19 @@ window.DATABASE_INCANTESIMI = {
             tiro_abilita:false
         },
         {
+            nome: "Passo tonante",
+            livello: 3,
+            modificatore: ["Qualsiasi"],
+            azione: "Azione",
+            raggio: "27 metri",
+            durata: "Istantanea",
+            concentrazione: false,
+            desc: "Ti teletrasporti in uno spazio libero visibile. Un boato sonoro colpisce le creature entro 3 metri dal punto di partenza, infliggendo 3d10 danni da tuono (TS Costituzione dimezza).",
+            effetto: { tipo: 'teletrasporto_boato', ts: 'Costituzione', danno: '3d10', dannoTipo: 'tuono' },
+            cd: true,
+            tiro_abilita: false
+        },
+        {
             nome: "Pelle di Corteccia",
             livello: 2,
             modificatore: ["Saggezza"],
@@ -329,6 +836,19 @@ window.DATABASE_INCANTESIMI = {
             tiro_abilita: false
         },
         {
+            nome: "Pietra Magica",
+            livello: 0,
+            modificatore: ["Intelligenza", "Saggezza"],
+            azione: "Azione bonus",
+            raggio: "A contatto",
+            durata: "1 minuto",
+            concentrazione: false,
+            desc: "Inbui da uno a tre sassolini con la magia. Chi li lancia usa il tuo modificatore di incantatore e infligge 1d6 danni contundenti + il modificatore.",
+            effetto: { tipo: 'buff_sassi', danno: '1d6', durataTurni: 10 },
+            cd: false,
+            tiro_abilita: false
+        },
+        {
             nome: "Pirotecnica",
             livello: 2,
             modificatore: ["Carisma"],
@@ -338,6 +858,32 @@ window.DATABASE_INCANTESIMI = {
             concentrazione: false,
             desc: "Scegli un'area di fiamma che puoi vedere e che possa entrare in un cubo di 1,5 metri entro il raggio d'azione. Puoi spegnere il fuoco in quell'area e creare fuochi d'artificio o fumo. \n - Fuochi d'artificio: Il bersaglio esplode in uno sfolgorante spettacolo di colori. Ogni creatura entro 3 metri dal bersaglio deve superare un tiro salvezza su Costituzione o essere accecata fino alla fine del tuo prossimo turno. \n - Fumo: Un denso fumo nero si diffonde dal bersaglio in un raggio di 6 metri, espandendosi oltre gli angoli. L'area del fumo è fortemente oscurata. Il fumo persiste per 1 minuto o finché un forte vento non lo disperde.",
             effetto: { tipo: 'pirotecnica', ts: 'Costituzione', condizione: 'accecato', raggioFumoMetri: 6, durataTurni: 10 },
+            cd: true,
+            tiro_abilita: false
+        },
+        {
+            nome: "Protetezione dalla Balistica",
+            livello: 2,
+            modificatore: ["Saggezza"],
+            azione: "Azione",
+            raggio: "A contatto",
+            durata: "10 minuti",
+            concentrazione: true,
+            desc: "Incatena la carne di una creatura contro l'impatto dei proiettili, conferendo resistenza ai danni balistici non magici.",
+            effetto: { tipo: 'buff_resistenza_balistica', durataTurni: 100 },
+            cd: false,
+            tiro_abilita: false
+        },
+        {
+            nome: "Punta Mentale",
+            livello: 2,
+            modificatore: ["Intelligenza"],
+            azione: "Azione",
+            raggio: "18 metri",
+            durata: "1 ora",
+            concentrazione: true,
+            desc: "Penetri nella mente di una creatura che vedi entro il raggio d'azione. Il bersaglio deve effettuare un tiro salvezza su Saggezza. Se fallisce, subisce 3d8 danni psichici e tu ne conosci sempre la posizione per la durata dell'incantesimo (se vi trovate sullo stesso piano). Finché hai questa conoscenza, il bersaglio non può nascondersi da te e, se invisibile, non ottiene benefici da quella condizione contro di te. Se supera il tiro salvezza, subisce solo la metà dei danni e non viene tracciato.",
+            effetto: { tipo: 'ts_danno_divinazione', ts: 'Saggezza', danno: '3d8', dannoTipo: 'psichici', durataOre: 1 },
             cd: true,
             tiro_abilita: false
         },
@@ -368,6 +914,19 @@ window.DATABASE_INCANTESIMI = {
             tiro_abilita: true
         },
         {
+        nome: "Raggio di Gelo",
+        livello: 0,
+        modificatore: ["Intelligenza"],
+        azione: "Azione",
+        raggio: "18 metri",
+        durata: "Istantanea",
+        concentrazione: false,
+        desc: "Un raggio di luce blu-bianca gelida sfreccia verso una creatura (attacco a distanza). Se colpisci, infliggi 1d8 danni da freddo e riduci la velocità del bersaglio di 3 metri fino all'inizio del tuo prossimo turno.",
+        effetto: { tipo: 'attacco_distanza_rallentamento', danno: '1d8', dannoTipo: 'freddo' },
+        cd: false,
+        tiro_abilita: true
+    },
+        {
             nome: "Raggio Rovente",
             livello: 2,
             modificatore: ["Intelligenza"],
@@ -378,6 +937,19 @@ window.DATABASE_INCANTESIMI = {
             desc: "Crei tre raggi di fuoco e li scagli contro bersagli entro il raggio d'azione. Puoi scagliarli contro un singolo bersaglio o bersagli multipli. Effettua un attacco con incantesimo a distanza per ogni raggio. Se colpisci, il bersaglio subisce 2d6 danni da fuoco.",
             effetto: { tipo: 'attacco_distanza_multiplo', raggi: 3, danno: '2d6', dannoTipo: 'fuoco' },
             cd: false,
+            tiro_abilita: true
+        },
+        {
+            nome: "Raggio velenoso",
+            livello: 1,
+            modificatore: ["Qualsiasi"],
+            azione: "Azione",
+            raggio: "18 metri",
+            durata: "Istantanea",
+            concentrazione: false,
+            desc: "Un raggio di energia verde scagliato con attacco a distanza infligge 2d8 danni da veleno e avvelena il bersaglio in caso di fallimento di un TS su Costituzione.",
+            effetto: { tipo: 'attacco_distanza_veleno', ts: 'Costituzione', danno: '2d8', dannoTipo: 'veleno', condizione: 'avvelenato' },
+            cd: true,
             tiro_abilita: true
         },
         {
@@ -394,6 +966,19 @@ window.DATABASE_INCANTESIMI = {
             tiro_abilita: false
         },
         {
+        nome: "Resistenza",
+        livello: 0,
+        modificatore: ["Carisma", "Saggezza"],
+        azione: "Azione",
+        raggio: "A contatto",
+        durata: "1 minuto",
+        concentrazione: true,
+        desc: "Tocchi una creatura consenziente: prima che l'incantesimo termini, il bersaglio può aggiungere un d4 a un tiro salvezza a sua scelta.",
+        effetto: { tipo: 'buff_resistenza_ts', durataTurni: 10 },
+        cd: false,
+        tiro_abilita: false
+        },
+        {
             nome: "Risveglio Primordiale",
             livello: 0,
             modificatore: ["Saggezza"],
@@ -405,6 +990,71 @@ window.DATABASE_INCANTESIMI = {
             effetto: { tipo: 'attacco_mischia', danno: '1d10', dannoTipo: 'acido' },
             cd: false,
             tiro_abilita:true
+        },
+        {
+            nome: "Ritirata",
+            livello: 1,
+            modificatore: ["Saggezza"],
+            azione: "Azione bonus",
+            raggio: "Se stesso",
+            durata: "10 minuti",
+            concentrazione: true,
+            desc: "Ti muovi a un ritmo incredibile: puoi intraprendere l'azione di Scatto come azione bonus in ogni tuo turno per la durata dell'incantesimo.",
+            effetto: { tipo: 'buff_scatto', durataTurni: 100 },
+            cd: false,
+            tiro_abilita: false
+        },
+        {
+            nome: "Santuario",
+            livello: 1,
+            modificatore: ["Saggezza"],
+            azione: "Azione bonus",
+            raggio: "9 metri",
+            durata: "1 minuto",
+            concentrazione: false,
+            desc: "Proteggi una creatura: chiunque la bersagli con un attacco o incantesimo deve superare un TS su Saggezza o scegliere un nuovo bersaglio.",
+            effetto: { tipo: 'protezione_rifugio', ts: 'Saggezza', durataTurni: 10 },
+            cd: true,
+            tiro_abilita: false
+        },
+        {
+        nome: "Scalda Metallo",
+        livello: 2,
+        modificatore: ["Carisma", "Intelligenza"],
+        azione: "Azione",
+        raggio: "18 metri",
+        durata: "1 minuto",
+        concentrazione: true,
+        desc: "Scegli un oggetto di metallo lavorato visibile. Fai brillare l'oggetto di rosso vivo: infligge 2d8 danni da fuoco alle creature a contatto e puoi ripeterlo come azione bonus nei turni successivi. Chi lo indossa o impugna deve superare un TS su Costituzione o lasciarlo cadere, subendo svantaggio ad attacchi e prove se lo trattiene.",
+        effetto: { tipo: 'danno_fuoco_metallo', ts: 'Costituzione', danno: '2d8', dannoTipo: 'fuoco', durataTurni: 10 },
+        cd: true,
+        tiro_abilita: false
+    },
+        {
+            nome: "Sciagura",
+            livello: 1,
+            modificatore: ["Carisma"],
+            azione: "Azione bonus",
+            raggio: "27 metri",
+            durata: "1 ora",
+            concentrazione: true,
+            desc: "Maledici una creatura: infliggi 1d6 danni necrotici extra quando la colpisci e il bersaglio ha svantaggio alle prove di una caratteristica scelta.",
+            effetto: { tipo: 'maledizione_danno', danno: '1d6', dannoTipo: 'necrotici', durataOre: 1 },
+            cd: false,
+            tiro_abilita: false
+        },
+        {
+            nome: "Scoppio",
+            livello: 0,
+            modificatore: ["Qualsiasi"],
+            azione: "Azione",
+            raggio: "Se stesso (1,5 metri)",
+            durata: "Istantanea",
+            concentrazione: false,
+            desc: "Produci un'esplosione di suono tuonante udibile fino a 30 metri. Ogni creatura vicina subisce 1d6 danni da tuono se fallisce un TS su Costituzione.",
+            effetto: { tipo: 'area_tuono_trucchetto', ts: 'Costituzione', danno: '1d6', dannoTipo: 'tuono' },
+            cd: true,
+            tiro_abilita: false
         },
         {
             nome: "Sfocatura",
@@ -446,6 +1096,32 @@ window.DATABASE_INCANTESIMI = {
             tiro_abilita: false
         },
         {
+            nome: "Spruzzo colorato",
+            livello: 1,
+            modificatore: ["Saggezza"],
+            azione: "Azione",
+            raggio: "Se stesso (cono di 4,5 metri)",
+            durata: "1 round",
+            concentrazione: false,
+            desc: "Una gamma di luci lampeggianti e colorate emerge dalla tua mano. Tira 6d10; il totale indica quanti punti ferita di creature in un cono di 4,5 metri puoi accecare, partendo da quelle con meno punti ferita.",
+            effetto: { tipo: 'accecamento_pf', dadi: '6d10', condizione: 'accecato' },
+            cd: false,
+            tiro_abilita: false
+        },
+        {
+            nome: "Spruzzo velenoso",
+            livello: 0,
+            modificatore: ["Saggezza"],
+            azione: "Azione",
+            raggio: "3 metri",
+            durata: "Istantanea",
+            concentrazione: false,
+            desc: "Proietti un soffio di gas tossico dalla mano contro una creatura visibile. Il bersaglio subisce 1d12 danni da veleno se fallisce un tiro salvezza su Costituzione.",
+            effetto: { tipo: 'ts_veleno', ts: 'Costituzione', danno: '1d12', dannoTipo: 'veleno' },
+            cd: true,
+            tiro_abilita: false
+        },
+        {
             nome:"Tocco gelido",
             livello:0,
             modificatore:["Carisma"],
@@ -471,9 +1147,115 @@ window.DATABASE_INCANTESIMI = {
             cd: false,
             tiro_abilita: true
         },
+        {
+            nome: "Trappola",
+            livello: 1,
+            modificatore: ["Intelligenza", "Saggezza"],
+            azione: "1 minuto",
+            raggio: "A contatto",
+            durata: "4 ore",
+            concentrazione: false,
+            desc: "Crei una trappola magica invisibile sul pavimento usando 7,5 metri di corda. Chi la attiva deve superare un TS su Destrezza o essere sollevato a testa in giù e trattenuto.",
+            effetto: { tipo: 'trappola_corda', ts: 'Destrezza', condizione: 'trattenuto', durataOre: 4 },
+            cd: true,
+            tiro_abilita: false
+        },
+        {
+            nome: "Unto",
+            livello: 1,
+            modificatore: ["Intelligenza", "Saggezza"],
+            azione: "Azione",
+            raggio: "18 metri",
+            durata: "1 minuto",
+            concentrazione: false,
+            desc: "Un quadrato di 3 metri di grasso scivoloso copre il terreno, rendendolo terreno difficile. Le creature devono superare un TS su Destrezza o cadere prone.",
+            effetto: { tipo: 'area_terreno_prono', ts: 'Destrezza', condizione: 'prono', durataTurni: 10 },
+            cd: true,
+            tiro_abilita: false
+        },
+        {
+            nome: "Velocità",
+            livello: 3,
+            modificatore: ["Saggezza"],
+            azione: "Azione",
+            raggio: "9 metri",
+            durata: "1 minuto",
+            concentrazione: true,
+            desc: "Scegli una creatura consenziente che puoi vedere entro il raggio d'azione. Per la durata, la velocità del bersaglio raddoppia, ottiene un bonus di +2 alla CA, ha vantaggio ai tiri salvezza su Destrezza e ottiene un'azione aggiuntiva in ogni suo turno (utilizzabile solo per Scattare, Disimpegnarsi, Nascondersi o Usare un Oggetto).",
+            effetto: { tipo: 'buff_velocita', bonusCa: 2, durataTurni: 10 },
+            cd: false,
+            tiro_abilita: false
+        },
+        {
+            nome: "Vento a favore",
+            livello: 2,
+            modificatore: ["Saggezza"],
+            azione: "Azione",
+            raggio: "Se stesso (linea di 18 metri)",
+            durata: "1 minuto",
+            concentrazione: true,
+            desc: "Una linea di forte vento lunga 18 metri e larga 3 metri spinge via le creature che falliscono un tiro salvezza su Forza e rende difficoltoso il movimento verso di te.",
+            effetto: { tipo: 'linea_vento_spinta', ts: 'Forza', spintaMetri: 4.5, durataTurni: 10 },
+            cd: true,
+            tiro_abilita: false
+        },
     ],
-    cura: [],
+    cura: [
+        {
+            nome: "Rianimare",
+            livello: 3,
+            modificatore: ["Qualsiasi"],
+            azione: "Azione",
+            raggio: "A contatto",
+            durata: "Istantanea",
+            concentrazione: false,
+            desc: "Tocchi una creatura morta nell'ultimo minuto riportandola in vita con 1 punto. Questo incantesimo ti infliggerà 1 stadio di fatica.",
+            effetto: { tipo: 'resurrezione', pfRitorno: 1 },
+            cd: false,
+            tiro_abilita: false
+        },
+    ],
      utilita: [
+        {
+            nome:"Accendere/Spegnere",
+            livello: 0,
+            modificatore:["Intelligenza"],
+            azione:"azione bonus",
+            raggio:"12 metri",
+            durata:"1 turno",
+            concentrazione:false,
+            Desc:"Puoi spegnere o accendere un dispositivo che vedi nel raggio che sia un robot, macchingengo o altro. La macchina ci metterà un turno ad avviarsi. Se provi a spegnere un robot questo farà un TS su Intelligenza (CD tuo da incantatore-3) se lo fallisce sarà stordito per un turno.",
+            effetto:{ tipo:'onoff'},
+            cd: true,
+            tiro_abilita:false
+
+        },
+        {
+            nome: "Allarme",
+            livello: 1,
+            modificatore: ["Intelligenza", "Saggezza"],
+            azione: "1 minuto",
+            raggio: "9 metri",
+            durata: "8 ore",
+            concentrazione: false,
+            desc: "Imposti un allarme contro intrusioni non desiderate in un'area o porta (cubo di 6 metri). L'allarme può essere mentale (entro 1 miglio) o acustico (campanello udibile a 18 metri).",
+            effetto: { tipo: 'trappola_allarme', durataOre: 8 },
+            cd: false,
+            tiro_abilita: false
+        },
+        {
+            nome: "Alterare se stesso",
+            livello: 2,
+            modificatore: ["Saggezza"],
+            azione: "Azione",
+            raggio: "Se stesso",
+            durata: "1 ora",
+            concentrazione: true,
+            desc: "Assumi una forma differente scegliendo tra: Adattamento Acquatico (respirare sott'acqua e velocità di nuoto), Modifica Aspetto (cambiare sembianze) o Armi Naturali (attacchi disarmati magici con 1d6 danni e +1).",
+            effetto: { tipo: 'mutazione', durataOre: 1 },
+            cd: false,
+            tiro_abilita: false
+        },
         {
             nome:"Amicizia",
             livello:0,
@@ -488,6 +1270,45 @@ window.DATABASE_INCANTESIMI = {
             tiro_abilita:false
         },
         {
+            nome: "Blink",
+            livello: 3,
+            modificatore: ["Intelligenza"],
+            azione: "Azione",
+            raggio: "Se stesso",
+            durata: "1 minuto",
+            concentrazione: false,
+            desc: "Tira un d20 alla fine di ogni tuo turno: con un 11 o più, svanisci nel Piano Etereo, tornando all'inizio del turno successivo in uno spazio libero entro 3 metri.",
+            effetto: { tipo: 'intermittenza_eterea', durataTurni: 10 },
+            cd: false,
+            tiro_abilita: false
+        },
+        {
+            nome: "Bocca magica",
+            livello: 2,
+            modificatore: ["Intelligenza"],
+            azione: "1 minuto",
+            raggio: "9 metri",
+            durata: "Finché non viene dissolto",
+            concentrazione: false,
+            desc: "Impianti un messaggio di massimo 25 parole su un oggetto che viene recitato ad alta voce quando si verifica una specifica condizione visiva o uditiva.",
+            effetto: { tipo: 'messaggio_ritardato' },
+            cd: false,
+            tiro_abilita: false
+        },
+        {
+            nome: "Caduta morbida",
+            livello: 1,
+            modificatore: ["Saggezza"],
+            azione: "Reazione",
+            raggio: "18 metri",
+            durata: "1 minuto",
+            concentrazione: false,
+            desc: "Rallenti la discesa fino a cinque creature cadenti a 18 metri al round, azzerando i danni da caduta all'atterraggio.",
+            effetto: { tipo: 'rallenta_caduta', bersagli: 5, durataTurni: 10 },
+            cd: false,
+            tiro_abilita: false
+        },
+        {
             nome: "Calmare Emozioni",
             livello: 2,
             modificatore: ["Carisma"],
@@ -497,6 +1318,32 @@ window.DATABASE_INCANTESIMI = {
             concentrazione: true,
             desc: "Tenti di sopprimere le forti emozioni in un gruppo di persone. Ogni umanoide in una sfera con raggio di 6 metri centrata su un punto a tua scelta entro il raggio d'azione deve effettuare un tiro salvezza su Carisma; una creatura può scegliere di fallire questo tiro salvezza se lo desidera. Se una creatura fallisce, scegli uno dei due effetti seguenti. Puoi sopprimere qualsiasi effetto che renda il bersaglio affascinato o spaventato. Quando questo incantesimo termina, qualsiasi effetto soppresso riprende, a condizione che la sua durata non sia scaduta nel frattempo. In alternativa, puoi rendere un bersaglio indifferente alle creature di tua scelta verso cui è ostile. Questa indifferenza termina se il bersaglio viene attaccato o ferito da un incantesimo o se assiste al ferimento di un suo alleato. Quando l'incantesimo termina, la creatura diventa di nuovo ostile, a meno che il DM non decida diversamente.",
             effetto: { tipo: 'calmare_emozioni', raggioMetri: 6, ts: 'Carisma', durataTurni: 10 },
+            cd: true,
+            tiro_abilita: false
+        },
+        {
+            nome: "Cammuffare se stesso",
+            livello: 1,
+            modificatore: ["Carisma", "Intelligenza"],
+            azione: "Azione",
+            raggio: "Se stesso",
+            durata: "1 ora",
+            concentrazione: false,
+            desc: "Modifichi l'aspetto tuo e dei tuoi inditi, potendo sembrare 30 cm più alto o più basso e alterando la corporatura di base. Richiede una prova di Intelligenza (Indagine) per essere scoperto.",
+            effetto: { tipo: 'illusione_aspetto', durataOre: 1 },
+            cd: true,
+            tiro_abilita: true
+        },
+        {
+            nome: "Charme su Persone",
+            livello: 1,
+            modificatore: ["Carisma"],
+            azione: "Azione",
+            raggio: "9 metri",
+            durata: "1 ora",
+            concentrazione: false,
+            desc: "Tenti di affascinare un umanoide visibile (TS su Saggezza con vantaggio se siete in combattimento). Il bersaglio ti considera un conoscente amichevole finché non subisce danni.",
+            effetto: { tipo: 'charme', ts: 'Saggezza', durataOre: 1 },
             cd: true,
             tiro_abilita: false
         },
@@ -514,6 +1361,19 @@ window.DATABASE_INCANTESIMI = {
             tiro_abilita:false
         },
         {
+            nome: "Contro incantesimo",
+            livello: 3,
+            modificatore: ["Intelligenza"],
+            azione: "Azione",
+            raggio: "36 metri",
+            durata: "Istantanea",
+            concentrazione: false,
+            desc: "Scegli una creatura, oggetto o effetto magico. Qualsiasi incantesimo di 3° livello o inferiore termina. Per quelli di 4° o superiore, effettua una prova di caratteristica contro CD 10 + livello dell'incantesimo.",
+            effetto: { tipo: 'rimozione_magia' },
+            cd: false,
+            tiro_abilita: true
+        },
+        {
             nome: "Controllare fiamme",
             livello: 0,
             modificatore: ["Carisma"],
@@ -526,6 +1386,32 @@ window.DATABASE_INCANTESIMI = {
             cd: false,
             tiro_abilita: false
         },
+        {
+            nome: "Corrente d'aria",
+            livello: 0,
+            modificatore: ["Intelligenza", "Saggezza"],
+            azione: "Azione",
+            raggio: "9 metri",
+            durata: "Istantanea",
+            concentrazione: false,
+            desc: "Crei una raffica d'aria per spingere una creatura di taglia Media o inferiore (TS Forza), muovere un oggetto leggero (fino a 2,5 kg) o produrre un effetto sensoriale innocuo.",
+            effetto: { tipo: 'spinta_aria', ts: 'Forza' },
+            cd: true,
+            tiro_abilita: false
+        },
+        {
+        nome: "Crea o Distruggi Acqua",
+        livello: 1,
+        modificatore: ["Qualsiasi"],
+        azione: "Azione",
+        raggio: "9 metri",
+        durata: "Istantanea",
+        concentrazione: false,
+        desc: "Crea acqua potabile o distrugge fino a 2 litri d'acqua in un contenitore aperto (oppure dissipa la nebbia in un cubo di 9 metri).",
+        effetto: { tipo: 'crea_distruggi_acqua' },
+        cd: false,
+        tiro_abilita: false
+    },
         {
             nome: "Creare cibo e Acqua",
             livello: 3,
@@ -540,6 +1426,45 @@ window.DATABASE_INCANTESIMI = {
             tiro_abilita:false
         },
         {
+            nome: "Creaee Falo' ",
+            livello: 0,
+            modificatore: ["Saggezza"],
+            azione: "Azione",
+            raggio: "18 metri",
+            durata: "1 minuto",
+            concentrazione: true,
+            desc: "Crea un falò in uno spazio visibile (cubo di 1,5 metri). Le creature che vi entrano o vi terminano il turno subiscono 1d8 danni da fuoco se falliscono un TS su Destrezza.",
+            effetto: { tipo: 'area_fuoco', ts: 'Destrezza', danno: '1d8', dannoTipo: 'fuoco', durataTurni: 10 },
+            cd: true,
+            tiro_abilita: false
+        },
+        {
+            nome: "Disco volante",
+            livello: 1,
+            modificatore: ["Intelligenza", "Saggezza"],
+            azione: "Azione",
+            raggio: "9 metri",
+            durata: "1 ora",
+            concentrazione: false,
+            desc: "Crea un piano di forza circolare fluttuante (diametro 90 cm) che segue i tuoi movimenti e può sostenere fino a 225 kg di carico.",
+            effetto: { tipo: 'disco_fluttuante', pesoKgMax: 225, durataOre: 1 },
+            cd: false,
+            tiro_abilita: false
+        },
+        {
+            nome: "Distorsione del valore",
+            livello: 1,
+            modificatore: ["Intelligenza"],
+            azione: "1 minuto",
+            raggio: "A contatto",
+            durata: "3 ore",
+            concentrazione: false,
+            desc: "Raddoppi o dimezzi il valore percepito di un oggetto (non più di 30 cm per lato) tramite illusioni. Chi lo esamina deve superare una prova di Intelligenza (Indagine) contro la tua CD.",
+            effetto: { tipo: 'illusione_valore', durataOre: 3 },
+            cd: true,
+            tiro_abilita: true
+        },
+        {
             nome: "Dono della Parlantina",
             livello: 2,
             modificatore: ["Carisma"],
@@ -549,6 +1474,32 @@ window.DATABASE_INCANTESIMI = {
             concentrazione: false,
             desc: "Reazione da usare quando parli a un'altra creatura (richiede di consumare 2 monete d'oro). Rimodelli abilmente i ricordi di chi ascolta nelle tue immediate vicinanze: ogni creatura a tua scelta entro 1,5 metri da te dimentica tutto ciò che hai detto negli ultimi 6 secondi. Quelle creature poi ricorderanno che hai effettivamente detto le parole che pronunci come componente verbale di questo incantesimo.",
             effetto: { tipo: 'alterazione_memoria', raggioMetri: 1.5 },
+            cd: false,
+            tiro_abilita: false
+        },
+        {
+            nome: "Dormire",
+            livello: 1,
+            modificatore: ["Carisma", "Saggezza"],
+            azione: "Azione",
+            raggio: "27 metri",
+            durata: "1 minuto",
+            concentrazione: false,
+            desc: "Tira 5d8: il totale indica quanti punti ferita di creature in un'area di 6 metri di raggio cadono in un sonno magico, partendo da quelle con meno punti ferita.",
+            effetto: { tipo: 'sonno_magico', dadi: '5d8' },
+            cd: false,
+            tiro_abilita: false
+        },
+        {
+            nome: "Finta morte",
+            livello: 3,
+            modificatore: ["Carisma"],
+            azione: "Azione",
+            raggio: "A contatto",
+            durata: "1 ora",
+            concentrazione: false,
+            desc: "Tocchi una creatura consenziente mettendola in uno stato cataleptico indistinguibile dalla morte (incapacitata, cieca, velocità 0, resistenza a tutti i danni tranne psichici).",
+            effetto: { tipo: 'stato_morte_apparente', durataOre: 1 },
             cd: false,
             tiro_abilita: false
         },
@@ -565,6 +1516,58 @@ window.DATABASE_INCANTESIMI = {
             cd:false,
             tiro_abilita:false
         },
+        {
+            nome: "Immagine maggiore",
+            livello: 3,
+            modificatore: ["Intelligenza"],
+            azione: "Azione",
+            raggio: "36 metri",
+            durata: "1 minuto",
+            concentrazione: true,
+            desc: "Crea l'illusione realistica di un oggetto o creatura in un cubo di 6 metri, completa di suoni, odori e variazioni di temperatura.",
+            effetto: { tipo: 'illusione_maggiore', durataTurni: 10 },
+            cd: false,
+            tiro_abilita: false
+        },
+        {
+            nome: "Immagine silenziosa",
+            livello: 1,
+            modificatore: ["Intelligenza"],
+            azione: "Azione",
+            raggio: "18 metri",
+            durata: "10 minuti",
+            concentrazione: true,
+            desc: "Crea l'immagine visiva di un oggetto o creatura in un cubo di 4,5 metri (senza suoni o odori). Puoi muoverla e modificarla con l'azione.",
+            effetto: { tipo: 'illusione_visiva', durataTurni: 100 },
+            cd: false,
+            tiro_abilita: false
+        },
+        {
+            nome: "Identificare",
+            livello: 1,
+            modificatore: ["Intelligenza"],
+            azione: "1 minuto",
+            raggio: "A contatto",
+            durata: "Istantanea",
+            concentrazione: false,
+            desc: "Tocchi un oggetto o una creatura per apprendere le proprietà magiche, i requisiti di sintonizzazione, i cariche rimasti o gli incantesimi che la influenzano (richiede perla da 100 mo).",
+            effetto: { tipo: 'identificazione_magica' },
+            cd: false,
+            tiro_abilita: false
+        },
+        {
+        nome: "Incita Avidità",
+        livello: 3,
+        modificatore: ["Carisma"],
+        azione: "Azione",
+        raggio: "9 metri",
+        durata: "1 minuto",
+        concentrazione: true,
+        desc: "Presenti una gemma di valore: le creature che ti vedono devono superare un TS su Saggezza o essere affascinate, muovendosi verso di te per fissare avidamente la gemma senza compiere altre azioni.",
+        effetto: { tipo: 'charme_avidita', ts: 'Saggezza', durataTurni: 10 },
+        cd: true,
+        tiro_abilita: false
+    },
          {
             nome: "Individua Oggetto",
             livello: 2,
@@ -605,17 +1608,17 @@ window.DATABASE_INCANTESIMI = {
             tiro_abilita: false
         },
         {
-            nome:"Luce",
-            livello:0,
-            modificatore:["Saggezza"],
-            azione:"Azione",
-            raggio:"A contatto",
-            durata:"20 minuti",
-            concentrazione: false,
-            desc:"Tocca un oggetto che non superi i 3 metri di dimensione in nessuna direzione. Finché l'incantesimo non termina, l'oggetto emette una luce intensa in un raggio di 6 metri e una luce fioca per altri 6 metri. La luce può essere colorata a piacere. Coprire completamente l'oggetto con qualcosa di opaco blocca la luce. L'incantesimo termina se lo lanci di nuovo o lo annulli con un'azione.",
-            effetto:{tipo:'luce', durataTurni:200},
-            cd:false,
-            tiro_abilita:false
+            nome: "Levitare",
+            livello: 2,
+            modificatore: ["Intelligenza", "Saggezza"],
+            azione: "Azione",
+            raggio: "18 metri",
+            durata: "10 minuti",
+            concentrazione: true,
+            desc: "Fai sollevare verticalmente una creatura o oggetto fino a 6 metri di altezza. Una creatura non consenziente può negare l'effetto con un TS su Costituzione.",
+            effetto: { tipo: 'levitazione', ts: 'Costituzione', altezzaMetri: 6, durataTurni: 100 },
+            cd: true,
+            tiro_abilita: false
         },
         {
             nome:"Lingue",
@@ -632,6 +1635,32 @@ window.DATABASE_INCANTESIMI = {
 
         },
         {
+            nome: "Localizza oggetto",
+            livello: 2,
+            modificatore: ["Intelligenza"],
+            azione: "Azione",
+            raggio: "Se stesso",
+            durata: "10 minuti",
+            concentrazione: true,
+            desc: "Percepisci la direzione di un oggetto familiare o specifico entro 300 metri da te, a patto che non sia bloccato da fogli di piombo.",
+            effetto: { tipo: 'divinazione_oggetto', raggioMetri: 300, durataTurni: 100 },
+            cd: false,
+            tiro_abilita: false
+        },
+         {
+            nome:"Luce",
+            livello:0,
+            modificatore:["Saggezza"],
+            azione:"Azione",
+            raggio:"A contatto",
+            durata:"20 minuti",
+            concentrazione: false,
+            desc:"Tocca un oggetto che non superi i 3 metri di dimensione in nessuna direzione. Finché l'incantesimo non termina, l'oggetto emette una luce intensa in un raggio di 6 metri e una luce fioca per altri 6 metri. La luce può essere colorata a piacere. Coprire completamente l'oggetto con qualcosa di opaco blocca la luce. L'incantesimo termina se lo lanci di nuovo o lo annulli con un'azione.",
+            effetto:{tipo:'luce', durataTurni:200},
+            cd:false,
+            tiro_abilita:false
+        },
+        {
             nome:"Luci danzanti",
             livello:0,
             modificatore:["Carisma"],
@@ -643,6 +1672,45 @@ window.DATABASE_INCANTESIMI = {
             effetto:{tipo:'luci_danzanti'},
             cd:false,
             tiro_abilita:false
+        },
+        {
+            nome: "Mandare",
+            livello: 3,
+            modificatore: ["Qualsiasi"],
+            azione: "Azione",
+            raggio: "Illimitato",
+            durata: "1 round",
+            concentrazione: false,
+            desc: "Invii un messaggio mentale di 25 parole o meno a una creatura familiare, ovunque essa si trovi (anche su altri piani, con il 5% di probabilità di fallimento).",
+            effetto: { tipo: 'messaggio_mentale_globale' },
+            cd: false,
+            tiro_abilita: false
+        },
+        {
+            nome: "Mano Magica",
+            livello: 0,
+            modificatore: ["Qualsiasi"],
+            azione: "Azione",
+            raggio: "9 metri",
+            durata: "1 minuto",
+            concentrazione: false,
+            desc: "Crea una mano spettrale fluttuante che può manipolare oggetti, aprire porte o trasportare pesi non superiori a 4,5 kg entro il raggio d'azione.",
+            effetto: { tipo: 'mano_ spettrale', durataTurni: 10 },
+            cd: false,
+            tiro_abilita: false
+        },
+        {
+            nome: "Moneta spelendente",
+            livello: 2,
+            modificatore: ["Carisma", "Intelligenza"],
+            azione: "Azione",
+            raggio: "18 metri",
+            durata: "1 minuto",
+            concentrazione: false,
+            desc: "Scagli una moneta che illumina l'area. Le creature nel raggio di 9 metri devono superare un TS su Saggezza o essere distratte, avendo svantaggio a Percezione e Iniziativa.",
+            effetto: { tipo: 'ts_distrazione', ts: 'Saggezza', durataTurni: 10 },
+            cd: true,
+            tiro_abilita: false
         },
         {
             nome: "Movimenti del Ragno",
@@ -678,7 +1746,7 @@ window.DATABASE_INCANTESIMI = {
             raggio: "Se stesso",
             durata: "20 minuti",
             concentrazione: true,
-            desc: "Un velo di ombre e silenzio si irradia da te, mascherando te e i tuoi compagni dall'individuazione. Per la durata dell'incantesimo, ogni creatura a tua scelta entro 9 metri da te (incluso te) ha un bonus di +10 alle prove di Destrezza (Furtività) e non può essere seguita se non con mezzi magici. Una creatura che riceve questo bonus non lascia impronte o altre tracce del suo passaggio.",
+            desc: "Un velo di ombre e silenzio si irradia da te, mascherando te e i tuoi compagni dall'individuazione. Per la durata dell'incantesimo, ogni creatura a tua scelta entro 6 metri da te (incluso te) ha un bonus di +6 alle prove di Destrezza (Furtività) e non può essere seguita se non con mezzi magici. Una creatura che riceve questo bonus non lascia impronte o altre tracce del suo passaggio.",
             effetto: { tipo: 'buff_furtivita', raggioMetri: 9, bonus: 10, durataOre: 1 },
             cd: false,
             tiro_abilita: false
@@ -697,6 +1765,44 @@ window.DATABASE_INCANTESIMI = {
             tiro_abilita: false
         },
         {
+            nome: "Passo veloce",
+            livello: 1,
+            modificatore: ["Saggezza"],
+            azione: "Azione",
+            raggio: "A contatto",
+            durata: "1 ora",
+            concentrazione: false,
+            desc: "Aumenti la velocità di movimento di una creatura toccata di 3 metri per la durata dell'incantesimo.",
+            effetto: { tipo: 'buff_velocita', bonusMetri: 3, durataOre: 1 },
+            cd: false,
+            tiro_abilita: false
+        },
+        {
+            nome: "Pisolino",
+            livello: 3,
+            modificatore: ["Carisma", "Saggezza"],
+            azione: "Azione",
+            raggio: "9 metri",
+            durata: "30 minuti",
+            concentrazione: false,
+            desc: "Compi un gesto calmante e fino a tre creature consenzienti a tua scelta, che puoi vedere entro il raggio d'azione, cadono prive di sensi per la durata dell'incantesimo. L'effetto termina in anticipo se il bersaglio subisce danni o se qualcuno usa un'azione per scuoterlo e svegliarlo. Se un bersaglio rimane privo di sensi per l'intera durata, ottiene i benefici di un riposo breve. Non può esserne influenzato di nuovo finché non termina un riposo lungo.",
+            effetto: { tipo: 'riposo_breve', durataMinuti: 10 },
+            cd: false,
+            tiro_abilita: false
+        },{
+        nome: "Prestigiazione",
+        livello: 0,
+        modificatore: ["Carisma"],
+        azione: "Azione",
+        raggio: "3 metri",
+        durata: "1 ora",
+        concentrazione: false,
+        desc: "Trucchetto magico minore per produrre effetti sensoriali innocui, accendere o spegnere fiammelle, pulire o sporcare oggetti, riscaldare o raffreddare piccoli materiali e creare cianfrusaglie.",
+        effetto: { tipo: 'trucchetto_prestigiazione', durataOre: 1 },
+        cd: false,
+        tiro_abilita: false
+    },
+        {
             nome:"Prestito di conoscenza",
             livello:2,
             modificatore:["Intelligenza"],
@@ -709,18 +1815,57 @@ window.DATABASE_INCANTESIMI = {
             tiro_abilita:false
         },
         {
-            nome: "Protezione dall'Energia",
-            livello: 3,
-            modificatore: ["Saggezza"],
+        nome: "Produrre Fiamma",
+        livello: 0,
+        modificatore: ["Carisma"],
+        azione: "Azione",
+        raggio: "Se stesso",
+        durata: "10 minuti",
+        concentrazione: false,
+        desc: "Una fiammella appare nella tua mano emettendo luce intensa in un raggio di 3 metri. Puoi lanciarla contro una creatura entro 9 metri (attacco a distanza) per infliggere 1d8 danni da fuoco.",
+        effetto: { tipo: 'attacco_distanza_fuoco', danno: '1d8', dannoTipo: 'fuoco', durataMinuti: 10 },
+        cd: false,
+        tiro_abilita: true
+    },
+        {
+        nome: "Protezione dal Veleno",
+        livello: 1,
+        modificatore: ["Intelligenza", "Saggezza"],
+        azione: "Azione",
+        raggio: "A contatto",
+        durata: "10 minuti",
+        concentrazione: false,
+        desc: "Neutralizza un veleno che affligge una creatura toccata e le conferisce vantaggio ai TS contro i veleni e resistenza ai danni da veleno per la durata.",
+        effetto: { tipo: 'neutralizza_veleno_buff', durataMinuti: 10 },
+        cd: false,
+        tiro_abilita: false
+    },
+        {
+            nome: "Pupazzo",
+            livello: 1,
+            modificatore: ["Carisma"],
             azione: "Azione",
-            raggio: "A contatto",
-            durata: "1 ora",
-            concentrazione: true,
-            desc: "Per la durata dell'incantesimo, la creatura consenziente che tocchi ha resistenza a un tipo di danno a tua scelta: acido, freddo, fuoco, fulmine o tuono.",
-            effetto: { tipo: 'buff_resistenza', durataOre: 1 },
-            cd: false,
+            raggio: "36 metri",
+            durata: "Istantanea",
+            concentrazione: false,
+            desc: "Forzi un umanoide visibile a effettuare un TS su Costituzione. Se fallisce, è costretto a muoversi della sua velocità in una direzione a tua scelta e può far cadere oggetti.",
+            effetto: { tipo: 'ts_movimento_forzato', ts: 'Costituzione' },
+            cd: true,
             tiro_abilita: false
         },
+        {
+        nome: "Purificare Cibo e Acqua",
+        livello: 1,
+        modificatore: ["Intelligenza", "Saggezza"],
+        azione: "Azione",
+        raggio: "3 metri",
+        durata: "Istantanea",
+        concentrazione: false,
+        desc: "Depura fino a 4 unità di cibo o acqua da veleni e malattie, rendendoli sicuri al consumo.",
+        effetto: { tipo: 'purificazione_cibo_acqua' },
+        cd: false,
+        tiro_abilita: false
+    },
         {
             nome:"Riparare",
             livello:0,
@@ -733,6 +1878,32 @@ window.DATABASE_INCANTESIMI = {
             effetto:{tipo:'riparare'},
             cd:false,
             tiro_abilita:false
+        },
+        {
+        nome: "Rivelare Magia",
+        livello: 1,
+        modificatore: ["Intelligenza"],
+        azione: "Azione",
+        raggio: "Se stesso",
+        durata: "1 minuto",
+        concentrazione: true,
+        desc: "Percepisci la presenza di magia entro 9 metri e puoi usare un'azione per individuarne l'aura e la scuola magica su creature o oggetti visibili (bloccato da materiali densi come piombo o pietra).",
+        effetto: { tipo: 'divinazione_magia', raggioMetri: 9, durataTurni: 10 },
+        cd: false,
+        tiro_abilita: false
+    },
+        {
+            nome: "Salto",
+            livello: 1,
+            modificatore: ["Saggezza"],
+            azione: "Azione",
+            raggio: "A contatto",
+            durata: "1 minuto",
+            concentrazione: false,
+            desc: "Tocchi una creatura triplicandone la distanza di salto per la durata dell'incantesimo.",
+            effetto: { tipo: 'buff_salto', moltiplicatore: 3, durataTurni: 10 },
+            cd: false,
+            tiro_abilita: false
         },
         {
             nome: "Scassinare",
@@ -748,6 +1919,32 @@ window.DATABASE_INCANTESIMI = {
             tiro_abilita: false
         },
         {
+            nome: "Scritto illusorio",
+            livello: 1,
+            modificatore: ["Intelligenza"],
+            azione: "1 minuto",
+            raggio: "A contatto",
+            durata: "10 giorni",
+            concentrazione: false,
+            desc: "Scrivi un messaggio magico su pergamena che appare normale a te e alle persone designate, mentre agli altri appare incomprensibile o come un messaggio totalmente diverso.",
+            effetto: { tipo: 'scrittura_illusoria', durataGiorni: 10 },
+            cd: false,
+            tiro_abilita: false
+        },
+        {
+            nome: "Scrivere nel cielo",
+            livello: 1,
+            modificatore: ["Carisma", "Saggezza"],
+            azione: "Azione",
+            raggio: "Vista",
+            durata: "4 ore",
+            concentrazione: true,
+            desc: "Fai formare fino a dieci parole fatte di nuvole in una parte del cielo visibile, che durano fino a 4 ore o finché un forte vento non le disperde.",
+            effetto: { tipo: 'scrittura_cielo', durataGiorni: 1 },
+            cd: false,
+            tiro_abilita: false
+        },
+        {
             nome: "Scurovisione",
             livello: 2,
             modificatore: ["Saggezza"],
@@ -757,6 +1954,19 @@ window.DATABASE_INCANTESIMI = {
             concentrazione: false,
             desc: "Tocchi una creatura consenziente per conferirle la capacità di vedere al buio. Per la durata dell'incantesimo, quella creatura ha scurovisione fino a un raggio di 18 metri.",
             effetto: { tipo: 'buff_visione', raggioMetri: 18, durataOre: 8 },
+            cd: false,
+            tiro_abilita: false
+        },
+        {
+            nome: "Sentire emozioni",
+            livello: 1,
+            modificatore: ["Qualsiasi"],
+            azione: "Azione",
+            raggio: "Se stesso",
+            durata: "1 minuto",
+            concentrazione: true,
+            desc: "Percepisci le emozioni prevalenti di un umanoide visibile entro 9 metri (amore, rabbia, paura, calmo, ecc.).",
+            effetto: { tipo: 'divinazione_emozioni', raggioMetri: 9, durataTurni: 10 },
             cd: false,
             tiro_abilita: false
         },
@@ -787,6 +1997,32 @@ window.DATABASE_INCANTESIMI = {
             tiro_abilita: false
         },
         {
+        nome: "Taumaturgia",
+        livello: 0,
+        modificatore: ["Carisma"],
+        azione: "Azione",
+        raggio: "9 metri",
+        durata: "1 minuto",
+        concentrazione: false,
+        desc: "Manifesti piccoli prodigi soprannaturali: amplifichi la voce, fai fluttuare fiamme, provochi lievi tremori al suolo, generi suoni improvvisi, apri porte non bloccate o cambi l'aspetto degli occhi.",
+        effetto: { tipo: 'prodigio_soprannaturale', durataTurni: 10 },
+        cd: false,
+        tiro_abilita: false
+    },
+        {
+            nome: "Teletrasporto forzato",
+            livello: 2,
+            modificatore: ["Intelligenza", "Saggezza"],
+            azione: "Azione",
+            raggio: "27 metri",
+            durata: "Istantanea",
+            concentrazione: false,
+            desc: "Torci magicamente lo spazio attorno a un bersaglio visibile. Se fallisce un TS su Costituzione, viene teletrasportato in uno spazio libero entro il raggio d'azione.",
+            effetto: { tipo: 'teletrasporto_bersaglio', ts: 'Costituzione' },
+            cd: true,
+            tiro_abilita: false
+        },
+        {
             nome: "Vento Custode",
             livello: 2,
             modificatore: ["Saggezza"],
@@ -799,5 +2035,18 @@ window.DATABASE_INCANTESIMI = {
             cd: false,
             tiro_abilita: false
         },
+        {
+            nome: "Zona di verita' ",
+            livello: 2,
+            modificatore: ["Carisma"],
+            azione: "Azione",
+            raggio: "18 metri",
+            durata: "10 minuti",
+            concentrazione: false,
+            desc: "Crea una sfera di 4,5 metri di raggio in cui le creature non possono mentire deliberatamente se falliscono un tiro salvezza su Carisma.",
+            effetto: { tipo: 'zona_verita', ts: 'Carisma', raggioMetri: 4.5, durataMinuti: 10 },
+            cd: true,
+            tiro_abilita: false
+        }
     ]
 };
