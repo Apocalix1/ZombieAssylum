@@ -4,6 +4,53 @@ import { apiUrl, buildAuthHeaders, salvaPersonaggioCloud } from '../logic/logic.
 import { mostraNotificaInAlto } from '../ui/ui.js';
 
 
+// Cariche giornaliere delle abilità mostrate in scheda spedizione, con rigenerazione automatica.
+const ABILITA_CARICHE_MAX = {
+    'Sempre pronto': 2,
+    'Mente ferrea': 1,
+    'Vicinanza': (p) => Math.max(0, p.getStatDettagliata('Carisma').mod),
+    'Fortunato': 2,
+    'Lotta': 2,
+    'Mente strategica': 1,
+    'Guerriero': 2,
+    'Memento Mori': 1,
+    'Sorte improvvisa': (p) => Math.max(0, p.getStatDettagliata('Saggezza').mod)
+};
+
+function renderCaricheAbilitaHtml(p, idx) {
+    const nomiPossedute = Object.keys(ABILITA_CARICHE_MAX).filter(nome => window.hasPerk && window.hasPerk(p, nome));
+    if (!nomiPossedute.length) return '';
+    const righe = nomiPossedute.map(nome => {
+        const info = p.getCaricheInfo(nome, ABILITA_CARICHE_MAX[nome]);
+        const disabled = info.residue <= 0 ? 'disabled' : '';
+        return `<div style="display:flex; justify-content:space-between; align-items:center; padding:4px 0; border-bottom:1px solid #222;">
+            <span>${nome} <small style="color:#888;">(${info.residue}/${info.max})</small></span>
+            <button ${disabled} onclick="window.usaCaricaAbilita(${idx}, '${nome.replace(/'/g, "\\'")}')">Usa</button>
+        </div>`;
+    }).join('');
+    return `<details style="background:#111; border:1px solid #333; padding:10px; border-radius:6px; margin-top:10px;">
+        <summary style="cursor:pointer; font-weight:bold; color:#f1c40f;">⚡ Cariche abilità</summary>
+        <div style="margin-top:6px;">${righe}</div>
+    </details>`;
+}
+window.renderCaricheAbilitaHtml = renderCaricheAbilitaHtml;
+
+window.usaCaricaAbilita = function(idx, nomeAbilita) {
+    const p = party[idx];
+    if (!p) return;
+    const maxDef = ABILITA_CARICHE_MAX[nomeAbilita];
+    if (!p.usaCarica(nomeAbilita, maxDef)) {
+        alert(`${p.nome} non ha più cariche di "${nomeAbilita}" per oggi.`);
+        return;
+    }
+    // Guerriero e Sorte improvvisa: la rigenerazione PF fortuna resta gestita dai bottoni esistenti,
+    // qui tracciamo solo il consumo della carica giornaliera.
+    mostraNotificaInAlto(`${p.nome} usa "${nomeAbilita}".`, 'info');
+    salvaPersonaggioCloud(p);
+    if (typeof renderSpedizioneModal === 'function') renderSpedizioneModal();
+    if (typeof window.aggiornaInterfaccia === 'function') window.aggiornaInterfaccia();
+};
+
 function applicaDannoRealeConReattivita(p, colpi) {
     for (let i = 0; i < colpi; i++) {
         p.puntiFeritaReali = Math.max(0, p.puntiFeritaReali - 1);
@@ -465,11 +512,11 @@ function renderSchedaSpedizioneRidotta(p, idx) {
                 <summary style="cursor:pointer; font-weight:bold;">Perk di combattimento</summary>
                 <div style="margin-top:8px;">${perkConDesc}</div>
             </details>
-            ${renderIncantesimiConosciutiHtml(p, idx)}
+                ${renderIncantesimiConosciutiHtml(p, idx)}
+            ${renderCaricheAbilitaHtml(p, idx)}
         </div>`;
 }
 
-// AGGIUNGI dopo window.consumaIncantesimo
 window.apriConsumaComposti = function(idx) {
     const p = party[idx];
     if (!p) return;
@@ -617,7 +664,8 @@ function renderSchedaCombattimentoMaster(p, idx) {
                 <summary style="cursor:pointer; font-weight:bold;">Mostra perks di combattimento</summary>
                 <div style="margin-top:8px; color:#eee; font-size:0.9rem;">${perkList}</div>
             </details>
-            ${renderIncantesimiConosciutiHtml(p, idx)}
+                        ${renderIncantesimiConosciutiHtml(p, idx)}
+            ${renderCaricheAbilitaHtml(p, idx)}
         </div>`;
 }
 

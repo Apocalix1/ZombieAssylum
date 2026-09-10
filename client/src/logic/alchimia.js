@@ -525,12 +525,13 @@ function applicaConsumoComposto(target, c, onConsumed) {
             target.faticaBase = Math.min(6, target.faticaBase + 2);
             target.resetWoundTimer();
             mostraNotificaInAlto(`☠️ ${target.nome}: "${c.nome}" era TOSSICO! -1 PF Reale, +2 Fatica.`, 'pericolo');
-        } else {
-            let riduzione = (typeof window.rollDice === 'function') ? window.rollDice(1, 4) : (Math.floor(Math.random() * 4) + 1);
-            if (c.qualita === 'instabile') riduzione = Math.floor(riduzione / 2);
-            target.follia = Math.max(0, target.follia - riduzione);
-            if (typeof target.aggiornaSintomiFollia === 'function') target.aggiornaSintomiFollia();
-            mostraNotificaInAlto(`💊 ${target.nome} consuma "${c.nome}": Follia -${riduzione}.`, 'successo');
+            } else {
+            let riduzioneRichiesta = (typeof window.rollDice === 'function') ? window.rollDice(1, 4) : (Math.floor(Math.random() * 4) + 1);
+            if (c.qualita === 'instabile') riduzioneRichiesta = Math.floor(riduzioneRichiesta / 2);
+            const riduzione = target.riduciFollia(riduzioneRichiesta, 'pillole_calma');
+            mostraNotificaInAlto(riduzione > 0
+                ? `💊 ${target.nome} consuma "${c.nome}": Follia -${riduzione}.`
+                : `💊 ${target.nome} consuma "${c.nome}", ma ha già raggiunto il limite giornaliero di riduzione della Follia.`, 'successo');
         }
     } else {
         const descBreve = c.desc ? ` (${c.desc})` : '';

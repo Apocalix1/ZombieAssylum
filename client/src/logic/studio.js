@@ -809,7 +809,12 @@ function completaStudioBookAction(p, action) {
                 p.competenze.push(book.subject);
             }
             if (currentPoints >= 210 && !p.masteries.map(m => m.toLowerCase()).includes(book.subject.toLowerCase())) {
-                p.masteries.push(book.subject);
+                if (p.puoOttenereMaestria(book.subject)) {
+                    p.masteries.push(book.subject);
+                } else {
+                    currentPoints = 209; // resta bloccato appena sotto la soglia finché non libera uno slot
+                    mostraNotificaInAlto(`${p.nome} ha già 3 Maestrie: "${book.subject}" resta a un passo dalla Maestria finché non ne rimuove una.`, 'avviso');
+                }
             }
             }
             currentPoints = Math.min(210, currentPoints);

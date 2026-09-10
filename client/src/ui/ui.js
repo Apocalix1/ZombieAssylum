@@ -1120,7 +1120,7 @@ function eseguiAzioneProposta(prop) {
         case 'intrattieni': {
             if (!destinatario.azioneCorrente) {
                 destinatario.azioneCorrente = {
-                    tipo: 'intrattieni', oreTotali: 1, oreRimanenti: 1,
+                    tipo: 'intrattieni', oreTotali: 2, oreRimanenti: 2,
                     onComplete: () => {
                         const riduzione = rollDice(1, 4);
                         destinatario.follia = Math.max(0, destinatario.follia - riduzione);
@@ -1154,10 +1154,10 @@ function eseguiAzioneProposta(prop) {
             if (!destinatario.azioneCorrente) {
                 const modCar = mittente.getStatDettagliata('Carisma').mod;
                 destinatario.azioneCorrente = {
-                    tipo: 'intrattenuto_musica', oreTotali: 1, oreRimanenti: 1,
+                    tipo: 'intrattenuto_musica', oreTotali: 2, oreRimanenti: 2,
                     onComplete: () => {
-                        const riduzione = Math.max(0, rollDice(1, 6) + modCar);
-                        destinatario.follia = Math.max(0, destinatario.follia - riduzione);
+                        const riduzioneRichiesta = Math.max(0, rollDice(1, 6) + modCar);
+                        const riduzione = destinatario.riduciFollia(riduzioneRichiesta, 'musicista');
                         mostraNotificaInAlto(`${destinatario.nome} si distrae con la musica di ${mittente.nome}: Follia -${riduzione}.`, 'successo');
                         salvaPersonaggioCloud(destinatario);
                         aggiornaInterfaccia();
@@ -1585,6 +1585,7 @@ export function aggiornaInterfaccia() {
                                         <button onclick="openRisorsaModal(${idx}, 'sete')">Bevi</button>
                                         <button onclick="openRisorsaModal(${idx}, 'sonno')">Dormi</button>
                                         ${hasPerk(p, 'Artista') ? `<button onclick="apriIntrattieniModal(${idx})">🎭 Intrattieni</button>` : ''}
+                                        ${hasPerk(p, 'Fedele') ? `<button onclick="apriPreghieraFedele(${idx})">🙏 Prega</button>` : ''}
                                         ${hasPerk(p, 'Musicista') ? `<button onclick="apriMusicistaModal(${idx})">🎵 Suona</button>` : ''}
                                         ${user && user.role === 'master' ? `<button onclick="apriAumentaFollia(${idx})" style="background:#c0392b; color:white;">🧠 Aumenta Follia</button>` : ''}
                                         ${hasPerk(p, 'Produrre veleni') ? `<button onclick="produciVeleno(${idx})">🧪 Produci Veleno</button>` : ''}
@@ -1675,10 +1676,9 @@ window.apriIntrattieniModal = function(idx) {
 
     // Il leader inizia subito la sua parte
     leader.azioneCorrente = {
-        tipo: 'intrattieni', oreTotali: 1, oreRimanenti: 1,
+        tipo: 'intrattieni', oreTotali: 2, oreRimanenti: 2,
         onComplete: () => {
-            const riduzione = rollDice(1, 4);
-            leader.follia = Math.max(0, leader.follia - riduzione);
+            const riduzione = leader.riduciFollia(rollDice(1, 4), 'intrattieni');
             mostraNotificaInAlto(`${leader.nome} si è distratto: Follia -${riduzione}.`, 'successo');
             salvaPersonaggioCloud(leader);
             aggiornaInterfaccia();
@@ -1688,6 +1688,30 @@ window.apriIntrattieniModal = function(idx) {
 
     candidati.forEach(dest => window.inviaProposta(leader.id, dest.id, 'intrattieni', {}));
     mostraNotificaInAlto(`${leader.nome} vuole distrarre il gruppo da questo mondo crudele...`, 'info');
+    aggiornaInterfaccia();
+};
+
+window.apriPreghieraFedele = function(idx) {
+    const p = party[idx];
+    if (!p || !(window.hasPerk && window.hasPerk(p, 'Fedele'))) return;
+    if (p.azioneCorrente) { alert(`${p.nome} sta già facendo altro.`); return; }
+    const info = p.getCaricheInfo('Fedele_Preghiera', 3);
+    if (info.residue <= 0) { alert(`${p.nome} ha già pregato 3 volte oggi.`); return; }
+    if (!p.usaCarica('Fedele_Preghiera', 3)) return;
+
+    p.azioneCorrente = {
+        tipo: 'preghiera_fedele',
+        oreTotali: 1,
+        oreRimanenti: 1,
+        onComplete: () => {
+            const riduzione = p.riduciFollia(rollDice(1, 4), 'preghiera_fedele');
+            mostraNotificaInAlto(`${p.nome} prega: Follia -${riduzione}.`, 'successo');
+            salvaPersonaggioCloud(p);
+            aggiornaInterfaccia();
+        }
+    };
+    salvaPersonaggioCloud(p);
+    mostraNotificaInAlto(`${p.nome} inizia a pregare (1h). Preghiere rimaste oggi: ${info.residue - 1}/3.`, 'info');
     aggiornaInterfaccia();
 };
 
@@ -2837,11 +2861,11 @@ function togglePerk(nomePerk, forceRemove = false) {
             p.perks.push({...perkDati, nome: `Lingue (${trovata})`});
         } else if (nomePerk === 'Razzista') {
             const razze = [
-                'Apide', 'Arakokra (Uccelloide rapace)', 'Bovinide', 'Canide (Umano cane/lupo)',
-                'Caprinide (Pecora umanoide)', 'Cobolto', 'Dawisu (Pavone umanoide)', 'Elfi',
-                'Goblin', 'Grong (Rana umanoide)', 'Huan-lei (Tassoide)', 'Ineac (Umano Iena)',
-                'Kitsune (Volpe umanoide)', 'Mezzelfo', 'Mezzorco', 'Nano', 'Orco',
-                'Sangliere (Cinghiale umanoide)', 'Sirena (umano pesce)', 'Tiefling', 'Umano',
+                'Apide', 'Arakokra (Uccelloide rapace)', 'Aracnide', 'Bovinide', 'Canide (Umano cane/lupo)',
+                'Caprinide (Pecora umanoide)','Chumara (Ghepardo umanoide)', 'Cobolto','Corvoide', 'Dawisu (Pavone umanoide)','Ekiwojo (Farfalla Umanoide)', 'Elfo','Fatato','Gnomo',
+                'Goblin','Goliath', 'Grong (Rana umanoide)','Halfling', 'Howling','Huan-lei (Tassoide)', 'Ineac (Umano Iena)',
+                'Kitsune (Volpe umanoide)', 'Mezzelfo', 'Mezzorco', 'Nano', 'Omukozi (Formica umanoide','Oni','Orco', 'Orsoide',
+                'Sangliere (Cinghiale umanoide)','Scalykin (Lucetola umanoide)', 'Sirena (umano pesce)','Slon (Elefante umanoide)','Tabaxi (Gatto umanoide)', 'Tiefling','Topoide', 'Umano', 
                 'Usagi (coniglio umanoide)', 'Vespide', 'Yuanthi (Umano serpente)'
             ];
             const giaScelte = p.perks
@@ -2951,31 +2975,14 @@ function togglePerk(nomePerk, forceRemove = false) {
                         return;
                     }
                     p.perks.push({ ...perkDati, nome: `Ignorante (${trovata})`, disadvantage: [trovata] });
-                } else if (nomePerk === 'Razzista') {
-                    const razze = ['Umano', 'Elfo', 'Nano', 'Rettiliano', 'Robot', 'Ibrido Animale', 'Orco', 'Insettoide'];
-                    const giaScelte = p.perks
-                        .filter(pp => getPerkBaseName(perkObjectName(pp)) === 'Razzista')
-                        .map(pp => (pp.disadvantage && pp.disadvantage[0]) || null)
-                        .filter(Boolean);
-                    const disponibili = razze.filter(r => !giaScelte.includes(r));
-                    if (disponibili.length === 0) {
-                        alert('Hai già preso Razzista su tutte le razze disponibili!');
-                        return;
-                    }
-                    const scelta = prompt(`Perk "Razzista": scegli la razza su cui ottenere svantaggio in Carisma:\n${disponibili.join(", ")}`, disponibili[0]);
-                    const trovata = disponibili.find(r => r.toLowerCase() === (scelta || '').toLowerCase());
-                    if (!trovata) {
-                        alert('Razza non valida o annullata.');
-                        return;
-                    }
-                    p.perks.push({ ...perkDati, nome: `Razzista (${trovata})`, disadvantage: [trovata] }); 
-                }
-                else if (nomePerk === 'Alchemico') {
+                }                 else if (nomePerk === 'Alchemico') {
+                        if (!window.tempP.puoOttenereMaestria('Natura')) { alert('Hai già raggiunto il massimo di 3 Maestrie.'); return; }
                         p.perks.push({...perkDati});
                         if (!p.masteries.map(m => m.toLowerCase()).includes('natura')) {
                             p.masteries.push('Natura');
                         }
                 } else if (nomePerk === 'Scienziato Pazzo') {
+                        if (!window.tempP.puoOttenereMaestria('Natura')) { alert('Hai già raggiunto il massimo di 3 Maestrie.'); return; }
                         p.perks.push({...perkDati});
                         p.artificeria = p.artificeria || { generale: { livello: 0, pag: 0 }, specializzazioni: { Balistica: { livello: 0, ps: 0 }, Meccanica: { livello: 0, ps: 0 }, Elettronica: { livello: 0, ps: 0 } } };
                         if (p.artificeria.generale.livello < 2) p.artificeria.generale.livello = 2;
@@ -2983,6 +2990,7 @@ function togglePerk(nomePerk, forceRemove = false) {
                             p.masteries.push('Natura');
                         }
              } else if (nomePerk === 'Bimbi') {
+            if (!window.tempP.puoOttenereMaestria('Cucina')) { alert('Hai già raggiunto il massimo di 3 Maestrie.'); return; }
             p.perks.push({...perkDati});
             if (!p.masteries.map(m => m.toLowerCase()).includes('cucina')) {
                 p.masteries.push('Cucina');
@@ -3321,6 +3329,19 @@ function apriScheda(idx) {
                     </div>
                 </div>
                 
+                ${(() => {
+                    const righeMalus = [];
+                    (p.perks || []).forEach(perk => {
+                        const pData = typeof perk === 'string' ? (window.findPerkData ? window.findPerkData(perk) : null) : perk;
+                        if (pData && pData.malusAbilita) {
+                            const m = pData.malusAbilita;
+                            righeMalus.push(`<div>${pData.nome}: <span style="color:#e74c3c;">${m.valore}</span> a tutte le prove di ${m.stat}${m.eccetto && m.eccetto.length ? ` (tranne ${m.eccetto.join(', ')})` : ''}</div>`);
+                        }
+                    });
+                    if (!righeMalus.length) return '';
+                    return `<p style="font-size:0.85em; color:#aaa; margin-top:12px; margin-bottom:4px;"><b>MALUS DA PERK:</b></p>
+                    <div style="font-size:0.85em; color:#eee; background:#111; padding:8px; border-radius:4px; margin-bottom:12px;">${righeMalus.join('')}</div>`;
+                })()}
                 <p style="font-size:0.85em; color:#aaa; margin-top:12px; margin-bottom:4px;"><b>MAESTRIE (LIVELLO 2):</b></p>
                 <div style="font-size:0.85em; color:#eee; background:#111; padding:8px; text-align:left; border-radius:4px;">
                     ${(() => {
