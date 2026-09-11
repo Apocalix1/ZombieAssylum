@@ -37,6 +37,36 @@ function getWaterEfficiency(p) {
 }
 window.getWaterEfficiency = getWaterEfficiency;
 
+// Tempo di consumo: 10 minuti ogni 0.25 di cibo, 1 minuto ogni 0.2 di acqua.
+// Mangiare veloce dimezza il tempo (10% rischio indigestione), Mangiare lento lo raddoppia.
+function calcolaTempoConsumoCibo(p, qty) {
+    let ore = (Math.max(0, qty) / 0.25) * (10 / 60);
+    if (p.hasPerk && p.hasPerk('Mangiare veloce')) ore *= 0.5;
+    if (p.hasPerk && p.hasPerk('Mangiare lento')) ore *= 2;
+    return Math.max(1 / 60, ore); // minimo 1 minuto
+}
+window.calcolaTempoConsumoCibo = calcolaTempoConsumoCibo;
+
+function calcolaTempoConsumoAcqua(p, qty) {
+    let ore = (Math.max(0, qty) / 0.2) * (1 / 60);
+    if (p.hasPerk && p.hasPerk('Mangiare veloce')) ore *= 0.5;
+    if (p.hasPerk && p.hasPerk('Mangiare lento')) ore *= 2;
+    return Math.max(1 / 60, ore);
+}
+window.calcolaTempoConsumoAcqua = calcolaTempoConsumoAcqua;
+
+function applicaChanceIndigestione(p) {
+    if (!(p.hasPerk && p.hasPerk('Mangiare veloce'))) return;
+    if (Math.random() < 0.10) {
+        // Debuff attivo fino a fine giornata di gioco
+        const oraAttuale = window.oreTotali || 0;
+        const fineGiornata = (Math.floor(oraAttuale / 24) + 1) * 24;
+        p._indigestioneFinoA = fineGiornata;
+        mostraNotificaInAlto(`🤢 ${p.nome} ha mangiato troppo in fretta: indigestione! -1 Costituzione e Destrezza per il resto della giornata.`, 'avviso');
+    }
+}
+window.applicaChanceIndigestione = applicaChanceIndigestione;
+
 function openRisorsaModal(idx, tipo) {
     const p = party[idx];
     if (!p) return;
@@ -412,6 +442,7 @@ function scheduleCucina(idx) {
         costoAcqua: cucinaCost.acqua,
         onComplete: () => completeCucina(p)
     };
+    nuovaAzione._tiroCucina = null; // calcolato al momento del completamento
     if (p.azioneCorrente) {
         if (confirm(`${p.nome} sta già facendo un'altra azione. Vuoi mettere la cucina in coda?`)) {
             p.codaAzioni.push(nuovaAzione);
@@ -488,23 +519,39 @@ window.consumaConsumabilePersonaggio = function(idx, itemIdx) {
     if (document.getElementById('modal-inventario')?.style.display === 'block') window.apriInventario(idx);
 };
 
-
+// Tabella bonus/malus piatti in base al tiro (1d20 + modificatore Cucina)
+function getModificatoreTiroCucina(tiro) {
+    if (tiro <= 3) return -4;
+    if (tiro <= 8) return -2;
+    if (tiro <= 12) return 0;
+    if (tiro <= 15) return 2;
+    if (tiro <= 18) return 4;
+    return 6; // 19-20+
+}
+window.getModificatoreTiroCucina = getModificatoreTiroCucina;
 
 function completeCucina(p) {
-    const piattiFinali = 12;
+    const skill = p.getSkillModifierForCheck ? p.getSkillModifierForCheck('Cucina') : { modifier: 0, advantage: false, disadvantage: false };
+    const tiro = (typeof rollD20WithAdv === 'function')
+        ? rollD20WithAdv(skill.advantage, skill.disadvantage, skill.svantaggioDoppio) + skill.modifier
+        : (Math.floor(Math.random() * 20) + 1) + skill.modifier;
+    const bonusPiatti = getModificatoreTiroCucina(tiro);
+    const piattiFinali = Math.max(0, 12 + bonusPiatti);
+    const notaTiro = ` (tiro Cucina ${tiro}: ${bonusPiatti >= 0 ? '+' : ''}${bonusPiatti} piatti)`;
+
     const isOttimo = p.hasPerk && p.hasPerk('Ottimo cuoco');
     const haMaestriaCucina = p.masteries && p.masteries.map(m => m.toLowerCase()).includes('cucina');
     if (haMaestriaCucina) {
         magazzino.piattiDeliziosiMaestria = (magazzino.piattiDeliziosiMaestria || 0) + piattiFinali;
-        alert(`${p.nome} (Maestria Cucina) ha completato la cucina: +${piattiFinali} piatti deliziosi speciali (donano PF Fortuna temporanei in spedizione se consumati entro 8h prima di partire).`);
+        alert(`${p.nome} (Maestria Cucina) ha completato la cucina: +${piattiFinali} piatti deliziosi speciali (donano PF Fortuna temporanei in spedizione se consumati entro 8h prima di partire).${notaTiro}`);
         if (typeof window.updateMagazzinoFields === 'function') window.updateMagazzinoFields({ piattiDeliziosiMaestria: magazzino.piattiDeliziosiMaestria });
     } else if (isOttimo) {
         magazzino.piattiDeliziosiPotenziati = (magazzino.piattiDeliziosiPotenziati || 0) + piattiFinali;
-        alert(`${p.nome} ha completato la cucina: +${piattiFinali} piatti deliziosi potenziati (+20% nutrimento).`);
+        alert(`${p.nome} ha completato la cucina: +${piattiFinali} piatti deliziosi potenziati (+20% nutrimento).${notaTiro}`);
         if (typeof window.updateMagazzinoFields === 'function') window.updateMagazzinoFields({ piattiDeliziosiPotenziati: magazzino.piattiDeliziosiPotenziati });
     } else {
         magazzino.piattiDeliziosi += piattiFinali;
-        alert(`${p.nome} ha completato la cucina: +${piattiFinali} piatti deliziosi.`);
+        alert(`${p.nome} ha completato la cucina: +${piattiFinali} piatti deliziosi.${notaTiro}`);
         if (typeof window.updateMagazzinoFields === 'function') window.updateMagazzinoFields({ piattiDeliziosi: magazzino.piattiDeliziosi });
     }
 
@@ -540,21 +587,34 @@ function bevi(idx, qty = null) {
     window.consumiGlobali += qty;
     checkRazionamento();
 
-    // Calcola l'effettivo guadagno con efficienza
-    const eff = getWaterEfficiency(p);
-    const effectiveGain = qty * eff;
-    p.sete += effectiveGain;
-    if (p.sete > 4) {
-        p.timers.buffSete = 6;
-        p.sete = Math.min(10, p.sete);
-    }
-    if (effectiveGain >= 0.25) {
-        p.timers.seteSoddisfatta = 2;
-    }
-
     if (typeof window.updateMagazzinoFields === 'function') {
         window.updateMagazzinoFields({ acqua: magazzino.acqua });
     }
+
+    const oreAzione = calcolaTempoConsumoAcqua(p, qty);
+    const nuovaAzione = {
+        tipo: 'bevi',
+        oreTotali: oreAzione,
+        oreRimanenti: oreAzione,
+        onComplete: () => {
+            applicaChanceIndigestione(p);
+            const eff = getWaterEfficiency(p);
+            const effectiveGain = qty * eff;
+            p.sete += effectiveGain;
+            if (p.sete > 4) {
+                p.timers.buffSete = 6;
+                p.sete = Math.min(10, p.sete);
+            }
+            if (effectiveGain >= 0.25) {
+                p.timers.seteSoddisfatta = 2;
+            }
+            mostraNotificaInAlto(`${p.nome} ha bevuto: sete +${effectiveGain.toFixed(2)}.`, 'successo');
+            salvaPersonaggio(p);
+            aggiornaInterfaccia();
+        }
+    };
+    inserisciAzioneConPriorita(p, nuovaAzione, p.stadioSete >= 2);
+    salvaPersonaggio(p);
     aggiornaInterfaccia();
 }
 
@@ -613,12 +673,13 @@ function schedulaAzioneNutrizione(idx, dati, isAuto = false) {
     }
     else magazzino.cibo -= dati.qty;
 
+        const oreAzione = calcolaTempoConsumoCibo(p, dati.qty || 1);
     const nuovaAzione = {
         tipo: 'nutri',
         auto: isAuto ? 'fame' : undefined,
-        oreTotali: 0.5,
-        oreRimanenti: 0.5,
-        onComplete: () => eseguiNutrizione(p, dati)
+        oreTotali: oreAzione,
+        oreRimanenti: oreAzione,
+        onComplete: () => { applicaChanceIndigestione(p); eseguiNutrizione(p, dati); }
     };
     // Fame stadio 3+ (tacche <=6): l'azione salta in cima alla coda
     inserisciAzioneConPriorita(p, nuovaAzione, p.stadioFame >= 3);
@@ -671,7 +732,7 @@ function eseguiNutrizione(p, dati) {
             p.puntiFortuna = Math.min(p.puntiFortunaMax, p.puntiFortuna + 1);
         }
         mostraNotificaInAlto(`${p.nome} ha mangiato un pasto delizioso: fame +${gain.toFixed(2)}.`, 'successo');
-    } else if (dati.tipo === 'avariato') {
+        } else if (dati.tipo === 'avariato') {
         recordResourceConsumption(p, qty);
         window.consumiGlobali += qty; checkRazionamento();
         let mult = 1;
@@ -681,34 +742,39 @@ function eseguiNutrizione(p, dati) {
         p.fame += gain;
         if (p.fame > 14) { p.timers.buffFame = (p.hasPerk && p.hasPerk('Adattamento alimentare')) ? 8 : 6;}
         if (gain >= 0.25) p.timers.fameSoddisfatta = durataFameSoddisfatta;
-        let dannoFollia = (p.hasPerk && p.hasPerk('Schizzinoso')) ? 2 : 1;
-        const effettoAssaporatore = (typeof window.chiediUsoOggettoMagico === 'function')
-            ? window.chiediUsoOggettoMagico(p, 'evita_follia_avariato', `${p.nome} sta per mangiare cibo avariato`)
-            : null;
-        if (effettoAssaporatore) {
-            dannoFollia = 0;
-            mostraNotificaInAlto(`${p.nome} usa l'Assaporatore: nessuna Follia da questo pasto avariato.`, 'successo');
-        }
-        p.follia += dannoFollia;
         if (p.nutriSpeciale) p.nutriSpeciale('avariato');
-        mostraNotificaInAlto(`${p.nome} ha mangiato cibo avariato. Fame +${gain.toFixed(2)}, follia +${dannoFollia}.`, 'avviso');
-        let costMod = p.getStatDettagliata('Costituzione').mod;
-        if (p.hasPerk && p.hasPerk('Stomaco di ferro')) costMod += 2;
-        if (p.hasPerk && p.hasPerk('Stomaco sensibile')) costMod -= 2;
-        if (p.hasPerk && p.hasPerk('Cagionevole')) costMod -= 3;
-        if (p.hasPerk && p.hasPerk('Fisico perfetto')) costMod += 3;
-        const totaleTS_base = () => rollDice(1, 20) + costMod;
-        let totaleTS = totaleTS_base();
-        if (p.hasDisadvantageCostituzioneTS && p.hasDisadvantageCostituzioneTS()) {
-            totaleTS = Math.min(totaleTS, totaleTS_base());
+
+        // Schizzinoso: unico caso in cui il cibo avariato aumenta ancora la Follia (raddoppiata)
+        let msgFollia = '';
+        if (p.hasPerk && p.hasPerk('Schizzinoso')) {
+            const dannoFollia = 2; // raddoppio del valore base (1) come da descrizione del perk
+            p.follia = Math.min(20, p.follia + dannoFollia);
+            if (typeof p.aggiornaSintomiFollia === 'function') p.aggiornaSintomiFollia();
+            msgFollia = `, follia +${dannoFollia} (Schizzinoso)`;
         }
-        if (totaleTS < 14) {
-            p.contraiMalattia(1);
-            mostraNotificaInAlto(`${p.nome} ha fallito il TS Costituzione (${totaleTS} vs 14) ed è rimasto intossicato.`, 'pericolo');
-        }
-        if (totaleTS < 14) {
-            p.contraiMalattia(1);
-            mostraNotificaInAlto(`${p.nome} ha fallito il TS Costituzione (${totaleTS} vs 14) ed è rimasto intossicato.`, 'pericolo');
+        mostraNotificaInAlto(`${p.nome} ha mangiato cibo avariato. Fame +${gain.toFixed(2)}${msgFollia}.`, 'avviso');
+
+        // Purificare Cibo e Acqua: fino a 4 unità purificate in precedenza evitano il rischio di malattia
+        const caricheDisponibili = p._purificazioneCiboCariche || 0;
+        if (caricheDisponibili > 0) {
+            const usate = Math.min(qty, caricheDisponibili);
+            p._purificazioneCiboCariche = caricheDisponibili - usate;
+            mostraNoificaInAlto(`✨ ${p.nome}: ${usate} unità di cibo avariato erano purificate, nessun rischio di malattia.`, 'successo');
+        } else {
+            let costMod = p.getStatDettagliata('Costituzione').mod;
+            if (p.hasPerk && p.hasPerk('Stomaco di ferro')) costMod += 2;
+            if (p.hasPerk && p.hasPerk('Stomaco sensibile')) costMod -= 2;
+            if (p.hasPerk && p.hasPerk('Cagionevole')) costMod -= 3;
+            if (p.hasPerk && p.hasPerk('Fisico perfetto')) costMod += 3;
+            const totaleTS_base = () => rollDice(1, 20) + costMod;
+            let totaleTS = totaleTS_base();
+            if (p.hasDisadvantageCostituzioneTS && p.hasDisadvantageCostituzioneTS()) {
+                totaleTS = Math.min(totaleTS, totaleTS_base());
+            }
+            if (totaleTS < 14) {
+                p.contraiMalattia(1);
+                mostraNotificaInAlto(`${p.nome} ha fallito il TS Costituzione (${totaleTS} vs 14) ed è rimasto intossicato.`, 'pericolo');
+            }
         }
     } else {
         recordResourceConsumption(p, qty);
@@ -812,6 +878,63 @@ window.nutriBiocarburante = function(idx) {
     mostraNotificaInAlto(`${p.nome} ha consumato biocarburante: nessuna penalità attiva.`, 'successo');
     window.updateMagazzinoFields({ cibo: magazzino.cibo, piattiDeliziosi: magazzino.piattiDeliziosi, ciboAvariato: magazzino.ciboAvariato });
     salvaPersonaggioCloud(p);
+    aggiornaInterfaccia();
+};
+
+window.lanciaCreaDistruggiAcqua = function(idx) {
+    const p = party[idx];
+    if (!p || !(p.incantesimi || []).includes('Crea o Distruggi Acqua')) return;
+    const azione = (prompt(`${p.nome}: vuoi "crea" o "distruggi" acqua? (fino a 2 litri, oppure dissipa la nebbia in un cubo di 9 metri)`, 'crea') || '').trim().toLowerCase();
+    if (azione !== 'crea' && azione !== 'distruggi') return;
+
+    p._nextCastIsCura = false;
+    const check = p.canCastSpell ? p.canCastSpell(1) : { allowed: true, cost: p.getSpellCost(1) };
+    if (!check.allowed) { alert(check.reason); return; }
+
+    if (azione === 'distruggi') {
+        const disponibile = magazzino.acqua || 0;
+        if (disponibile <= 0) { alert('Non c\'è acqua nel magazzino da distruggere qui.'); return; }
+        const qtaStr = prompt(`Quanta acqua vuoi distruggere? (max 2, disponibile ${disponibile})`, Math.min(2, disponibile).toString());
+        const qta = Math.min(2, parseFloat(qtaStr) || 0, disponibile);
+        if (qta <= 0) return;
+        const result = p.castSpell(1);
+        if (!result.success) { alert(result.message); return; }
+        magazzino.acqua = Math.max(0, magazzino.acqua - qta);
+        if (typeof window.updateMagazzinoFields === 'function') window.updateMagazzinoFields({ acqua: magazzino.acqua });
+        mostraNotificaInAlto(`${p.nome} distrugge ${qta} unità di acqua. ${result.message}`, 'successo');
+    } else {
+        const result = p.castSpell(1);
+        if (!result.success) { alert(result.message); return; }
+        p.initInventarioBase();
+        p.inventario.acqua = (p.inventario.acqua || 0) + 2;
+        mostraNotificaInAlto(`${p.nome} crea 2 unità di acqua potabile nel proprio inventario. ${result.message}`, 'successo');
+        salvaPersonaggioCloud(p);
+    }
+    aggiornaInterfaccia();
+};
+
+window.lanciaPurificareCiboAcqua = function(idx) {
+    const p = party[idx];
+    if (!p || !(p.incantesimi || []).includes('Purificare Cibo e Acqua')) return;
+    p._nextCastIsCura = false;
+    const check = p.canCastSpell ? p.canCastSpell(1) : { allowed: true, cost: p.getSpellCost(1) };
+    if (!check.allowed) { alert(check.reason); return; }
+
+    const candidati = party.filter(q => !!q.inSpedizione === !!p.inSpedizione);
+    let target = p;
+    if (candidati.length > 1) {
+        const lista = candidati.map((c, i) => `${i}) ${c.nome}`).join('\n');
+        const scelta = parseInt(prompt(`Su chi vuoi lanciare Purificare Cibo e Acqua? (entro 3 metri)\n${lista}`, '0'));
+        target = candidati[scelta] || p;
+    }
+
+    const result = p.castSpell(1);
+    if (!result.success) { alert(result.message); return; }
+
+    target._purificazioneCiboCariche = (target._purificazioneCiboCariche || 0) + 4;
+    mostraNotificaInAlto(`${p.nome} purifica cibo e acqua per ${target.nome}: le prossime 4 unità di cibo avariato consumate non rischieranno di ammalarlo. ${result.message}`, 'successo');
+    salvaPersonaggioCloud(p);
+    if (target !== p) salvaPersonaggioCloud(target);
     aggiornaInterfaccia();
 };
 

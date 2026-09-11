@@ -642,3 +642,81 @@ Personaggio.prototype.getRestMultiplier = getRestMultiplier;
 window.lootMedici = lootMedici;
 window.infestazioneWound = infestazioneWound;
 
+// --- Incantesimo "Rianimare": riporta in vita un personaggio morto nell'ultimo minuto di gioco ---
+window.lanciaRianimare = async function(idx) {
+    const p = window.party[idx];
+    if (!p || !(p.incantesimi || []).includes('Rianimare')) return;
+    p._nextCastIsCura = false;
+    const check = p.canCastSpell ? p.canCastSpell(3) : { allowed: true, cost: p.getSpellCost(3) };
+    if (!check.allowed) { alert(check.reason); return; }
+
+    let cimiteroArray = [];
+    try {
+        const res = await fetch(window.apiUrl('/api/cimitero'), { headers: window.buildAuthHeaders() });
+        if (res.ok) {
+            const data = await res.json();
+            cimiteroArray = data.cimitero || [];
+        }
+    } catch (e) {
+        alert('Impossibile contattare il server per verificare il cimitero.');
+        return;
+    }
+
+    const oraAttuale = window.oreTotali || 0;
+    const sogliaOre = 1 / 60; // "entro l'ultimo minuto"
+    const candidati = cimiteroArray.filter(c => {
+        const oraMorte = c.data?.oraMorteGioco;
+        return typeof oraMorte === 'number' && (oraAttuale - oraMorte) >= 0 && (oraAttuale - oraMorte) <= sogliaOre;
+    });
+
+    if (!candidati.length) {
+        alert('Nessun personaggio è morto entro l\'ultimo minuto: Rianimare non può avere effetto ora.');
+        return;
+    }
+
+    let target = candidati[0];
+    if (candidati.length > 1) {
+        const lista = candidati.map((c, i) => `${i}) ${c.nome}`).join('\n');
+        const scelta = parseInt(prompt(`Chi vuoi rianimare?\n${lista}`, '0'));
+        target = candidati[scelta];
+        if (!target) return;
+    }
+
+    if (!confirm(`Rianimare "${target.nome}" con 1 PF Reale? L'incantesimo ti infliggerà 1 stadio di fatica.`)) return;
+
+    const result = p.castSpell(3);
+    if (!result.success) { alert(result.message); return; }
+
+    const nuoviDati = { ...(target.data || {}) };
+    nuoviDati.puntiFeritaReali = 1;
+    delete nuoviDati.causaMorte;
+    delete nuoviDati.giornoMorte;
+    delete nuoviDati.giorniSopravvissuto;
+    delete nuoviDati.oraMorteGioco;
+
+    try {
+        const campoId = window.getCampoBaseId ? window.getCampoBaseId() : 1;
+        const res = await fetch(window.apiUrl(`/api/personaggi/${target.id}`), {
+            method: 'PUT',
+            headers: window.buildAuthHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify({ data: JSON.stringify(nuoviDati), status: 'vivo', campoBaseId: campoId })
+        });
+        if (!res.ok) throw new Error('Errore del server durante la rianimazione');
+    } catch (e) {
+        alert('Errore durante la rianimazione: ' + e.message);
+        return;
+    }
+
+    p.faticaBase = Math.min(6, (p.faticaBase || 0) + 1);
+    mostraNotificaInAlto(`⚡ ${p.nome} rianima ${target.nome}! Torna in vita con 1 PF Reale. ${result.message} (+1 stadio di fatica per ${p.nome})`, 'successo');
+
+    if (typeof window.salvaPersonaggioCloud === 'function') window.salvaPersonaggioCloud(p);
+    if (typeof window.renderCimitero === 'function') window.renderCimitero();
+    const utenteCorrente = window.getCurrentUser ? window.getCurrentUser() : null;
+    if (utenteCorrente && utenteCorrente.role === 'master' && typeof window.caricaPartyMaster === 'function') {
+        await window.caricaPartyMaster();
+    } else if (typeof window.syncPartyFromServer === 'function') {
+        await window.syncPartyFromServer();
+    }
+    if (typeof window.aggiornaInterfaccia === 'function') window.aggiornaInterfaccia();
+};
