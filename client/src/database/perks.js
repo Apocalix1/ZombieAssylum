@@ -337,11 +337,10 @@ window.DATABASE_PERK = {
         { nome: "Zoom", costo: 2, desc: "Ottieni +4 a Indagare e Percezione. Hai una visuale aumentata del 300%.", skills: ["Indagare", "Percezione"] }
     ],
     "oktavia": [
-        { nome: "Sfida", desc: "Il modificatore di Destrezza è trattato come negativo nelle prove basate su Destrezza (Acrobazia, Rapidità di mano, Furtività). In cambio ottieni +2 alla CA e vantaggio nei tiri salvezza su Destrezza.", costo: 4, skills: [] },
+        { nome: "Sfida", desc: "Il manipolatore è un po’ come i pinguini, maldestro e imbranato. Ma grazie ai suoi studi è riuscito ad arrivare a un equilibrio perfetto. Mentre svantaggio sulle prove di abilità basate su Destrezza (Acrobazia, Rapidità di mano e Furtività), ottiene un bonus di +2 alla CA e vantaggio tiri salvezza su Destrezza", costo: 4, skills: [],disadvantage:["Furtività","Acrobazia","Rapidita di mano"] },
         { nome: "Armatura del tenero", desc: "Quando non indossi armatura né scudo, la tua CA è pari a 6 + modificatore di Destrezza + modificatore di Carisma.", costo: 6, skills: [] },
         { nome: "Cacciatore inaspettato", desc: "Ottieni competenza in Indagare e Percezione. Su un soggetto di cui conosci informazioni generali, ottieni vantaggio su quella prova una volta al giorno per soggetto.", costo: 7, skills: ["Indagare", "Percezione"] },
         { nome: "Scivolata+", desc: "Impari a slittare sul ghiaccio: +3 metri di velocità muovendoti sul ghiaccio, senza rischio di caduta.", costo: 6, skills: [], requires: "Scivolata(Pinguinosa)" },
-        { nome: "Slittare", desc: "(Passiva) Ottieni +3 metri di velocità muovendoti sul ghiaccio a terra, senza rischio di caduta.", costo: 2, skills: [] },
         { nome: "Perforbecco", desc: "(Passiva) A ogni attacco puoi ridurre il tiro per colpire di 2 (max 5 volte cumulabili) per aggiungere 1d4 danni perforanti per riduzione. Se il tiro scende sotto zero subisci metà dei danni dell'attacco; un critico annulla l'accumulo.", costo: 4, skills: [] },
         { nome: "Corpo Leggero", desc: "(Passiva) +1 metro di velocità (senza armatura pesante), salti aumentati di 1/3, danno da caduta ridotto di 1 metro (non applicabile a cadute oltre i 5 metri).", costo: 5, skills: [] }
     ]

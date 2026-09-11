@@ -828,16 +828,19 @@ export class Personaggio {
      let CA =10+Math.floor((this.destrezza-10)/2);
      if (this.hasPerk('Cauto')) CA+=1;
      if (this.hasPerk('Esoscheletro duro')) CA+=2;
+     if (this.hasPerk('Sfida')) CA+=2;
      if (this.hasPerk('Armatura del tenero')) 
      {
         CA = 8 + Math.floor((this.destrezza-10)/2) + Math.floor((this.carisma-10)/2);
      }
-     return CA;CA
+     if(this.hasPerk('Combattimento strategico'))
+     {
+        CA= 8 + Math.floor((this.intelligenza-10)/2) + Math.floor((this.saggezza-10)/2);
+     }
+     return CA;
     }
 
     get capacitaMax() {
-        // Evitiamo di chiamare `getStatDettagliata` qui per non creare ricorsioni.
-        // Usiamo il valore base della Forza se presente, altrimenti 10 come default.
         const forzaVal = (typeof this.forza === 'number') ? this.forza : (typeof this['forza'] === 'number' ? this['forza'] : (this.Forza || 10));
         const modForza = Math.floor((forzaVal - 10) / 2);
         let cap = 5 + modForza;
@@ -1997,6 +2000,11 @@ export class Personaggio {
             modFinale -= 2;
             motivi.push("Overdose (-2)");
         }
+        if (this._indigestioneFinoA && (window.oreTotali || 0) < this._indigestioneFinoA &&
+            (statNome === "Costituzione" || statNome === "Destrezza")) {
+            modFinale -= 1;
+            motivi.push("Indigestione (-1)");
+        }
 
         if (this.timers) {
             if (this.timers.buffFame > 0 && (statNome === "Forza" || statNome === "Costituzione")) modFinale += 1;
@@ -2328,7 +2336,7 @@ export class Personaggio {
         const attrMod = this.getStatDettagliata(attr).mod;
         const prof = this.getBonusCompetenza();
 
-        let modifier = attrMod;
+                let modifier = attrMod;
 
         let sbloccaNuovaAbilita = false;
         let svantaggioMeccanico = false;
@@ -2337,6 +2345,19 @@ export class Personaggio {
         if (rating === 2) {
             modifier = attrMod + (prof * 2);
             sbloccaNuovaAbilita = true;
+
+            // MAESTRO: se possiedi 3+ perk che danno competenza/maestria in questa abilità,
+            // sommi il bonus competenza in eccesso oltre il normale limite della Maestria (x2).
+            if (this.hasPerk && this.hasPerk('Maestro')) {
+                const fontiPerk = (this.perks || []).filter(perk => {
+                    const pData = typeof perk === 'string' ? (window.findPerkData ? window.findPerkData(perk) : null) : perk;
+                    return pData && Array.isArray(pData.skills) && pData.skills.map(s => s.toLowerCase().trim()).includes(skillKey);
+                }).length;
+                if (fontiPerk >= 3) {
+                    const eccesso = fontiPerk - 2;
+                    modifier += prof * eccesso;
+                }
+            }
         } else if (rating === 1) {
             modifier = attrMod + prof;
         } else if (rating === 0) {
@@ -2513,13 +2534,7 @@ export class Personaggio {
     }
 
     nutriSpeciale(tipoCibo) {
-        if (tipoCibo === 'avariato') {
-            this.contatoreCiboAvariato++;
-            if (this.contatoreCiboAvariato >= 3) {
-                this.contatoreCiboAvariato = 0;
-                this.aggiungiFolliaPerEvento('avariato');
-            }
-            } else if (tipoCibo === 'delizioso') {
+            if (tipoCibo === 'delizioso') {
             // Probabilità 65% di ridurre di 1, 35% di ridurre di 2 (soggetto a Resistenza alla Follia)
             const rand = Math.random();
             const cura = rand < 0.65 ? 1 : 2;

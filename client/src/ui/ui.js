@@ -1316,10 +1316,11 @@ async function passaTempoGlobale() {
         const causaMorte = (typeof p.tickOre === 'function') ? p.tickOre(ore) : null;
            if (causaMorte) {
             annullaEsplorazionePerMorte(p);
-            const giorniSopravvissuto = giornoAttuale - (p.giornoInizio || 0);
+                        const giorniSopravvissuto = giornoAttuale - (p.giornoInizio || 0);
             p.causaMorte = causaMorte;
             p.giorniSopravvissuto = giorniSopravvissuto;
             p.giornoMorte = giornoAttuale;
+            p.oraMorteGioco = oreTotali;
 
             queueCommand({
                 type: 'markDead',
@@ -1362,11 +1363,12 @@ export function aggiornaInterfaccia() {
     try {
         // Controllo morte immediato
         party.forEach((p, i) => {
-            if (p.puntiFeritaReali <= 0 && !p.isRobot) {
+                        if (p.puntiFeritaReali <= 0 && !p.isRobot) {
                 p.causaMorte = p.causaMorte || "emorragia";
                 const giornoAttuale = Math.floor(oreTotali / 24);
                 p.giorniSopravvissuto = giornoAttuale - (p.giornoInizio || 0);
                 p.giornoMorte = giornoAttuale;
+                p.oraMorteGioco = oreTotali;
                 
                 // Notifica server
                 fetch(apiUrl(`/api/personaggi/${p.id}`), {
@@ -1478,9 +1480,7 @@ export function aggiornaInterfaccia() {
                     { label: "Sonno", attuale: p.sonno, max: 8 },
                     { label: "Stamina", attuale: p.staminaAttuale ?? 0, max: p.staminaMax ?? 10, color: "#f1c40f" }
                 ];
-                if (isMaster) {
-                    risorse.push({ label: "Follia", attuale: p.follia || 0, max: 20, color: "#3498db" });
-                }
+                risorse.push({ label: "Follia", attuale: p.follia || 0, max: 20, color: "#3498db" });
                 risorse.forEach(r => {
                     let taccheHtml = "";
                     const colore = r.color || getColoreBarra((r.attuale / r.max) * 100);
@@ -1587,12 +1587,15 @@ export function aggiornaInterfaccia() {
                                         ${hasPerk(p, 'Artista') ? `<button onclick="apriIntrattieniModal(${idx})">🎭 Intrattieni</button>` : ''}
                                         ${hasPerk(p, 'Fedele') ? `<button onclick="apriPreghieraFedele(${idx})">🙏 Prega</button>` : ''}
                                         ${hasPerk(p, 'Musicista') ? `<button onclick="apriMusicistaModal(${idx})">🎵 Suona</button>` : ''}
-                                        ${user && user.role === 'master' ? `<button onclick="apriAumentaFollia(${idx})" style="background:#c0392b; color:white;">🧠 Aumenta Follia</button>` : ''}
+                                        <button onclick="apriAumentaFollia(${idx})" style="background:#c0392b; color:white;">🧠 Aumenta Follia</button>
                                         ${hasPerk(p, 'Produrre veleni') ? `<button onclick="produciVeleno(${idx})">🧪 Produci Veleno</button>` : ''}
                                          <button onclick="apriMedica(${idx})" ${canUseMedicalAction ? '' : 'disabled'}>🩹 Medica</button>
                                         <button onclick="apriDiagnosiMalattia(${idx})">🩺 Diagnostica</button>
                                         <button onclick="apriCuraMalattia(${idx})">💊 Cura</button>
                                         ${(p.incantesimi || []).includes('Creare cibo e Acqua') ? `<button onclick="window.lanciaCreaCiboAcqua(${idx})">🍞💧 Crea Cibo e Acqua</button>` : ''}
+                                        ${(p.incantesimi || []).includes('Crea o Distruggi Acqua') ? `<button onclick="window.lanciaCreaDistruggiAcqua(${idx})">💧 Crea/Distruggi Acqua</button>` : ''}
+                                        ${(p.incantesimi || []).includes('Purificare Cibo e Acqua') ? `<button onclick="window.lanciaPurificareCiboAcqua(${idx})">✨ Purificare Cibo e Acqua</button>` : ''}
+                                        ${(p.incantesimi || []).includes('Rianimare') ? `<button onclick="window.lanciaRianimare(${idx})" style="background:#8e44ad; color:white;">⚡ Rianimare</button>` : ''}
                                     `}
                                 </div>
                             </details>
@@ -2531,39 +2534,59 @@ window.apriAumentaFollia = function(idx) {
             <p><strong>Follia Attuale:</strong> ${p.follia || 0}</p>
             <p><strong>Sintomi:</strong> <span style="color:#e74c3c;">${p.folliaSintomi || "1-8 nessun sintomo"}</span></p>
         </div>
-        
-        <p style="font-size:0.9em; color:#aaa; margin-bottom:10px;">Seleziona la causa dell'aumento:</p>
-        
-        <div style="display:grid; gap:8px;">
-            <button class="btn-big" style="background:#d35400;" onclick="applicaFollia(${idx}, 'cibo_avariato')">Cibo Avariato (1d4)</button>
-            <button class="btn-big" style="background:#e67e22;" onclick="applicaFollia(${idx}, 'perk_fobia')">Perk Fobia (1d6)</button>
-            <button class="btn-big" style="background:#c0392b;" onclick="applicaFollia(${idx}, 'compagno_morto')">Morte Compagno / Rischio (1d10)</button>
-            <button class="btn-big" style="background:#8e44ad;" onclick="applicaFollia(${idx}, 'rischio_morte')">Rischio Morte / Rianimazione (1d12)</button>
+
+        <p style="font-size:0.9em; color:#aaa; margin-bottom:10px;">Di quanto vuoi aumentare la follia?</p>
+        <div style="font-size:0.8em; color:#888; margin-bottom:10px; line-height:1.6;">
+            <div>1d4 → Fastidio / perk</div>
+            <div>2d4 → Evento disturbante</div>
+            <div>3d4 → Trauma</div>
+            <div>4d4 → Trauma generazionale</div>
         </div>
-        
-        <div style="margin-top:20px; font-size:0.8em; color:#888;">
-            <p><i>Nota: Il modificatore di Carisma (${p.getStatDettagliata('Carisma').mod}) verrà sottratto dal tiro (minimo 1).</i></p>
+
+        <div style="display:grid; gap:8px;">
+            <button class="btn-big" style="background:#f1c40f; color:#111;" onclick="applicaFolliaDiretta(${idx}, 1)">1d4 — Fastidio/perk</button>
+            <button class="btn-big" style="background:#e67e22;" onclick="applicaFolliaDiretta(${idx}, 2)">2d4 — Evento disturbante</button>
+            <button class="btn-big" style="background:#d35400;" onclick="applicaFolliaDiretta(${idx}, 3)">3d4 — Trauma</button>
+            <button class="btn-big" style="background:#c0392b;" onclick="applicaFolliaDiretta(${idx}, 4)">4d4 — Trauma generazionale</button>
+        </div>
+
+        <div style="margin-top:12px; border-top:1px solid #333; padding-top:10px;">
+            <button class="btn-big" style="width:100%; background:#8e44ad;" onclick="applicaFolliaCustom(${idx})">Inserisci un numero a scelta</button>
+        </div>
+
+        <div style="margin-top:16px; font-size:0.8em; color:#888;">
+            <p><i>Nota: questa Follia è inflitta direttamente, senza alcuna riduzione da Carisma o altri modificatori.</i></p>
         </div>
     `;
 
     modal.style.display = 'block';
 };
 
-window.applicaFollia = function(idx, causa) {
+window.applicaFolliaDiretta = function(idx, numDadi) {
     const p = party[idx];
     if (!p) return;
+    const tiro = rollDice(numDadi, 4);
+    p.follia = Math.min(20, (p.follia || 0) + tiro);
+    if (typeof p.aggiornaSintomiFollia === 'function') p.aggiornaSintomiFollia();
 
-    const risultato = p.subisciFollia(causa);
-    
-    alert(`FOLLIA AUMENTATA!\n\n` +
-          `Causa: ${risultato.causa}\n` +
-          `Tiro dado: ${risultato.tiro}\n` +
-          `Mod. Carisma: ${risultato.modificatore}\n` +
-          `Punti Follia subiti: ${risultato.punti}\n\n` +
-          `Totale Follia: ${risultato.totale}\n` +
-          `Nuovi Sintomi: ${risultato.sintomi}`);
-
+    mostraNotificaInAlto(`🧠 ${p.nome}: Follia +${tiro} (${numDadi}d4). Totale: ${p.follia}.`, 'pericolo');
     document.getElementById('modal-follia').style.display = 'none';
+    salvaPersonaggioCloud(p);
+    aggiornaInterfaccia();
+};
+
+window.applicaFolliaCustom = function(idx) {
+    const p = party[idx];
+    if (!p) return;
+    const input = prompt(`Di quanti punti Follia vuoi aumentare ${p.nome}?`, '1');
+    const quantita = parseInt(input);
+    if (isNaN(quantita) || quantita <= 0) return;
+    p.follia = Math.min(20, (p.follia || 0) + quantita);
+    if (typeof p.aggiornaSintomiFollia === 'function') p.aggiornaSintomiFollia();
+
+    mostraNotificaInAlto(`🧠 ${p.nome}: Follia +${quantita}. Totale: ${p.follia}.`, 'pericolo');
+    document.getElementById('modal-follia').style.display = 'none';
+    salvaPersonaggioCloud(p);
     aggiornaInterfaccia();
 };
 

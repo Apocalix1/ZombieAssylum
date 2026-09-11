@@ -135,6 +135,7 @@ function degradaInCombat(idx) {
         p.causaMorte = 'combattimento';
         p.giorniSopravvissuto = giorniSopravvissuto;
         p.giornoMorte = Math.floor(oreTotali / 24);
+        p.oraMorteGioco = oreTotali;
         fetch(apiUrl(`/api/personaggi/${p.id}`), {
             method: 'PUT',
             headers: buildAuthHeaders({ 'Content-Type': 'application/json' }),
@@ -177,6 +178,7 @@ function ferisciInCombat(idx) {
         p.causaMorte = 'combattimento';
         p.giorniSopravvissuto = giorniSopravvissuto;
         p.giornoMorte = Math.floor(oreTotali / 24);
+        p.oraMorteGioco = oreTotali;
         fetch(apiUrl(`/api/personaggi/${p.id}`), {
             method: 'PUT',
             headers: buildAuthHeaders({ 'Content-Type': 'application/json' }),
