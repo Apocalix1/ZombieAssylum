@@ -285,11 +285,16 @@ function modificaArmaLivello(categoria, delta) {
         const next = attuale + 1;
         if (next > maxLivello) return;
         const costo = costi[next];
-        if (p.puntiCreazione < costo) { alert(`Punti insufficienti per salire a livello ${next} in ${categoria}.`); return; }
+        if (p.puntiCreazione < costo) { 
+            alert(`Punti insufficienti per salire a livello ${next} in ${categoria}.`); 
+            return; 
+        }
         p.puntiCreazione -= costo;
         p.armiLivello[categoria] = next;
-    } else if (attuale > 0) {
-        p.puntiCreazione += costi[attuale];
+    } else if (delta < 0 && attuale > 0) {
+        // Restituisce correttamente il costo del livello che si sta rimuovendo
+        const costoRimborso = costi[attuale];
+        p.puntiCreazione += costoRimborso;
         p.armiLivello[categoria] = attuale - 1;
     }
     renderSetupStats();
@@ -314,10 +319,10 @@ function renderSetupArmi() {
         html += `
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
                 <span>${categoria} (Lv ${lvl}/${maxLivello})</span>
-                <div>
-                    <button onclick="modificaArmaLivello('${categoria}', -1)" style="padding:4px 8px;">-</button>
+                                <div>
+                    <button onclick="modificaArmaLivello('${categoria.replace(/'/g, "\\'")}', -1)" style="padding:4px 8px;">-</button>
                     <span style="display:inline-block; width:36px; text-align:center; font-size:0.8rem;">${prossimoCosto !== null ? prossimoCosto + 'pt' : 'MAX'}</span>
-                    <button onclick="modificaArmaLivello('${categoria}', 1)" style="padding:4px 8px;" ${lvl >= maxLivello ? 'disabled' : ''}>+</button>
+                    <button onclick="modificaArmaLivello('${categoria.replace(/'/g, "\\'")}', 1)" style="padding:4px 8px;" ${lvl >= maxLivello ? 'disabled' : ''}>+</button>
                 </div>
             </div>`;
     });

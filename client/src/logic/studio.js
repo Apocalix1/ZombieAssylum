@@ -404,11 +404,22 @@ function studio(idx) {
     apriStudio();
 }
 
-
 function avviaStudioLingua(idx) {
     const p = party[idx];
     if (!p) return;
     if (window.hasPerk(p, 'Analfabeta')) { alert('Il tuo personaggio non sa leggere. Che stupidone!'); return; }
+
+    const libriLingua = magazzino.libri.filter(b => b.subject === 'Lingue' && (b.maxStudyHours - b.usedHours) > 0);
+    if (!libriLingua.length) { alert('Serve un libro di Lingue in biblioteca per poter studiare una lingua.'); return; }
+
+    let book = libriLingua[0];
+    if (libriLingua.length > 1) {
+        const lista = libriLingua.map((b, i) => `${i}) ${b.title} (restanti ${Math.max(0, b.maxStudyHours - b.usedHours)}h)`).join('\n');
+        const scelta = parseInt(prompt(`Quale libro vuoi usare?\n${lista}`, '0'));
+        book = libriLingua[scelta];
+        if (!book) return;
+    }
+
     const tutte = ['Yazyk', 'Engenity', 'Chrimil', 'Ridulphi', 'Antali', 'Puleun', 'Eklesti', 'Meer'];
     const giaConosciute = p.lingue || ['Verbum'];
     const disponibili = tutte.filter(l => !giaConosciute.includes(l));
@@ -421,11 +432,13 @@ function avviaStudioLingua(idx) {
     const subject = `Lingua:${lingua}`;
     if (p.getStudyPoints(subject) >= 70) { alert('Hai già imparato questa lingua.'); return; }
 
-    let ore = parseInt(prompt('Quante ore vuoi dedicare allo studio della lingua?', '4'));
+    const remaining = Math.max(0, book.maxStudyHours - book.usedHours);
+    let ore = parseInt(prompt(`Quante ore vuoi dedicare allo studio della lingua? (max ${remaining})`, `${Math.min(4, remaining)}`));
     if (isNaN(ore) || ore <= 0) return;
+    ore = Math.min(ore, remaining);
     ore = Math.ceil(ore * p.getModificatoreTempoAzione('studio-lingua', subject));
 
-    pianificaAzione(idx, 'studio-lingua', null, subject, lingua, ore, null);
+    pianificaAzione(idx, 'studio-lingua', book.id, subject, lingua, ore, null);
     document.getElementById('modal-studio').style.display = 'none';
 }
 
@@ -433,6 +446,14 @@ function completaStudioLinguaAction(p, action) {
     const subject = action.subject;
     const lingua = action.linguaTarget;
     const hours = action.oreTotali;
+    const book = magazzino.libri.find(b => b.id === action.bookId);
+    if (book) {
+        book.usedHours = Math.min(book.maxStudyHours, book.usedHours + hours);
+        if (book.usedHours >= book.maxStudyHours) {
+            const index = magazzino.libri.indexOf(book);
+            if (index !== -1) magazzino.libri.splice(index, 1);
+        }
+    }
 
     const isPessimoStudente = p.hasPerk && p.hasPerk('Pessimo studente');
     const progressMultiplier = isPessimoStudente ? 0.75 : 1;
@@ -513,7 +534,10 @@ function renderStudioModal() {
     html += '</div>';
     html += '<div style="margin-bottom:10px; font-size:0.9rem; color:#ddd;"><strong>Libri disponibili:</strong></div>';
     html += '<div style="display:grid; gap:8px; max-height:320px; overflow-y:auto;">';
-    html += `<button class="btn-hero" style="margin-bottom:10px;" onclick="avviaStudioLingua(${studioPersonaggioSelezionato})">🗣️ Studia una lingua</button>`;
+        const libriLinguaDisponibili = magazzino.libri.filter(b => b.subject === 'Lingue' && (b.maxStudyHours - b.usedHours) > 0);
+    if (libriLinguaDisponibili.length > 0) {
+        html += `<button class="btn-hero" style="margin-bottom:10px;" onclick="avviaStudioLingua(${studioPersonaggioSelezionato})">🗣️ Studia una lingua (${libriLinguaDisponibili.length} libro/i)</button>`;
+    }
     magazzino.libri.forEach((book, idx) => {
         const remaining = Math.max(0, book.maxStudyHours - book.usedHours);
         html += `<div class="stat-row" style="background:#111; display:grid; grid-template-columns: 1fr 110px 120px 90px; gap:6px; align-items:center;">
@@ -1344,6 +1368,8 @@ window.partyConosceLingua = partyConosceLingua;
 // ---------- ESPOSIZIONI GLOBALI ----------
 window.studio = studio;
 window.apriStudio = apriStudio;
+window.switchStudioPersonaggio = switchStudioPersonaggio;
+window.selezionaLibroStudio = selezionaLibroStudio;
 window.apriBiblioteca = apriBiblioteca;
 window.apriAiutoModal = apriAiutoModal;
 window.annullaAssistente = annullaAssistente;

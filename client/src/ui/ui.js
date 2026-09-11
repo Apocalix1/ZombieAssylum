@@ -2129,9 +2129,9 @@ function registraAttaccoModal(idx) {
         html += `<div style="background:#222; padding:10px; border:1px solid #333; border-radius:4px;">
             <div style="margin-bottom:8px;"><strong>${cat}</strong> - PCA: ${pca.toFixed(1)}</div>
             <div style="display:flex; gap:4px; flex-wrap:wrap;">
-                <button class="btn-big" style="flex:1; min-width:80px; background:#2ecc71;" onclick="registraColpo(${idx}, '${cat}', 'success')">✓ Colpo (+1)</button>
-                <button class="btn-big" style="flex:1; min-width:80px; background:#f39c12;" onclick="registraColpo(${idx}, '${cat}', 'critical')">⚡ Critico (+2)</button>
-                <button class="btn-big" style="flex:1; min-width:80px; background:#e74c3c;" onclick="registraColpo(${idx}, '${cat}', 'fail')">✗ Mancato (+0.5)</button>
+                <button class="btn-big" style="flex:1; min-width:80px; background:#2ecc71;" onclick="registraColpo(${idx}, '${cat.replace(/'/g, "\\'")}', 'success')">✓ Colpo (+1)</button>
+                <button class="btn-big" style="flex:1; min-width:80px; background:#f39c12;" onclick="registraColpo(${idx}, '${cat.replace(/'/g, "\\'")}', 'critical')">⚡ Critico (+2)</button>
+                <button class="btn-big" style="flex:1; min-width:80px; background:#e74c3c;" onclick="registraColpo(${idx}, '${cat.replace(/'/g, "\\'")}', 'fail')">✗ Mancato (+0.5)</button>
             </div>
         </div>`;
     });
@@ -2390,14 +2390,9 @@ function pianificaAzione(idx, tipo, bookId = null, subject = null, bookTitle = n
     if (!puoIniziareAzione(p, tipo)) return;
     let plannedHours;
     if (tipo === 'studio-libro' || tipo === 'studio-lingua') {
-        if (!bookId || !ore) return;
+    if (!bookId || !ore) return;
         plannedHours = ore;
-    } else if (tipo === 'studio-lingua') {
-    nuovaAzione.subject = subject;
-    nuovaAzione.linguaTarget = bookTitle; // riuso il parametro come nome lingua
-    nuovaAzione.onComplete = () => completaStudioLinguaAction(p, nuovaAzione);
-} 
-    else {
+    } else {
         const defaultHours = tipo === 'dormi' ? '8' : '1';
         plannedHours = prompt(`Quante ore vuoi dedicare a: ${tipo.toUpperCase()}?`, defaultHours);
         plannedHours = parseFloat(plannedHours);
@@ -2412,12 +2407,17 @@ function pianificaAzione(idx, tipo, bookId = null, subject = null, bookTitle = n
     }
 
     const nuovaAzione = { tipo: tipo, oreTotali: plannedHours, oreRimanenti: plannedHours };
-    if (tipo === 'studio-libro') {
+        if (tipo === 'studio-libro') {
         nuovaAzione.bookId = bookId;
         nuovaAzione.subject = subject;
         nuovaAzione.bookTitle = bookTitle;
         nuovaAzione.teacherName = teacherName;
         nuovaAzione.onComplete = () => completaStudioBookAction(p, nuovaAzione);
+    } else if (tipo === 'studio-lingua') {
+        nuovaAzione.bookId = bookId;
+        nuovaAzione.subject = subject;
+        nuovaAzione.linguaTarget = bookTitle;
+        nuovaAzione.onComplete = () => completaStudioLinguaAction(p, nuovaAzione);
     } else if (tipo === 'studio') {
         nuovaAzione.onComplete = () => {
             const guadagno = awardStudyPM(p, plannedHours);
@@ -3027,11 +3027,20 @@ function togglePerk(nomePerk, forceRemove = false) {
             if (indici.length === 0) indici = [0, 1];
             p.armiLivello = p.armiLivello || {};
             p.soldatoArmiScelte = indici.map(i => categorieArmi[i]);
+            let rimborsoTotale = 0;
             p.soldatoArmiScelte.forEach(cat => {
-                p.armiLivello[cat] = Math.max(1, p.armiLivello[cat] || 0);
+                const livelloAttuale = p.armiLivello[cat] || 0;
+                if (livelloAttuale >= 1) {
+                    const costi = window.ARMI_COSTI && window.ARMI_COSTI[cat];
+                    rimborsoTotale += costi ? (costi[1] || 0) : 0;
+                }
+                p.armiLivello[cat] = Math.max(1, livelloAttuale);
             });
+            if (rimborsoTotale > 0) {
+                p.puntiCreazione = (p.puntiCreazione || 0) + rimborsoTotale;
+            }
             if (typeof window.mostraNotificaInAlto === 'function') {
-                window.mostraNotificaInAlto(`Soldato: competenza Livello 1 registrata in ${p.soldatoArmiScelte.join(' e ')}.`, 'successo');
+                window.mostraNotificaInAlto(`Soldato: competenza Livello 1 registrata in ${p.soldatoArmiScelte.join(' e ')}.${rimborsoTotale > 0 ? ` Rimborsati ${rimborsoTotale} punti già spesi.` : ''}`, 'successo');
             }        } else if (nomePerk === 'Produrre veleni') {
             const veleni = ['Emotossine', 'Neurotossine', 'Neurotossine Ottiche', 'Allucinogeni', 'Miotossine', 'Blocco Respirazione', 'Gestrotossine'];
             const elencoVeleni = veleni.map((v, i) => `${i + 1}) ${v}`).join('\n');

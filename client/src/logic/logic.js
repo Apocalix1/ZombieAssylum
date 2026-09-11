@@ -1906,6 +1906,10 @@ export class Personaggio {
                     valoreBase += 2;
                     motivi.push("Anziana Carismatica (+2)");
                 }
+                if (haPerk("Muto")){
+                    valoriBase-=2;
+                    motivi.push("Muto (suka non parli) (-2)");
+                }
             }
             if (statNome === "Saggezza") {
                 if (haAnzianaVariante("Anziana_Bilanciata")) {
@@ -1962,12 +1966,12 @@ export class Personaggio {
         }
         }
         if (statNome === "Carisma" && this.hasPerk && this.hasPerk('Leader nato')) {
-            // Conta i compagni nello stesso "luogo": in spedizione con lui, oppure in base con lui.
+            // Conta i compagni nello stesso "luogo"[cite: 3]
             const compagni = (window.party || []).filter(m => m !== this && !!m.inSpedizione === !!this.inSpedizione);
             const bonusLeader = Math.min(3, Math.floor(compagni.length / 2));
             if (bonusLeader > 0) {
                 modFinale += bonusLeader;
-                motivi.push(`Leader nato (+${bonusLeader}, ${compagni.length} compagni)`);
+                motivi.push(`Leader nato (+${bonusLeader}, ${compagni.length} compagni)[cite: 3]`);
             }
         }
         let eccedenza = 0;
@@ -2848,6 +2852,7 @@ export class Personaggio {
                         this.medicalHealPending = false;
                         this.woundTreated = false;
                         this.resetWoundTimer();
+                        if (this.puntiFeritaReali >= this.puntiFeritaRealiMax) this._curaFeriteAttiva = false;
                     } else {
                         this.worsenWoundDueToTime();
                     }
@@ -3145,6 +3150,7 @@ export class Personaggio {
                 this.puntiFeritaReali = Math.min(this.puntiFeritaRealiMax, this.puntiFeritaReali + 1);
                 this.oreRiposoAccumulate = 0;
                 this.resetWoundTimer();
+                if (this.puntiFeritaReali >= this.puntiFeritaRealiMax) this._curaFeriteAttiva = false;
                 if (this._bendaggioCoagulanteAttivo) {
                     this._bendaggioCoagulanteAttivo = false;
                     this._bendaggioCoagulantePercent = 0;
