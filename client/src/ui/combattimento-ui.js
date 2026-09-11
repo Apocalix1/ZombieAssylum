@@ -494,6 +494,7 @@ function renderSchedaSpedizioneRidotta(p, idx) {
             </div>
                 <div style="margin:10px 0; font-size:0.85rem; color:#ddd;">
                 <div>🏃 Velocità: ${p.velocitaAttuale}m</div>
+                <div>🛡️ CA: ${p.CA}</div>
                 ${p.isRobot ? `<div>🤖 PF: ${p.robotPF}/${p.robotPFMax}</div>` : `
                     <div>❤️ PF Reali: ${p.puntiFeritaReali}/${p.puntiFeritaRealiMax}</div>
                     <div>✨ PF Fortuna: ${p.puntiFortuna}/${p.puntiFortunaMax}${p.puntiFortunaTemp > 0 ? ` <span style="color:#3498db;">(+${p.puntiFortunaTemp} temp.)</span>` : ''}</div>
@@ -575,6 +576,53 @@ window.consumaCompostoDaSpedizione = function(idx, itemIdx) {
     if (typeof renderSpedizioneModal === 'function') renderSpedizioneModal();
 };
 
+window.lanciaCuraFerite = function(casterIdx, targetIdx) {
+    const p = window.party[casterIdx];
+    const target = window.party[targetIdx];
+    if (!p || !target) return;
+    if (!(p.incantesimi || []).includes('Cura Ferite')) return alert('Non conosci Cura Ferite.');
+    if (target.puntiFeritaReali <= 0 || target.puntiFeritaReali >= target.puntiFeritaRealiMax) {
+        return alert(`${target.nome} non ha ferite reali da alleviare con questo incantesimo.`);
+    }
+    p._nextCastIsCura = true;
+    const check = p.canCastSpell ? p.canCastSpell(1) : { allowed: true };
+    if (!check.allowed) { p._nextCastIsCura = false; return alert(check.reason); }
+    const result = p.castSpell(1);
+    p._nextCastIsCura = false;
+    if (!result.success) return alert(result.message);
+
+    const ripetuto = !!target._curaFeriteAttiva; // non ancora tornato a PF pieni dall'ultimo uso
+    let esito = '';
+
+    if (target.woundState === 'Ferita lieve') {
+        if (Math.random() < 0.60) {
+            target.puntiFeritaReali = Math.min(target.puntiFeritaRealiMax, target.puntiFeritaReali + 1);
+            target.woundTreated = false;
+            target.medicalHealPending = false;
+            target.resetWoundTimer();
+            target._curaFeriteAttiva = false;
+            esito = `✨ La ferita lieve di ${target.nome} guarisce istantaneamente!`;
+        } else {
+            const moltiplicatore = ripetuto ? 1 : 2;
+            target.woundTimer = (target.woundTimer || target.woundTimeToWorsen) * moltiplicatore;
+            target._curaFeriteAttiva = true;
+            esito = `Il tentativo automatico fallisce, ma il timer di peggioramento di ${target.nome} è ${ripetuto ? 'esteso (effetto dimezzato, già usato di recente)' : 'raddoppiato'}.`;
+        }
+    } else {
+        const moltiplicatore = ripetuto ? 1 : 2;
+        target.woundTimer = (target.woundTimer || target.woundTimeToWorsen) * moltiplicatore;
+        target._curaFeriteAttiva = true;
+        esito = `Il timer di peggioramento di ${target.nome} è ${ripetuto ? 'esteso (effetto dimezzato, già usato di recente)' : 'raddoppiato'}.`;
+    }
+
+    mostraNotificaInAlto(`${p.nome} lancia Cura Ferite su ${target.nome}. ${esito} ${result.message}`, 'successo');
+    if (typeof window.salvaPersonaggioCloud === 'function') {
+        window.salvaPersonaggioCloud(p);
+        window.salvaPersonaggioCloud(target);
+    }
+    if (typeof window.aggiornaInterfaccia === 'function') window.aggiornaInterfaccia();
+};
+
 
 function renderSchedaCombattimentoMaster(p, idx) {
     const user = getCurrentUser();
@@ -607,7 +655,8 @@ function renderSchedaCombattimentoMaster(p, idx) {
                 <strong>${p.nome}</strong>
                 <button class="combat-retreat" onclick="ritiraPersonaggio(${idx})">RITIRA</button>
             </div>
-            <div style="margin:10px 0; font-size:0.9rem;">
+                        <div style="margin:10px 0; font-size:0.9rem;">
+                <div>🛡️ CA: ${p.CA}</div>
                 ${p.isRobot ? `
                     <div>🤖 PF Robotici: ${p.robotPF} / ${p.robotPFMax}</div>
                     ${typeof getBarra === 'function' ? getBarra(p.robotPF, p.robotPFMax, '#c0392b') : ''}
@@ -921,3 +970,4 @@ window.useRigeneraCombattimento = useRigeneraCombattimento;
 window.useGuerrieroRigenera = useGuerrieroRigenera;
 window.degradaInCombat = degradaInCombat;
 window.ferisciInCombat = ferisciInCombat;
+window.applyCucinaMaestriaBuffSeAttivo = applyCucinaMaestriaBuffSeAttivo;

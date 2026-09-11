@@ -334,10 +334,25 @@ window.curaTarget = function(targetIdx, tipo = 'cura') {
         return;
     }
 
-    let bonusOggettoMagico = 0;
+        let bonusOggettoMagico = 0;
     if (['Funzionalità a rischio', 'Rischio di morte'].includes(target.woundState) && typeof window.chiediUsoOggettoMagico === 'function') {
         const effetto = window.chiediUsoOggettoMagico(medico, 'bonus_medicina', `Curare ${target.nome} (${target.woundState})`);
         if (effetto) bonusOggettoMagico = effetto.bonus || 0;
+    }
+
+    const helperMedicina = (window.assistenzaSelezionata && window.assistenzaSelezionata.tipo === 'medicina')
+        ? window.party[window.assistenzaSelezionata.idx] : null;
+    const spellBonus = { parolaGuaritrice: false, cdPreghiera: 0, vantaggioPreghiera: false };
+    [medico, helperMedicina].filter(Boolean).forEach(caster => {
+        if (!spellBonus.parolaGuaritrice && chiediUsoIncantesimoCura(caster, 'Parola Guaritrice',
+            `Medicazione di ${target.nome}: dimezza i materiali usati e -4 al CD.`)) {
+            spellBonus.parolaGuaritrice = true;
+        }
+    });
+    if (chiediUsoIncantesimoCura(medico, 'Preghiera della Guarigione',
+        `Medicazione di ${target.nome}: vantaggio al tiro e -1d6 al CD.`)) {
+        spellBonus.vantaggioPreghiera = true;
+        spellBonus.cdPreghiera = rollDice(1, 6);
     }
 
     // PERFEZIONISTA: tira PRIMA, poi il tempo dipende dal risultato
@@ -356,11 +371,11 @@ window.curaTarget = function(targetIdx, tipo = 'cura') {
         }
     }
 
-    const azione = {
+        const azione = {
         tipo: 'medicina',
         oreTotali: oreAzione,
         oreRimanenti: oreAzione,
-        onComplete: () => eseguiCuraTarget(medicoCorrente, targetIdx, tipo, rollPrecalcolato, bonusOggettoMagico)
+        onComplete: () => eseguiCuraTarget(medicoCorrente, targetIdx, tipo, rollPrecalcolato, bonusOggettoMagico, spellBonus)
     };
     if (!medico.azioneCorrente) medico.azioneCorrente = azione;
     else medico.codaAzioni.unshift(azione);
@@ -369,7 +384,7 @@ window.curaTarget = function(targetIdx, tipo = 'cura') {
     renderMedicaModal();
     window.aggiornaInterfaccia();
 };
-function eseguiCuraTarget(medicoIdx, targetIdx, tipo, rollPrecalcolato = null, bonusOggettoMagico = 0) {
+function eseguiCuraTarget(medicoIdx, targetIdx, tipo, rollPrecalcolato = null, bonusOggettoMagico = 0, spellBonus = {}) {
     const medico = window.party[medicoIdx];
     const target = window.party[targetIdx];
     if (!medico || !target) return;
@@ -398,10 +413,17 @@ function eseguiCuraTarget(medicoIdx, targetIdx, tipo, rollPrecalcolato = null, b
         dcFinale += 2;
         dimezzaBase = true;
     }
-    let divisorAllMedico = 1;
+        let divisorAllMedico = 1;
     if (medico.hasPerk && medico.hasPerk('Medico')) {
         dcFinale += 2;
         divisorAllMedico = 2;
+    }
+    if (spellBonus.parolaGuaritrice) {
+        dcFinale = Math.max(1, dcFinale - 4);
+        divisorAllMedico *= 2; // materiali dimezzati
+    }
+    if (spellBonus.cdPreghiera) {
+        dcFinale = Math.max(1, dcFinale - spellBonus.cdPreghiera);
     }
     if (target._unguentoCoagulanteAttivo && target.woundState !== 'Ferita lieve') {
         dcFinale = Math.max(1, dcFinale + (target._unguentoCoagulanteBonus || -4));
@@ -424,11 +446,12 @@ function eseguiCuraTarget(medicoIdx, targetIdx, tipo, rollPrecalcolato = null, b
         }
     }
 
-    // PERFEZIONISTA: riusa il tiro fatto all'avvio, altrimenti tira ora come prima
+        // PERFEZIONISTA: riusa il tiro fatto all'avvio, altrimenti tira ora come prima
+    const modIntMedico = medico.getStatDettagliata('Intelligenza').mod + getMedicineLevelBonus(medico.livelloMedicina);
+    const tiroSingolo = () => rollDice(1, 20) + modIntMedico;
     const totale = rollPrecalcolato !== null
         ? rollPrecalcolato
-        : rollDice(1, 20) + medico.getStatDettagliata('Intelligenza').mod + getMedicineLevelBonus(medico.livelloMedicina);
-
+        : (spellBonus.vantaggioPreghiera ? Math.max(tiroSingolo(), tiroSingolo()) : tiroSingolo());
     const cdConBonusMalus = dcFinale + medico.getIrascibileCDBonus() + medico.getPessimistaCDBonus();
     const scarto = cdConBonusMalus - totale;
 
@@ -720,3 +743,20 @@ window.lanciaRianimare = async function(idx) {
     }
     if (typeof window.aggiornaInterfaccia === 'function') window.aggiornaInterfaccia();
 };
+
+function chiediUsoIncantesimoCura(caster, nomeSpell, messaggio) {
+    if (!caster || !(caster.incantesimi || []).includes(nomeSpell)) return false;
+    const spellData = caster.getSpellDataByName ? caster.getSpellDataByName(nomeSpell) : null;
+    if (!spellData) return false;
+    const check = caster.canCastSpell ? caster.canCastSpell(spellData.livello) : { allowed: true };
+    if (!check.allowed) return false;
+    const costo = caster.getSpellCost ? caster.getSpellCost(spellData.livello) : 0;
+    if (!confirm(`${caster.nome} conosce "${nomeSpell}". ${messaggio}\nVuoi usarlo? (costa ${costo} mana)`)) return false;
+    caster._nextCastIsCura = true;
+    const result = caster.castSpell(spellData.livello);
+    caster._nextCastIsCura = false;
+    if (!result.success) { alert(result.message); return false; }
+    mostraNotificaInAlto(`${caster.nome} lancia "${nomeSpell}". ${result.message}`, 'successo');
+    if (typeof window.salvaPersonaggioCloud === 'function') window.salvaPersonaggioCloud(caster);
+    return true;
+}
