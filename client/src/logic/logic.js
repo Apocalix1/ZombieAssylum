@@ -1086,7 +1086,7 @@ export class Personaggio {
     }
 
         getSpellCost(level) {
-        const costs = {0: 1, 1: 3, 2: 6, 3: 12};
+        const costs = {0: 1, 1: 3, 2: 7, 3: 10};
         let cost = costs[level] || 0;
         if (this._nextCastIsCura && this.hasPerk && this.hasPerk('Magia benedetta')) {
             cost = Math.max(1, cost - 1);
@@ -1096,7 +1096,7 @@ export class Personaggio {
 
     getSpellSlotCost(level) {
         // Trucchetto=1, Lv1=2, Lv2=3, Lv3=4 spazi occupati
-        const weights = {0: 1, 1: 2, 2: 3, 3: 4, 4: 5};
+        const weights = {0: 1, 1: 2, 2: 3, 3: 4};
         return weights[level] !== undefined ? weights[level] : (level + 1);
     }
 
@@ -1166,7 +1166,7 @@ export class Personaggio {
     }
 
     getArcaneFatigueThreshold() {
-        return Math.floor(this.manaMax * 0.5);
+        return Math.floor(this.manaMax * 0.75);
     }
 
     resetManaSpentCounter() {
@@ -1177,7 +1177,7 @@ export class Personaggio {
     checkArcaneFatigue(manaSpent) {
         const now = Date.now();
         const elapsed = now - (this._lastManaSpentReset || 0);
-        if (elapsed > 60000) { // 1 minuto
+        if (elapsed > 120000) { // 2 minuti
             this._manaSpentLastMinute = 0;
             this._lastManaSpentReset = now;
         }
@@ -1186,9 +1186,7 @@ export class Personaggio {
         const threshold = this.getArcaneFatigueThreshold();
         if (this._manaSpentLastMinute > threshold && !this._arcaneFatigueApplied) {
             this._arcaneFatigueApplied = true;
-            this._arcaneFatigueUntil = null; // fino al prossimo riposo lungo
-            // Applica -2 a tutte le prove e danni
-            // Questo sarà gestito in getStatDettagliata e getDamageModifier
+            this._arcaneFatigueUntil = null; 
             if (typeof window.mostraNotificaInAlto === 'function') {
                 window.mostraNotificaInAlto(`${this.nome} è affaticato arcano! -2 a tutte le prove e danni fino al prossimo riposo lungo.`, 'pericolo');
             }
@@ -1965,15 +1963,6 @@ export class Personaggio {
                 }
         }
         }
-        if (statNome === "Carisma" && this.hasPerk && this.hasPerk('Leader nato')) {
-            // Conta i compagni nello stesso "luogo"[cite: 3]
-            const compagni = (window.party || []).filter(m => m !== this && !!m.inSpedizione === !!this.inSpedizione);
-            const bonusLeader = Math.min(3, Math.floor(compagni.length / 2));
-            if (bonusLeader > 0) {
-                modFinale += bonusLeader;
-                motivi.push(`Leader nato (+${bonusLeader}, ${compagni.length} compagni)[cite: 3]`);
-            }
-        }
         let eccedenza = 0;
         if (valoreBase > 20) {
             eccedenza = valoreBase - 20;
@@ -1983,6 +1972,15 @@ export class Personaggio {
 
         let modBase = Math.floor((valoreBase - 10) / 2);
         let modFinale = modBase;
+           if (statNome === "Carisma" && this.hasPerk && this.hasPerk('Leader nato')) {
+            // Conta i compagni nello stesso "luogo"[cite: 3]
+            const compagni = (window.party || []).filter(m => m !== this && !!m.inSpedizione === !!this.inSpedizione);
+            const bonusLeader = Math.min(3, Math.floor(compagni.length / 2));
+            if (bonusLeader > 0) {
+                modFinale += bonusLeader;
+                motivi.push(`Leader nato (+${bonusLeader}, ${compagni.length} compagni)[cite: 3]`);
+            }
+        }
         const malTuttiMod = this.applicaEffettiMalattia('tuttiMod');
         if (malTuttiMod !== 0) {
             modFinale += malTuttiMod;
@@ -2130,7 +2128,7 @@ export class Personaggio {
     }
 
     getManaMaxFromLevel(livello) {
-        const manaPerLivello = [0, 4, 6, 9, 12, 16];
+        const manaPerLivello = [0, 6, 9, 12, 15, 18];
         const base = manaPerLivello[Math.min(Math.max(0, livello), manaPerLivello.length - 1)] || 0;
         const bonusPerk = this.perks && this.perks.some(p => p.nome === 'Apprendista mago') ? 4 : 0;
         return base + bonusPerk + (this.hasArcanoMastery() ? 2 : 0);
@@ -2194,7 +2192,7 @@ export class Personaggio {
     }
 
     getManaRecoveryPerShortRest() {
-        const base = Math.max(0, this.livelloMagia);
+        const base = Math.max(0, this.livelloMagia+(this.getStatDettagliata(this.getCastingAttribute)));
         if (!base) return 0;
         let recovery = base;
         if (this.hasArcanoMastery()) {
@@ -2204,7 +2202,9 @@ export class Personaggio {
     }
 
     getManaRecoveryOnLongRest() {
-        return this.livelloMagia;
+        const base=Math.max(0,this.livelloMagia);
+        if (!base) return 0;
+        return(this.livelloMagia*2)+(this.getStatDettagliata(this.getCastingAttribute));
     }
 
     isRestAction() {

@@ -2261,7 +2261,7 @@ window.DATABASE_INCANTESIMI = {
         {
             nome: "Unghie gelide",
             livello: 0,
-            modificatore: ["Qualsiasi"],
+            modificatore: ["Intelligenza"],
             azione: "Azione",
             raggio: "9 metri (linea)",
             durata: "Istantanea",

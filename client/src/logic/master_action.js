@@ -36,6 +36,90 @@ export async function masterInviaDocumento(titolo, lingua, testoOriginale, perso
 	}
 }
 
+window.apriStatisticheMaster = function() {
+    const modal = document.getElementById('modal-statistiche-master');
+    if (modal) modal.style.display = 'block';
+    window.mostraStatisticheTab('perk');
+};
+
+window.chiudiStatisticheMaster = function() {
+    const modal = document.getElementById('modal-statistiche-master');
+    if (modal) modal.style.display = 'none';
+};
+
+window.mostraStatisticheTab = function(tipo) {
+    const container = document.getElementById('statistiche-contenuto');
+    if (!container) return;
+    const tuttiIpg = window.party || [];
+    
+    if (tipo === 'perk') {
+        let conteggioPerk = {};
+        let totalePg = tuttiIpg.length || 1;
+
+        tuttiIpg.forEach(pg => {
+            if (!pg.perks) return;
+            pg.perks.forEach(perk => {
+                const nomePerk = typeof perk === 'string' ? perk : perk.nome;
+                conteggioPerk[nomePerk] = (conteggioPerk[nomePerk] || 0) + 1;
+            });
+        });
+
+        let ordinati = Object.entries(conteggioPerk).sort((a, b) => b[1] - a[1]);
+
+        let html = `<h3>Utilizzo Perk (Totale PG: ${totalePg})</h3><ul style="list-style:none; padding:0;">`;
+        if (ordinati.length === 0) {
+            html += `<li>Nessun perk registrato.</li>`;
+        } else {
+            ordinati.forEach(([nome, count]) => {
+                let percentuale = ((count / totalePg) * 100).toFixed(1);
+                html += `<li style="padding:6px 0; border-bottom:1px solid #222;"><strong>${nome}</strong>: ${count} utilizzi (${percentuale}%)</li>`;
+            });
+        }
+        html += `</ul>`;
+        container.innerHTML = html;
+
+    } else if (tipo === 'incantesimi') {
+        let pgMaghi = tuttiIpg.filter(pg => (pg.livelloMagia || 0) >= 1);
+        let conteggioIncantesimi = {};
+        let totaleMaghi = pgMaghi.length || 1;
+
+        pgMaghi.forEach(pg => {
+            let listaSpells = pg.incantesimi || [];
+            listaSpells.forEach(spell => {
+                conteggioIncantesimi[spell] = (conteggioIncantesimi[spell] || 0) + 1;
+            });
+        });
+
+        let ordinati = Object.entries(conteggioIncantesimi).sort((a, b) => b[1] - a[1]);
+
+        let html = `<h3>Utilizzo Incantesimi (PG con magia: ${totaleMaghi})</h3><ul style="list-style:none; padding:0;">`;
+        if (ordinati.length === 0) {
+            html += `<li>Nessun incantesimo registrato sui personaggi idonei.</li>`;
+        } else {
+            ordinati.forEach(([nome, count]) => {
+                let percentuale = ((count / totaleMaghi) * 100).toFixed(1);
+                html += `<li style="padding:6px 0; border-bottom:1px solid #222;"><strong>${nome}</strong>: ${count} (${percentuale}%)</li>`;
+            });
+        }
+        html += `</ul>`;
+        container.innerHTML = html;
+
+    } else if (tipo === 'ricette' || tipo === 'crafting') {
+        let titolo = tipo === 'ricette' ? 'Ricette più create' : 'Oggetti in Crafting più creati';
+        let html = `<h3>${titolo}</h3><p style="color:#888;">Analisi basata sugli elementi registrati nel magazzino e nelle azioni dei personaggi.</p><ul style="list-style:none; padding:0;">`;
+        
+        if (window.magazzino && window.magazzino.logCrafting) {
+            Object.entries(window.magazzino.logCrafting).forEach(([obj, qty]) => {
+                html += `<li style="padding:6px 0; border-bottom:1px solid #222;"><strong>${obj}</strong>: ${qty} creati</li>`;
+            });
+        } else {
+            html += `<li>Nessun dato di crafting/ricette registrato nella sessione corrente.</li>`;
+        }
+        html += `</ul>`;
+        container.innerHTML = html;
+    }
+};
+
 export async function masterApplicaStato(personaggioId, nomeStato, tipo, descrizione, durataMinuti, modificatori = []) {
 	const payload = { personaggio_id: personaggioId, nome: nomeStato, tipo, descrizione, durata_minuti: durataMinuti, modificatori };
 	const res = await fetch(apiUrl('/api/master/apply-state'), {

@@ -452,6 +452,7 @@ window.apriPannelloMaster = async function apriPannelloMaster() {
     content.innerHTML = `
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
             <div style="border-right: 1px solid #333; padding-right: 20px;">
+          
                 <h3 style="color:#f1c40f;">📜 Invia Documento</h3>
                 <div style="margin-bottom: 10px;">
                     <label style="display: block; margin-bottom: 4px; color: #ccc;">Destinatario:</label>
@@ -484,7 +485,22 @@ window.apriPannelloMaster = async function apriPannelloMaster() {
                 </div>
                 <button class="btn-hero" onclick="masterActionInvia()" style="width: 100%;">Invia Documento</button>
             </div>
-
+            <button class="btn-hero" style="font-size: 0.8rem; padding: 6px 10px;" onclick="apriStatisticheMaster()">📊 Statistiche</button>
+            <div id="modal-statistiche-master" class="modal" style="display:none;">
+                <div class="modal-content" style="background:#1a1a1a; color:#fff; width:80%; max-width:800px; padding:20px; border-radius:8px;">
+                    <h2 style="color:#f1c40f; letter-spacing: 2px; margin-bottom:15px;">📊 STATISTICHE GLOBALI</h2>
+                    <div style="display:flex; gap:10px; margin-bottom:15px; flex-wrap:wrap;">
+                        <button class="btn-hero" onclick="mostraStatisticheTab('perk')">Perk</button>
+                        <button class="btn-hero" onclick="mostraStatisticheTab('incantesimi')">Incantesimi</button>
+                        <button class="btn-hero" onclick="mostraStatisticheTab('ricette')">Ricette</button>
+                        <button class="btn-hero" onclick="mostraStatisticheTab('crafting')">Crafting</button>
+                        <button class="btn-big btn-cancel" onclick="chiudiStatisticheMaster()" style="margin-left:auto;">Chiudi</button>
+                    </div>
+                    <div id="statistiche-contenuto" style="max-height:400px; overflow-y:auto; border:1px solid #333; padding:10px; background:#111; text-align:left;">
+                        <!-- Contenuto dinamico -->
+                    </div>
+                </div>
+            </div>
             <div>
                 <h3 style="color:#f1c40f;">⚙️ Applica Stato</h3>
                 <div style="margin-bottom: 10px;">
@@ -536,7 +552,7 @@ window.apriPannelloMaster = async function apriPannelloMaster() {
         <div style="margin-top:12px; display:flex; align-items:center; gap:10px;">
         <button class="btn-hero" onclick="masterAggiungiCadavereRobot()">🤖🪦 +1 Cadavere Robot (${magazzino.cadaveriRobot||0})</button>
 <button class="btn-hero" onclick="masterAggiungiCadavereUmano()">💀 +1 Cadavere (${magazzino.cadaveriUmani||0})</button>
-</div>
+</div>apriPanne
          <div style="margin-top:20px; border-top:1px solid #333; padding-top:10px;">
             <h3 style="color:#f1c40f;">📋 Log Transazioni Magazzino</h3>
             <div id="master-magazzino-log" style="max-height:200px; overflow-y:auto; background:#111; padding:8px; border:1px solid #333; font-size:0.85rem;"></div>
@@ -1610,30 +1626,23 @@ export function aggiornaInterfaccia() {
                                 </div>
                             </details>
 
-                              
-
                             <details class="action-dropdown">
-                                <summary>ESPLORA</summary>
-                                <div class="dropdown-buttons">
-                                    <button onclick="spedisciPersonaggio(${idx})">Spedisci</button>
-                                    <button onclick="esplora(${idx})">Esplora</button>
-                                </div><details class="action-dropdown">
-                                <summary>MIGLIORA</summary>
-                                <div class="dropdown-buttons">
-                                    <button onclick="allenamento(${idx})">Allenamento</button>
-                                    <button onclick="studio(${idx})">Studio</button>
-                                    <button onclick="apriDecifra(${idx})">Decifra</button>
-                                    ${(p.incantesimi || []).includes('Comprensione del Linguaggio') ? `<button onclick="window.lanciaComprensioneLinguaggio(${idx})">🗣️ Comprensione${p._comprensioneLinguaggioFinoA && (window.oreTotali||0) < p._comprensioneLinguaggioFinoA ? ' (attiva)' : ''}</button>` : ''}
-                                </div>
-                            </details>
+                            <summary>MIGLIORA</summary>
+                            <div class="dropdown-buttons">
+                                <button onclick="allenamento(${idx})">Allenamento</button>
+                                <button onclick="studio(${idx})">Studio</button>
+                                <button onclick="apriDecifra(${idx})">Decifra</button>
+                                ${(p.incantesimi || []).includes('Comprensione del Linguaggio') ? `<button onclick="window.lanciaComprensioneLinguaggio(${idx})">🗣️ Comprensione${p._comprensioneLinguaggioFinoA && (window.oreTotali||0) < p._comprensioneLinguaggioFinoA ? ' (attiva)' : ''}</button>` : ''}
+                            </div>
+                        </details>
 
-                            <details class="action-dropdown">
-                                <summary>ESPLORA</summary>
-                                <div class="dropdown-buttons">
-                                    <button onclick="spedisciPersonaggio(${idx})">Spedisci</button>
-                                    <button onclick="esplora(${idx})">Esplora</button>
-                                </div>
-                            </details>
+                        <details class="action-dropdown">
+                            <summary>ESPLORA</summary>
+                            <div class="dropdown-buttons">
+                                <button onclick="spedisciPersonaggio(${idx})">Spedisci</button>
+                                <button onclick="esplora(${idx})">Esplora</button>
+                            </div>
+                        </details>
                     `;
                 } else {
                     // --- Visualizzazione ospite: solo lettura ---
@@ -2799,20 +2808,25 @@ function togglePerk(nomePerk, forceRemove = false) {
     const isRepeatable = Boolean(perkDati.repeats);
     const shouldRemove = forceRemove || (!isRepeatable && isSelected);
 
+    // ==========================================
+    // 1. GESTIONE RIMOZIONE PERK
+    // ==========================================
     if (shouldRemove && isSelected) {
-    const index = p.perks.findIndex(pp => getPerkBaseName(perkObjectName(pp)) === getPerkBaseName(perkDati.nome));
-            p.perks.splice(index, 1);
-        if (getPerkBaseName(perkDati.nome) === 'Obeso' || getPerkBaseName(perkDati.nome) === 'Sovrappeso') {
+        const index = p.perks.findIndex(pp => getPerkBaseName(perkObjectName(pp)) === getPerkBaseName(perkDati.nome));
+        p.perks.splice(index, 1);
+        
+        const baseName = getPerkBaseName(perkDati.nome);
+        if (baseName === 'Obeso' || baseName === 'Sovrappeso') {
             p.pesoCorporeo = p.pesoCorporeo || {};
             p.pesoCorporeo.usiCuscinetto = null;
         }
-        if (getPerkBaseName(perkDati.nome) === 'Alchemico') {
+        if (baseName === 'Alchemico') {
             p.masteries = p.masteries.filter(m => m.toLowerCase() !== 'natura');
         }
-        if (getPerkBaseName(perkDati.nome) === 'Bimbi') {
+        if (baseName === 'Bimbi') {
             p.masteries = p.masteries.filter(m => m.toLowerCase() !== 'cucina');
         }
-        if (getPerkBaseName(perkDati.nome) === 'Soldato' && p.soldatoArmiScelte) {
+        if (baseName === 'Soldato' && p.soldatoArmiScelte) {
             p.soldatoArmiScelte.forEach(cat => {
                 if (p.armiLivello && p.armiLivello[cat] > 0) {
                     p.armiLivello[cat] = Math.max(0, p.armiLivello[cat] - 1);
@@ -2820,274 +2834,198 @@ function togglePerk(nomePerk, forceRemove = false) {
             });
             p.soldatoArmiScelte = null;
         }
-        if (getPerkBaseName(perkDati.nome) === 'Autoctono') {
-    p.lingue = (p.lingue || []).filter(l => l !== 'Eklesti');
-}
+        if (baseName === 'Autoctono') {
+            p.lingue = (p.lingue || []).filter(l => l !== 'Eklesti');
+        }
+        
+        // Rimborso Punti
         p.puntiCreazione += perkDati.costo;
 
-        // NUOVO: rimuovi a cascata (e rimborsa) i perk che dipendevano da questo,
-        // finché non si stabilizza (es. rimuovere Medicina Lv1 deve far cadere anche Lv2/3/4/5)
+        // Rimozione a cascata dei perk dipendenti
         let cambiatoQualcosa = true;
+        let rimossiAggiuntivi = false;
         while (cambiatoQualcosa) {
             cambiatoQualcosa = false;
             const nomiAttuali = p.perks.map(pp => getPerkBaseName(perkObjectName(pp)));
             p.perks = p.perks.filter(pp => {
+                const nomePulito = getPerkBaseName(perkObjectName(pp));
                 if (pp.requires && !nomiAttuali.includes(getPerkBaseName(pp.requires))) {
                     p.puntiCreazione += (pp.costo || 0);
                     cambiatoQualcosa = true;
-                    return false;
-                }
-                return true;
-            });
-        }
-
-        renderSetupStats();
-        p.sincronizzaLivelloMedicina();
-        renderSetupPerks();
-    } else {
-        if (perkDati.requires && !hasPerk(p, perkDati.requires)) {
-            alert(`Devi scegliere prima ${perkDati.requires} per poter prendere ${perkDati.nome}.`);
-            return;
-        }
-        if (perkDati.nome === 'Arti marziali') {
-            const hasManiNude = p.perks.some(pp => getPerkBaseName(perkObjectName(pp)).startsWith('Mani nude'));
-            if (!hasManiNude) {
-                alert('Devi selezionare almeno Mani nude 1 prima di poter acquistare Arti marziali.');
-                return;
-            }
-        }
-        if (!canAfford) {
-            alert('Punti insufficienti!');
-            return;
-        }
-        if (nomePerk === 'Anziana') {
-            const scelta = prompt("Sei un'Anziana! Scegli il tuo bonus di esperienza:\n1. +1 Saggezza e +1 Carisma\n2. +2 a Saggezza\n3. +2 a Carisma", "1");
-            let nomeSpecifico = 'Anziana_Bilanciata';
-            if (scelta === '2') nomeSpecifico = 'Anziana_Saggezza';
-            if (scelta === '3') nomeSpecifico = 'Anziana_Carisma';
-            p.perks.push({...perkDati, nome: nomeSpecifico});
-        } else if (nomePerk === 'Lingue') {
-            const lingueDisponibili = ['Yazyk', 'Engenity', 'Chrimil', 'Ridulphi', 'Antali', 'Puleun', 'Eklesti', 'Meer'];
-            const giaConosciute = p.lingue || ['Verbum'];
-            const disponibiliRestanti = lingueDisponibili.filter(l => !giaConosciute.includes(l));
-            if (disponibiliRestanti.length === 0) {
-                alert('Conosci già tutte le lingue disponibili!');
-                return;
-            }
-            const scelta = prompt(`Perk "Lingue": scegli una nuova lingua da imparare:\n${disponibiliRestanti.join(", ")}`, disponibiliRestanti[0]);
-            const trovata = disponibiliRestanti.find(l => l.toLowerCase() === (scelta || '').toLowerCase());
-            if (!trovata) {
-                alert('Lingua non valida o annullata.');
-                return;
-            }
-            p.lingue = [...giaConosciute, trovata];
-            p.perks.push({...perkDati, nome: `Lingue (${trovata})`});
-        } else if (nomePerk === 'Razzista') {
-            const razze = [
-                'Apide', 'Arakokra (Uccelloide rapace)', 'Aracnide', 'Bovinide', 'Canide (Umano cane/lupo)',
-                'Caprinide (Pecora umanoide)','Chumara (Ghepardo umanoide)', 'Cobolto','Corvoide', 'Dawisu (Pavone umanoide)','Ekiwojo (Farfalla Umanoide)', 'Elfo','Fatato','Gnomo',
-                'Goblin','Goliath', 'Grong (Rana umanoide)','Halfling', 'Howling','Huan-lei (Tassoide)', 'Ineac (Umano Iena)',
-                'Kitsune (Volpe umanoide)', 'Mezzelfo', 'Mezzorco', 'Nano', 'Omukozi (Formica umanoide','Oni','Orco', 'Orsoide',
-                'Sangliere (Cinghiale umanoide)','Scalykin (Lucetola umanoide)', 'Sirena (umano pesce)','Slon (Elefante umanoide)','Tabaxi (Gatto umanoide)', 'Tiefling','Topoide', 'Umano', 
-                'Usagi (coniglio umanoide)', 'Vespide', 'Yuanthi (Umano serpente)'
-            ];
-            const giaScelte = p.perks
-            .filter(pp => getPerkBaseName(perkObjectName(pp)) === 'Razzista')
-        .   map(pp => {
-            const m = /\(([^)]+)\)$/.exec(perkObjectName(pp));
-            return m ? m[1] : null;
-                    })
-                .filter(Boolean);
-            const disponibili = razze.filter(r => !giaScelte.includes(r));
-            if (disponibili.length === 0) {
-                alert('Hai già preso Razzista verso tutte le razze disponibili!');
-                return;
-            }
-            const scelta = prompt(`Perk "Razzista": verso quale razza ottieni svantaggio Carisma?\n${disponibili.join(", ")}`, disponibili[0]);
-            const trovata = disponibili.find(r => r.toLowerCase() === (scelta || '').toLowerCase());
-            if (!trovata) {
-                alert('Razza non valida o annullata.');
-                return;
-            }
-            p.perks.push({ ...perkDati, nome: `Razzista (${trovata})` });
-        } else if (nomePerk === 'Misogino/Androfobico') {
-            const giaSelezionato = p.perks.some(pp => getPerkBaseName(perkObjectName(pp)) === 'Misogino/Androfobico');
-            if (giaSelezionato) {
-                alert('Hai già preso Misogino/Androfobico.');
-                return;
-            }
-            const scelta = prompt(`Perk "Misogino/Androfobico": ottieni svantaggio Carisma verso quale sesso?\nUomo, Donna`, "Uomo");
-            const opzioni = ['Uomo', 'Donna'];
-            const trovata = opzioni.find(o => o.toLowerCase() === (scelta || '').toLowerCase());
-            if (!trovata) {
-                alert('Scelta non valida o annullata.');
-                return;
-            }
-            p.perks.push({ ...perkDati, nome: `Misogino/Androfobico (${trovata})` });
-        } else if (nomePerk === 'Obeso') {
-            p.perks.push({...perkDati});
-            p.pesoCorporeo = p.pesoCorporeo || {usiCuscinetto: null, benNutritoOreAccumulate: 0};
-            p.pesoCorporeo.usiCuscinetto = 40;
-        } else if (nomePerk === 'Sovrappeso') {
-            p.perks.push({...perkDati});
-            p.pesoCorporeo = p.pesoCorporeo || {usiCuscinetto: null, benNutritoOreAccumulate: 0};
-            p.pesoCorporeo.usiCuscinetto = 20;
-        }else if (nomePerk === 'Autoctono') {
-    p.perks.push({...perkDati});
-    const giaConosciute = p.lingue || ['Verbum'];
-    if (!giaConosciute.includes('Eklesti')) {
-        p.lingue = [...giaConosciute, 'Eklesti'];
-    }
-}
-         else if (nomePerk === 'Artista') {
-                const scelta = prompt(
-                    `Perk "Artista": scegli specializzazione:\n1. Musicista (Orecchio fino)\n2. Scrittore (comp. Manodopera)\n3. Danzatore (+2 Acrobazia)\n4. Narratore (studio accelerato 25%)\n5. Pittore (narrativo)`, "1");
-                const mappaSpec = {
-                    '1': 'Musicista',
-                    '2': 'Scultore',
-                    '3': 'Danzatore',
-                    '4': 'Narratore',
-                    '5': 'Pittore'
-                };
-                const spec = mappaSpec[scelta] || 'Musicista';
-                const nuovoPerk = {...perkDati, nome: 'Artista', specializzazione: spec};
-                if (spec === 'Musicista') {
-                    const orecchioDati = findPerkData('Orecchio Fino') || {
-                        nome: 'Orecchio Fino',
-                        desc: '',
-                        costo: 0
-                    };
-                    p.perks.push({...orecchioDati, costo: 0});
-                } else if (spec === 'Scultore') {
-                    nuovoPerk.skills = ['Manodopera'];
-                }
-                p.perks.push(nuovoPerk);
-                } else if (nomePerk === 'Enciclopedia') {
-                    const skillsEnciclopedia = ['Natura', 'Religione', 'Storia', 'Cucina', 'Artificeria', 'Medicina', 'Arcano'];
-                    const giaScelte = p.perks
-                        .filter(pp => getPerkBaseName(perkObjectName(pp)) === 'Enciclopedia')
-                        .map(pp => (pp.skills && pp.skills[0]) || null)
-                        .filter(Boolean);
-                    const disponibili = skillsEnciclopedia.filter(s => !giaScelte.includes(s));
-                    if (disponibili.length === 0) {
-                        alert('Hai già preso Enciclopedia su tutte le competenze disponibili!');
-                        return;
-                    }
-                    const scelta = prompt(`Perk "Enciclopedia": scegli una competenza:\n${disponibili.join(", ")}`, disponibili[0]);
-                    const trovata = disponibili.find(s => s.toLowerCase() === (scelta || '').toLowerCase());
-                    if (!trovata) {
-                        alert('Competenza non valida o annullata.');
-                        return;
-                    }
-                    p.perks.push({ ...perkDati, nome: `Enciclopedia (${trovata})`, skills: [trovata] });
-                } else if (nomePerk === 'Ignorante') {
-                    const skillsIgnorante = ['Arcano', 'Artificeria', 'Medicina', 'Natura', 'Storia', 'Religione', 'Cucina', 'Sopravvivenza'];
-                    const giaScelte = p.perks
-                        .filter(pp => getPerkBaseName(perkObjectName(pp)) === 'Ignorante')
-                        .map(pp => (pp.disadvantage && pp.disadvantage[0]) || null)
-                        .filter(Boolean);
-                    const disponibili = skillsIgnorante.filter(s => !giaScelte.includes(s));
-                    if (disponibili.length === 0) {
-                        alert('Hai già preso Ignorante su tutte le competenze disponibili!');
-                        return;
-                    }
-                    const scelta = prompt(`Perk "Ignorante": scegli una competenza in cui ottenere svantaggio:\n${disponibili.join(", ")}`, disponibili[0]);
-                    const trovata = disponibili.find(s => s.toLowerCase() === (scelta || '').toLowerCase());
-                    if (!trovata) {
-                        alert('Competenza non valida o annullata.');
-                        return;
-                    }
-                    p.perks.push({ ...perkDati, nome: `Ignorante (${trovata})`, disadvantage: [trovata] });
-                }                 else if (nomePerk === 'Alchemico') {
-                        if (!window.tempP.puoOttenereMaestria('Natura')) { alert('Hai già raggiunto il massimo di 3 Maestrie.'); return; }
-                        p.perks.push({...perkDati});
-                        if (!p.masteries.map(m => m.toLowerCase()).includes('natura')) {
-                            p.masteries.push('Natura');
-                        }
-                } else if (nomePerk === 'Scienziato Pazzo') {
-                        if (!window.tempP.puoOttenereMaestria('Natura')) { alert('Hai già raggiunto il massimo di 3 Maestrie.'); return; }
-                        p.perks.push({...perkDati});
-                        p.artificeria = p.artificeria || { generale: { livello: 0, pag: 0 }, specializzazioni: { Balistica: { livello: 0, ps: 0 }, Meccanica: { livello: 0, ps: 0 }, Elettronica: { livello: 0, ps: 0 } } };
-                        if (p.artificeria.generale.livello < 2) p.artificeria.generale.livello = 2;
-                        if (!p.masteries.map(m => m.toLowerCase()).includes('natura')) {
-                            p.masteries.push('Natura');
-                        }
-             } else if (nomePerk === 'Bimbi') {
-            if (!window.tempP.puoOttenereMaestria('Cucina')) { alert('Hai già raggiunto il massimo di 3 Maestrie.'); return; }
-            p.perks.push({...perkDati});
-            if (!p.masteries.map(m => m.toLowerCase()).includes('cucina')) {
-                p.masteries.push('Cucina');
-            }
-        } else if (nomePerk === 'Soldato') {
-            p.perks.push({...perkDati});
-            const categorieArmi = ['Archi', 'Balestre', "Armi con l'asta", 'Lame leggere', 'Armi da fuoco', 'Rampini e fruste', 'Mazze e armi contundenti'];
-            const elenco = categorieArmi.map((c, i) => `${i + 1}) ${c}`).join('\n');
-            let sceltaStr = prompt(`Perk "Soldato": scegli DUE armi (es. "1,3") in cui ottenere competenza livello 1:\n${elenco}`, '1,2');
-            let indici = [...new Set((sceltaStr || '').split(',').map(s => parseInt(s.trim()) - 1).filter(i => !isNaN(i) && i >= 0 && i < categorieArmi.length))].slice(0, 2);
-            if (indici.length === 0) indici = [0, 1];
-            p.armiLivello = p.armiLivello || {};
-            p.soldatoArmiScelte = indici.map(i => categorieArmi[i]);
-            let rimborsoTotale = 0;
-            p.soldatoArmiScelte.forEach(cat => {
-                const livelloAttuale = p.armiLivello[cat] || 0;
-                if (livelloAttuale >= 1) {
-                    const costi = window.ARMI_COSTI && window.ARMI_COSTI[cat];
-                    rimborsoTotale += costi ? (costi[1] || 0) : 0;
-                }
-                p.armiLivello[cat] = Math.max(1, livelloAttuale);
-            });
-            if (rimborsoTotale > 0) {
-                p.puntiCreazione = (p.puntiCreazione || 0) + rimborsoTotale;
-            }
-            if (typeof window.mostraNotificaInAlto === 'function') {
-                window.mostraNotificaInAlto(`Soldato: competenza Livello 1 registrata in ${p.soldatoArmiScelte.join(' e ')}.${rimborsoTotale > 0 ? ` Rimborsati ${rimborsoTotale} punti già spesi.` : ''}`, 'successo');
-            }        } else if (nomePerk === 'Produrre veleni') {
-            const veleni = ['Emotossine', 'Neurotossine', 'Neurotossine Ottiche', 'Allucinogeni', 'Miotossine', 'Blocco Respirazione', 'Gestrotossine'];
-            const elencoVeleni = veleni.map((v, i) => `${i + 1}) ${v}`).join('\n');
-            const sceltaVel = parseInt(prompt(`Perk "Produrre veleni": scegli il tuo tipo di veleno:\n${elencoVeleni}`, '1'));
-            const tipoVeleno = veleni[sceltaVel - 1] || veleni[0];
-            p.perks.push({ ...perkDati, nome: 'Produrre veleni', tipoVeleno });
-            if (typeof window.mostraNotificaInAlto === 'function') {
-                window.mostraNotificaInAlto(`${p.nome} produce veleno di tipo: ${tipoVeleno}.`, 'successo');
-            }
-        } else if (nomePerk === 'Sensibilità alle temperature') {
-            const sceltaTemp = prompt(`Perk "Sensibilità alle temperature": scegli la tua debolezza:\n1) Fuoco\n2) Gelo`, '1');
-            const tipoTemp = sceltaTemp === '2' ? 'Gelo' : 'Fuoco';
-            p.perks.push({ ...perkDati, nome: `Sensibilità alle temperature (${tipoTemp})`, tipoTemperatura: tipoTemp });
-        } else if (nomePerk === 'Termoregolazione') {
-            const sceltaTemp2 = prompt(`Perk "Termoregolazione": scegli la tua resistenza:\n1) Fuoco\n2) Gelo`, '1');
-            const tipoTemp2 = sceltaTemp2 === '2' ? 'Gelo' : 'Fuoco';
-            p.perks.push({ ...perkDati, nome: `Termoregolazione (${tipoTemp2})`, tipoTemperatura: tipoTemp2 });
-        } else {
-                p.perks.push({...perkDati});
-            }
-        }
-
-            p.puntiCreazione -= perkDati.costo;
-
-            const existingNames = p.perks.map(pp => getPerkBaseName(perkObjectName(pp)));
-            let removedSomething = false;
-            p.perks = p.perks.filter(pp => {
-                const nomePulito = getPerkBaseName(perkObjectName(pp));
-                if (pp.requires && !existingNames.includes(getPerkBaseName(pp.requires))) {
-                    removedSomething = true;
+                    rimossiAggiuntivi = true;
                     return false;
                 }
                 if (nomePulito === 'Arti marziali') {
-                    const hasMani = existingNames.some(n => n.startsWith('Mani nude'));
+                    const hasMani = nomiAttuali.some(n => n.startsWith('Mani nude'));
                     if (!hasMani) {
-                        removedSomething = true;
+                        p.puntiCreazione += (pp.costo || 0);
+                        cambiatoQualcosa = true;
+                        rimossiAggiuntivi = true;
                         return false;
                     }
                 }
                 return true;
             });
-
-            if (removedSomething) alert('Alcuni perk dipendenti sono stati rimossi perché mancava il prerequisito.');
-
-            renderSetupStats();
-            renderSetupPerks();
         }
+
+        if (rimossiAggiuntivi) alert('Alcuni perk dipendenti sono stati rimossi perché mancava il prerequisito.');
+
+        renderSetupStats();
+        if(typeof p.sincronizzaLivelloMedicina === 'function') p.sincronizzaLivelloMedicina();
+        renderSetupPerks();
+        
+        return; // INTERROMPE LA FUNZIONE QUI, evitando di sottrarre punti a fine script
+    }
+
+    // ==========================================
+    // 2. GESTIONE AGGIUNTA PERK
+    // ==========================================
+    if (perkDati.requires && !hasPerk(p, perkDati.requires)) {
+        alert(`Devi scegliere prima ${perkDati.requires} per poter prendere ${perkDati.nome}.`);
+        return;
+    }
+    if (perkDati.nome === 'Arti marziali') {
+        const hasManiNude = p.perks.some(pp => getPerkBaseName(perkObjectName(pp)).startsWith('Mani nude'));
+        if (!hasManiNude) {
+            alert('Devi selezionare almeno Mani nude 1 prima di poter acquistare Arti marziali.');
+            return;
+        }
+    }
+    if (!canAfford) {
+        alert('Punti insufficienti!');
+        return;
+    }
+
+    if (nomePerk === 'Anziana') {
+        const scelta = prompt("Sei un'Anziana! Scegli il tuo bonus di esperienza:\n1. +1 Saggezza e +1 Carisma\n2. +2 a Saggezza\n3. +2 a Carisma", "1");
+        let nomeSpecifico = 'Anziana_Bilanciata';
+        if (scelta === '2') nomeSpecifico = 'Anziana_Saggezza';
+        if (scelta === '3') nomeSpecifico = 'Anziana_Carisma';
+        p.perks.push({...perkDati, nome: nomeSpecifico});
+    } else if (nomePerk === 'Lingue') {
+        const lingueDisponibili = ['Yazyk', 'Engenity', 'Chrimil', 'Ridulphi', 'Antali', 'Puleun', 'Eklesti', 'Meer'];
+        const giaConosciute = p.lingue || ['Verbum'];
+        const disponibiliRestanti = lingueDisponibili.filter(l => !giaConosciute.includes(l));
+        if (disponibiliRestanti.length === 0) { alert('Conosci già tutte le lingue disponibili!'); return; }
+        const scelta = prompt(`Perk "Lingue": scegli una nuova lingua da imparare:\n${disponibiliRestanti.join(", ")}`, disponibiliRestanti[0]);
+        const trovata = disponibiliRestanti.find(l => l.toLowerCase() === (scelta || '').toLowerCase());
+        if (!trovata) { alert('Lingua non valida o annullata.'); return; }
+        p.lingue = [...giaConosciute, trovata];
+        p.perks.push({...perkDati, nome: `Lingue (${trovata})`});
+    } else if (nomePerk === 'Razzista') {
+        const razze = ['Apide', 'Arakokra (Uccelloide rapace)', 'Aracnide', 'Bovinide', 'Canide (Umano cane/lupo)', 'Caprinide (Pecora umanoide)','Chumara (Ghepardo umanoide)', 'Cobolto','Corvoide', 'Dawisu (Pavone umanoide)','Ekiwojo (Farfalla Umanoide)', 'Elfo','Fatato','Gnomo', 'Goblin','Goliath', 'Grong (Rana umanoide)','Halfling', 'Howling','Huan-lei (Tassoide)', 'Ineac (Umano Iena)', 'Kitsune (Volpe umanoide)', 'Mezzelfo', 'Mezzorco', 'Nano', 'Omukozi (Formica umanoide','Oni','Orco', 'Orsoide', 'Sangliere (Cinghiale umanoide)','Scalykin (Lucetola umanoide)', 'Sirena (umano pesce)','Slon (Elefante umanoide)','Tabaxi (Gatto umanoide)', 'Tiefling','Topoide', 'Umano', 'Usagi (coniglio umanoide)', 'Vespide', 'Yuanthi (Umano serpente)'];
+        const giaScelte = p.perks.filter(pp => getPerkBaseName(perkObjectName(pp)) === 'Razzista').map(pp => {
+            const m = /\(([^)]+)\)$/.exec(perkObjectName(pp)); return m ? m[1] : null;
+        }).filter(Boolean);
+        const disponibili = razze.filter(r => !giaScelte.includes(r));
+        if (disponibili.length === 0) { alert('Hai già preso Razzista verso tutte le razze disponibili!'); return; }
+        const scelta = prompt(`Perk "Razzista": verso quale razza ottieni svantaggio Carisma?\n${disponibili.join(", ")}`, disponibili[0]);
+        const trovata = disponibili.find(r => r.toLowerCase() === (scelta || '').toLowerCase());
+        if (!trovata) { alert('Razza non valida o annullata.'); return; }
+        p.perks.push({ ...perkDati, nome: `Razzista (${trovata})` });
+    } else if (nomePerk === 'Misogino/Androfobico') {
+        const giaSelezionato = p.perks.some(pp => getPerkBaseName(perkObjectName(pp)) === 'Misogino/Androfobico');
+        if (giaSelezionato) { alert('Hai già preso Misogino/Androfobico.'); return; }
+        const scelta = prompt(`Perk "Misogino/Androfobico": ottieni svantaggio Carisma verso quale sesso?\nUomo, Donna`, "Uomo");
+        const trovata = ['Uomo', 'Donna'].find(o => o.toLowerCase() === (scelta || '').toLowerCase());
+        if (!trovata) { alert('Scelta non valida o annullata.'); return; }
+        p.perks.push({ ...perkDati, nome: `Misogino/Androfobico (${trovata})` });
+    } else if (nomePerk === 'Obeso') {
+        p.perks.push({...perkDati});
+        p.pesoCorporeo = p.pesoCorporeo || {usiCuscinetto: null, benNutritoOreAccumulate: 0};
+        p.pesoCorporeo.usiCuscinetto = 40;
+    } else if (nomePerk === 'Sovrappeso') {
+        p.perks.push({...perkDati});
+        p.pesoCorporeo = p.pesoCorporeo || {usiCuscinetto: null, benNutritoOreAccumulate: 0};
+        p.pesoCorporeo.usiCuscinetto = 20;
+    } else if (nomePerk === 'Autoctono') {
+        p.perks.push({...perkDati});
+        p.lingue = p.lingue || ['Verbum'];
+        if (!p.lingue.includes('Eklesti')) p.lingue.push('Eklesti');
+    } else if (nomePerk === 'Artista') {
+        const scelta = prompt(`Perk "Artista": scegli specializzazione:\n1. Musicista (Orecchio fino)\n2. Scrittore (comp. Manodopera)\n3. Danzatore (+2 Acrobazia)\n4. Narratore (studio accelerato 25%)\n5. Pittore (narrativo)`, "1");
+        const mappaSpec = {'1': 'Musicista', '2': 'Scultore', '3': 'Danzatore', '4': 'Narratore', '5': 'Pittore'};
+        const spec = mappaSpec[scelta] || 'Musicista';
+        const nuovoPerk = {...perkDati, nome: 'Artista', specializzazione: spec};
+        if (spec === 'Musicista') {
+            const orecchioDati = findPerkData('Orecchio Fino') || { nome: 'Orecchio Fino', desc: '', costo: 0 };
+            p.perks.push({...orecchioDati, costo: 0});
+        } else if (spec === 'Scultore') {
+            nuovoPerk.skills = ['Manodopera'];
+        }
+        p.perks.push(nuovoPerk);
+    } else if (nomePerk === 'Enciclopedia') {
+        const skillsEnciclopedia = ['Natura', 'Religione', 'Storia', 'Cucina', 'Artificeria', 'Medicina', 'Arcano'];
+        const giaScelte = p.perks.filter(pp => getPerkBaseName(perkObjectName(pp)) === 'Enciclopedia').map(pp => (pp.skills && pp.skills[0]) || null).filter(Boolean);
+        const disponibili = skillsEnciclopedia.filter(s => !giaScelte.includes(s));
+        if (disponibili.length === 0) { alert('Hai già preso Enciclopedia su tutte le competenze disponibili!'); return; }
+        const scelta = prompt(`Perk "Enciclopedia": scegli una competenza:\n${disponibili.join(", ")}`, disponibili[0]);
+        const trovata = disponibili.find(s => s.toLowerCase() === (scelta || '').toLowerCase());
+        if (!trovata) { alert('Competenza non valida o annullata.'); return; }
+        p.perks.push({ ...perkDati, nome: `Enciclopedia (${trovata})`, skills: [trovata] });
+    } else if (nomePerk === 'Ignorante') {
+        const skillsIgnorante = ['Arcano', 'Artificeria', 'Medicina', 'Natura', 'Storia', 'Religione', 'Cucina', 'Sopravvivenza'];
+        const giaScelte = p.perks.filter(pp => getPerkBaseName(perkObjectName(pp)) === 'Ignorante').map(pp => (pp.disadvantage && pp.disadvantage[0]) || null).filter(Boolean);
+        const disponibili = skillsIgnorante.filter(s => !giaScelte.includes(s));
+        if (disponibili.length === 0) { alert('Hai già preso Ignorante su tutte le competenze disponibili!'); return; }
+        const scelta = prompt(`Perk "Ignorante": scegli una competenza in cui ottenere svantaggio:\n${disponibili.join(", ")}`, disponibili[0]);
+        const trovata = disponibili.find(s => s.toLowerCase() === (scelta || '').toLowerCase());
+        if (!trovata) { alert('Competenza non valida o annullata.'); return; }
+        p.perks.push({ ...perkDati, nome: `Ignorante (${trovata})`, disadvantage: [trovata] });
+    } else if (nomePerk === 'Alchemico' || nomePerk === 'Scienziato Pazzo') {
+        if (!window.tempP.puoOttenereMaestria('Natura')) { alert('Hai già raggiunto il massimo di 3 Maestrie.'); return; }
+        p.perks.push({...perkDati});
+        if (nomePerk === 'Scienziato Pazzo') {
+            p.artificeria = p.artificeria || { generale: { livello: 0, pag: 0 }, specializzazioni: { Balistica: { livello: 0, ps: 0 }, Meccanica: { livello: 0, ps: 0 }, Elettronica: { livello: 0, ps: 0 } } };
+            if (p.artificeria.generale.livello < 2) p.artificeria.generale.livello = 2;
+        }
+        if (!p.masteries.map(m => m.toLowerCase()).includes('natura')) p.masteries.push('Natura');
+    } else if (nomePerk === 'Bimbi') {
+        if (!window.tempP.puoOttenereMaestria('Cucina')) { alert('Hai già raggiunto il massimo di 3 Maestrie.'); return; }
+        p.perks.push({...perkDati});
+        if (!p.masteries.map(m => m.toLowerCase()).includes('cucina')) p.masteries.push('Cucina');
+    } else if (nomePerk === 'Soldato') {
+        p.perks.push({...perkDati});
+        const categorieArmi = ['Archi', 'Balestre', "Armi con l'asta", 'Lame leggere', 'Armi da fuoco', 'Rampini e fruste', 'Mazze e armi contundenti'];
+        const elenco = categorieArmi.map((c, i) => `${i + 1}) ${c}`).join('\n');
+        let sceltaStr = prompt(`Perk "Soldato": scegli DUE armi (es. "1,3") in cui ottenere competenza livello 1:\n${elenco}`, '1,2');
+        let indici = [...new Set((sceltaStr || '').split(',').map(s => parseInt(s.trim()) - 1).filter(i => !isNaN(i) && i >= 0 && i < categorieArmi.length))].slice(0, 2);
+        if (indici.length === 0) indici = [0, 1];
+        p.armiLivello = p.armiLivello || {};
+        p.soldatoArmiScelte = indici.map(i => categorieArmi[i]);
+        let rimborsoTotale = 0;
+        p.soldatoArmiScelte.forEach(cat => {
+            const livelloAttuale = p.armiLivello[cat] || 0;
+            if (livelloAttuale >= 1) {
+                const costi = window.ARMI_COSTI && window.ARMI_COSTI[cat];
+                rimborsoTotale += costi ? (costi[1] || 0) : 0;
+            }
+            p.armiLivello[cat] = Math.max(1, livelloAttuale);
+        });
+        if (rimborsoTotale > 0) p.puntiCreazione = (p.puntiCreazione || 0) + rimborsoTotale;
+        if (typeof window.mostraNotificaInAlto === 'function') {
+            window.mostraNotificaInAlto(`Soldato: competenza Livello 1 registrata in ${p.soldatoArmiScelte.join(' e ')}.${rimborsoTotale > 0 ? ` Rimborsati ${rimborsoTotale} punti già spesi.` : ''}`, 'successo');
+        }
+    } else if (nomePerk === 'Produrre veleni') {
+        const veleni = ['Emotossine', 'Neurotossine', 'Neurotossine Ottiche', 'Allucinogeni', 'Miotossine', 'Blocco Respirazione', 'Gestrotossine'];
+        const elencoVeleni = veleni.map((v, i) => `${i + 1}) ${v}`).join('\n');
+        const sceltaVel = parseInt(prompt(`Perk "Produrre veleni": scegli il tuo tipo di veleno:\n${elencoVeleni}`, '1'));
+        const tipoVeleno = veleni[sceltaVel - 1] || veleni[0];
+        p.perks.push({ ...perkDati, nome: 'Produrre veleni', tipoVeleno });
+        if (typeof window.mostraNotificaInAlto === 'function') window.mostraNotificaInAlto(`${p.nome} produce veleno di tipo: ${tipoVeleno}.`, 'successo');
+    } else if (nomePerk === 'Sensibilità alle temperature' || nomePerk === 'Termoregolazione') {
+        const sceltaTemp = prompt(`Perk "${nomePerk}": scegli la tua ${nomePerk === 'Termoregolazione' ? 'resistenza' : 'debolezza'}:\n1) Fuoco\n2) Gelo`, '1');
+        const tipoTemp = sceltaTemp === '2' ? 'Gelo' : 'Fuoco';
+        p.perks.push({ ...perkDati, nome: `${nomePerk} (${tipoTemp})`, tipoTemperatura: tipoTemp });
+    } else {
+        p.perks.push({...perkDati});
+    }
+
+    // Viene eseguito SOLO in caso di aggiunta Perk avvenuta con successo
+    p.puntiCreazione -= perkDati.costo;
+    renderSetupStats();
+    renderSetupPerks();
+}
 
 function renderInventarioHtml(p) {
     if (typeof p.initInventarioBase === 'function') p.initInventarioBase();
