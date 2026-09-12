@@ -78,7 +78,7 @@ window.toggleCorsaAQuattroZampe = function(idx) {
     aggiornaInterfaccia();
 };
 
-function applyCucinaMaestriaBuffSeAttivo(p) {
+export function applyCucinaMaestriaBuffSeAttivo(p) {
     if ((p.buffCucinaMaestriaOreRestanti || 0) > 0) {
         p.puntiFortunaTemp = (p.puntiFortunaTemp || 0) + 4;
         p.buffCucinaMaestriaOreRestanti = 0;
@@ -462,7 +462,7 @@ window.consumaIncantesimo = function(idx, level) {
     }
 };
 
-function renderSchedaSpedizioneRidotta(p, idx) {
+export function renderSchedaSpedizioneRidotta(p, idx) {
     const statiPerTS = ["Forza", "Destrezza", "Costituzione", "Intelligenza", "Saggezza", "Carisma"];
     const haCorsa4Zampe = window.hasPerk && window.hasPerk(p, 'Corsa a 4 zampe');
     const attiva4Zampe = !!p._corsaAQuattroZampeAttiva;
@@ -624,7 +624,7 @@ window.lanciaCuraFerite = function(casterIdx, targetIdx) {
 };
 
 
-function renderSchedaCombattimentoMaster(p, idx) {
+export function renderSchedaCombattimentoMaster(p, idx) {
     const user = getCurrentUser();
     const isMaster = user && user.role === 'master';
     const haCorsa4Zampe = window.hasPerk && window.hasPerk(p, 'Corsa a 4 zampe');

@@ -335,7 +335,7 @@ window.modificaArmaLivello = modificaArmaLivello;
 window.renderSetupArmi = renderSetupArmi;
 window.ARMI_COSTI = ARMI_COSTI;
 
-const SPELL_KNOWLEDGE_COST = { 0: 1, 1: 2, 2: 3, 3: 4, 4: 5 };
+const SPELL_KNOWLEDGE_COST = { 0: 1, 1: 2, 2: 3, 3: 4};
 
 function modificaIncantesimiConosciuti(livello, delta) {
     const p = window.tempP;
@@ -639,21 +639,19 @@ async function confermaCreazione(directAdd = window._directAdd || false) {
                 alert(`⚠️ Personaggio salvato localmente, ma non è stato possibile attivarlo. Riprova più tardi.`);
             }
         }
-       } else {
-        const campoScelto = await window.chiediCampoBase();
-        if (!campoScelto) {
-            alert('Creazione annullata: devi scegliere un campo base per il personaggio.');
-            return;
-        }
-        window.tempP.campoBaseId = campoScelto.id;
-        window.tempP.campoBaseNome = campoScelto.nome;
-
-        salvaPersonaggioLocalmente(window.tempP);
-        if (typeof window.saveCharacterForUser === 'function') {
-            window.saveCharacterForUser(window.tempP.nome);
-        }
-        alert(`✅ Personaggio "${window.tempP.nome}" salvato in locale, assegnato a "${campoScelto.nome}".\nUsa il pulsante "Manda in gioco" nella lobby per renderlo attivo.`);
+      // creazione-ui.js - All'interno di confermaCreazione (fondo della funzione)
+} else {
+    // RIMOSSO window.chiediCampoBase() da qui
+    salvaPersonaggioLocalmente(window.tempP);
+    if (typeof window.saveCharacterForUser === 'function') {
+        window.saveCharacterForUser(window.tempP.nome);
     }
+    alert(`✅ Personaggio "${window.tempP.nome}" salvato in locale.\nUsa il pulsante "Entra in Gioco" nella lobby per scegliere il campo base e renderlo attivo.`);
+}
+
+document.getElementById('modal-creazione').style.display = 'none';
+if (typeof window.aggiornaInterfaccia === 'function') window.aggiornaInterfaccia();
+if (typeof window.renderCharacterList === 'function') window.renderCharacterList();
     // --- 7. CHIUDI MODAL E AGGIORNA ---
     document.getElementById('modal-creazione').style.display = 'none';
     if (typeof window.aggiornaInterfaccia === 'function') window.aggiornaInterfaccia();
@@ -688,10 +686,20 @@ function renderIncantesimiTab(p) {
         </div>`;
     }
     const conosciuti = p.incantesimi || [];
-    let disponibili = getSpellDatabaseFlat().filter(sp => sp.livello <= p.livelloMagia);
+    const isOktavia = (p.nome || '').trim().toLowerCase() === 'oktavia';
+
+    // 🔥 FIX: Rimosso il blocco preventivo sul Livello Magia, ora carica tutto il database
+    let disponibili = getSpellDatabaseFlat().filter(sp => {
+        if (sp.categoria.toLowerCase() === 'oktavia' && !isOktavia) return false;
+        return true; 
+    });
 
     if (incantesimiFiltri.livelli.size > 0) {
-        disponibili = disponibili.filter(sp => incantesimiFiltri.livelli.has(String(sp.livello)));
+        disponibili = disponibili.filter(sp => 
+            incantesimiFiltri.livelli.has(sp.livello) || 
+            incantesimiFiltri.livelli.has(String(sp.livello)) || 
+            incantesimiFiltri.livelli.has(Number(sp.livello))
+        );
     }
     if (incantesimiFiltri.tipi.size > 0) {
         disponibili = disponibili.filter(sp => incantesimiFiltri.tipi.has(sp.categoria));
@@ -717,6 +725,10 @@ function renderIncantesimiTab(p) {
         { grp: 'tipi', val: 'utilita', label: 'Utilità' }
     ];
 
+    if (isOktavia) {
+        filtriBtns.push({ grp: 'tipi', val: 'Oktavia', label: 'Oktavia' });
+    }
+
     const filtriHtml = `<div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:12px;">
         ${filtriBtns.map(b => {
             const attivo = incantesimiFiltri[b.grp].has(b.val);
@@ -727,8 +739,9 @@ function renderIncantesimiTab(p) {
         }).join('')}
     </div>`;
 
+    // 🔥 FIX: Aggiornata la dicitura dell'intestazione per chiarezza
     let html = `<div style="background:#111; border:1px solid #333; border-radius:8px; padding:12px;">
-        <div style="font-size:0.95rem; margin-bottom:8px; color:#f1c40f; font-weight:bold;">INCANTESIMI (Lv ≤ ${p.livelloMagia})</div>
+        <div style="font-size:0.95rem; margin-bottom:8px; color:#f1c40f; font-weight:bold;">DATABASE INCANTESIMI</div>
         <div style="font-size:0.8rem; color:#aaa; margin-bottom:8px;">Puoi selezionare più pulsanti contemporaneamente per combinare i filtri.</div>
         ${filtriHtml}
         <div style="display:grid; gap:10px;">`;
@@ -743,13 +756,20 @@ function renderIncantesimiTab(p) {
         const maxKnow = p.getMaxKnownSpells ? p.getMaxKnownSpells(sp.livello) : 0;
         const attuali = (p.spellsKnown && p.spellsKnown[sp.livello]) || 0;
         const soddisfaReq = p.soddisfaRequisitoIncantesimo ? p.soddisfaRequisitoIncantesimo(sp) : true;
-        const canAfford = !conosciuto && p.puntiCreazione >= costo && attuali < maxKnow && soddisfaReq;
+        
+        // 🔥 FIX: Verifica che il personaggio abbia un Livello Magia sufficiente per l'incantesimo
+        const magicLevelOk = sp.livello <= p.livelloMagia;
+        
+        // 🔥 FIX: Aggiunto "magicLevelOk" alle condizioni per poterlo acquistare
+        const canAfford = !conosciuto && p.puntiCreazione >= costo && attuali < maxKnow && soddisfaReq && magicLevelOk;
+        
         html += `
             <div class="stat-row" style="font-size:0.82rem; padding:12px; background:#161616; border:1px solid #222; border-radius:6px; display:flex; gap:12px; align-items:flex-start; justify-content:space-between;">
                 <div style="flex:1; text-align:left;">
                     <div style="font-weight:bold; color:#fff;">${sp.nome} <span style="font-size:0.8rem; color:#aaa;">(${sp.livello === 0 ? 'Trucchetto' : 'Lv'+sp.livello}, ${costo} PT)</span></div>
                     <div style="color:#ccc; margin-top:4px; line-height:1.4;">${sp.desc || ''}</div>
-                    <div style="color:${soddisfaReq ? '#666' : '#e74c3c'}; font-size:0.75rem; margin-top:4px;">Richiede: ${(sp.modificatore || []).join(' o ')} ≥ 12${soddisfaReq ? '' : ' — NON SODDISFATTO'}</div>
+                    <div style="color:${soddisfaReq ? '#666' : '#e74c3c'}; font-size:0.75rem; margin-top:4px;">Richiede: ${(sp.modificatore || []).join(' o ')} ≥ 12${soddisfaReq ? '' : ' — STAT NON SODDISFATTA'}</div>
+                    ${!magicLevelOk ? `<div style="color:#e74c3c; font-size:0.75rem; margin-top:2px;">Richiede: Livello di Magia ${sp.livello} (Il tuo è ${p.livelloMagia})</div>` : ''}
                 </div>
                 <div style="display:flex; gap:8px; align-items:center; flex-shrink:0;">
                     ${!conosciuto ? `
@@ -928,48 +948,53 @@ export function renderSetupPerks() {
             `;
 
             perks.forEach(perk => {
-                // 🔥 FIX: usa il nome del perk, non il nome del personaggio
-                const nomePerkEscaped = perk.nome.replace(/'/g, "\\'");
-                const selectedCount = getGlobalPerkCount(window.tempP, perk.nome);
-                const giaPreso = selectedCount > 0;
-                const canAfford = perk.costo <= 0 || window.tempP.puntiCreazione >= perk.costo;
-                const actionAddAllowed = canAfford;
-                const actionRemoveAllowed = giaPreso && perk.repeats;
-                const costoHtml = `<span style="font-size:0.8rem; color:#aaa;">(${perk.costo} PT)</span>`;
-                const countBadge = perk.repeats && selectedCount > 0 ?
-                    `<span style="margin-left:8px; font-size:0.75rem; color:#9b59b6;">x${selectedCount}</span>` : '';
+    // 🔥 FIX: usa il nome del perk, non il nome del personaggio
+    const nomePerkEscaped = perk.nome.replace(/'/g, "\\'");
+    const selectedCount = getGlobalPerkCount(window.tempP, perk.nome);
+    const giaPreso = selectedCount > 0;
+    const canAfford = perk.costo <= 0 || window.tempP.puntiCreazione >= perk.costo;
+    
+    // --- NUOVA LOGICA: Blocco categoria Magici se Livello Magia è assente o < 1 ---
+    const isMagicoLocked = cat === 'magici' && (!window.tempP.livelloMagia || window.tempP.livelloMagia < 1);
+    
+    const actionAddAllowed = canAfford && !isMagicoLocked;
+    const actionRemoveAllowed = giaPreso && perk.repeats;
+    const costoHtml = `<span style="font-size:0.8rem; color:#aaa;">(${perk.costo} PT)</span>`;
+    const countBadge = perk.repeats && selectedCount > 0 ?
+        `<span style="margin-left:8px; font-size:0.75rem; color:#9b59b6;">x${selectedCount}</span>` : '';
 
-                html += `
-                    <div class="stat-row" style="font-size:0.82rem; padding:12px; background:#161616; border:1px solid #222; border-radius:6px; display:flex; gap:12px; align-items:flex-start; justify-content:space-between;">
-                        <div style="flex:1; text-align:left;">
-                            <div style="font-weight:bold; color:#fff;">${perk.nome} ${countBadge} ${costoHtml}</div>
-                            <div style="color:#ccc; margin-top:4px; line-height:1.4;">${perk.desc || ''}</div>
-                            ${perk.requires ? `<div style="color:#e67e22; font-size:0.75rem; margin-top:4px;">Richiede: ${perk.requires}</div>` : ''}
-                        </div>
-                        <div style="display:flex; gap:8px; align-items:center; flex-shrink:0;">
-                            ${(!giaPreso || perk.repeats) ? `
-                               <button onclick="togglePerk('${nomePerkEscaped}')"
-                                        style="padding:10px 14px !important; min-width:100px; background:#27ae60; color:#fff !important; border:none !important; border-radius:6px; opacity:${actionAddAllowed ? '1' : '0.45'}; cursor:${actionAddAllowed ? 'pointer' : 'not-allowed'};"
-                                        ${actionAddAllowed ? '' : 'disabled'}>
-                                    PRENDI
-                                </button>
-                            ` : ''}
-                            ${perk.repeats ? `
-                                <button onclick="togglePerk('${nomePerkEscaped}', true)"
-                                        style="padding:10px 14px !important; min-width:100px; background:#c0392b; color:#fff !important; border:none !important; border-radius:6px; opacity:${actionRemoveAllowed ? '1' : '0.45'}; cursor:${actionRemoveAllowed ? 'pointer' : 'not-allowed'};"
-                                        ${actionRemoveAllowed ? '' : 'disabled'}>
-                                    RIMUOVI
-                                </button>
-                            ` : (giaPreso ? `
-                               <button onclick="togglePerk('${nomePerkEscaped}', true)"
-                                        style="padding:10px 14px !important; min-width:100px; background:#c0392b; color:#fff !important; border:none !important; border-radius:6px;">
-                                    RIMUOVI
-                                </button>
-                            ` : '')}
-                        </div>
-                    </div>
-                `;
-            });
+    html += `
+        <div class="stat-row" style="font-size:0.82rem; padding:12px; background:#161616; border:1px solid #222; border-radius:6px; display:flex; gap:12px; align-items:flex-start; justify-content:space-between;">
+            <div style="flex:1; text-align:left;">
+                <div style="font-weight:bold; color:#fff;">${perk.nome} ${countBadge} ${costoHtml}</div>
+                <div style="color:#ccc; margin-top:4px; line-height:1.4;">${perk.desc || ''}</div>
+                ${perk.requires ? `<div style="color:#e67e22; font-size:0.75rem; margin-top:4px;">Richiede: ${perk.requires}</div>` : ''}
+                ${isMagicoLocked ? `<div style="color:#e74c3c; font-size:0.75rem; margin-top:4px;">Richiede: Livello di Magia &ge; 1</div>` : ''}
+            </div>
+            <div style="display:flex; gap:8px; align-items:center; flex-shrink:0;">
+                ${(!giaPreso || perk.repeats) ? `
+                   <button onclick="togglePerk('${nomePerkEscaped}')"
+                            style="padding:10px 14px !important; min-width:100px; background:#27ae60; color:#fff !important; border:none !important; border-radius:6px; opacity:${actionAddAllowed ? '1' : '0.45'}; cursor:${actionAddAllowed ? 'pointer' : 'not-allowed'};"
+                            ${actionAddAllowed ? '' : 'disabled'}>
+                        PRENDI
+                    </button>
+                ` : ''}
+                ${perk.repeats ? `
+                    <button onclick="togglePerk('${nomePerkEscaped}', true)"
+                            style="padding:10px 14px !important; min-width:100px; background:#c0392b; color:#fff !important; border:none !important; border-radius:6px; opacity:${actionRemoveAllowed ? '1' : '0.45'}; cursor:${actionRemoveAllowed ? 'pointer' : 'not-allowed'};"
+                            ${actionRemoveAllowed ? '' : 'disabled'}>
+                        RIMUOVI
+                    </button>
+                ` : (giaPreso ? `
+                   <button onclick="togglePerk('${nomePerkEscaped}', true)"
+                            style="padding:10px 14px !important; min-width:100px; background:#c0392b; color:#fff !important; border:none !important; border-radius:6px;">
+                        RIMUOVI
+                    </button>
+                ` : '')}
+            </div>
+        </div>
+    `;
+});
 
             html += `
                     </div>

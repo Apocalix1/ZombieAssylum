@@ -3,6 +3,7 @@ import { party } from '../state.js';
 import { magazzino, setMagazzino } from '../state.js'; // oppure importa da dove viene esportato
 import { apiUrl, buildAuthHeaders, salvaPersonaggioCloud } from '../logic/logic.js';
 import {segnaVittoria} from '../ui/combattimento-ui.js';
+import { segnaVittoria, applyCucinaMaestriaBuffSeAttivo, renderSchedaSpedizioneRidotta, renderSchedaCombattimentoMaster } from '../ui/combattimento-ui.js';
 import{puoIniziareAzione} from "./cibo_e_acqua-ui.js";
 import { applyCucinaMaestriaBuffSeAttivo } from "./combattimento-ui.js";
 import { mostraNotificaInAlto } from '../ui/ui.js';
@@ -72,6 +73,7 @@ function openSpedizioneModal() {
 }
 
 function ritiraTutti() {
+    const user = getCurrentUser(); // Aggiunto per il controllo permessi
     party.forEach(p => {
         p.inSpedizione = false;
         if (p.finoAllUltimoActive) {
@@ -85,7 +87,11 @@ function ritiraTutti() {
         }
         p.puntiFortuna = p.puntiFortunaMax;
         p.puntiFortunaTemp = 0;
-        salvaPersonaggioCloud(p); // Salva sul server
+
+        // Salvataggio condizionato ai permessi
+        if (user && (user.role === 'master' || p.user_id === user.id)) {
+            salvaPersonaggioCloud(p); 
+        }
     });
     chiudiSpedizione();
     if (typeof window.aggiornaInterfaccia === 'function') window.aggiornaInterfaccia();
