@@ -3062,6 +3062,7 @@ function togglePerk(nomePerk, forceRemove = false) {
                 p.perks.push({...perkDati});
             }
         }
+
             p.puntiCreazione -= perkDati.costo;
 
             const existingNames = p.perks.map(pp => getPerkBaseName(perkObjectName(pp)));
