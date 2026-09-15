@@ -899,13 +899,34 @@ function artificeriaPersonaggio(idx) {
     renderArtificeriaModal(idx);
 }
 
+function getRicetteSmontabili(p) {
+    const nomiPosseduti = new Set();
+    if (p.inventario && Array.isArray(p.inventario.armi)) {
+        p.inventario.armi.forEach(nome => nomiPosseduti.add(nome));
+    }
+    (window.magazzino.congegniFissi || []).forEach(c => nomiPosseduti.add(c.nome));
+    Object.entries(window.magazzino.congegniConteggio || {}).forEach(([nome, qta]) => {
+        if (qta > 0) nomiPosseduti.add(nome);
+    });
+    return ARTIFICER_RECIPES.filter(r => nomiPosseduti.has(r.name));
+}
+window.getRicetteSmontabili = getRicetteSmontabili;
+
 function renderArtificeriaModal(idx) {
     const container = document.getElementById('artificeria-content');
     if (!container) return;
     const p = party[idx];
-    const recipes = (typeof window.ricetteVisibili === 'function' ? window.ricetteVisibili(p) : (window.ARTIFICER_RECIPES || []));
+    const smontaggioCheckbox = document.getElementById('artificeria-smontaggio');
+    const isSmontaggio = smontaggioCheckbox ? smontaggioCheckbox.checked : false;
+    const recipes = isSmontaggio
+        ? getRicetteSmontabili(p)
+        : (typeof window.ricetteVisibili === 'function' ? window.ricetteVisibili(p) : (window.ARTIFICER_RECIPES || []));
+
     if (!recipes.length) {
-        container.innerHTML = '<p style="color:#aaa;">Nessuna ricetta disponibile al momento (servono più ingranaggi, un robot nel party o un oggetto magico in magazzino).</p>';
+        container.innerHTML = (isSmontaggio
+            ? '<p style="color:#aaa;">Nessun oggetto smontabile nell\'inventario di questo personaggio o nella base.</p>'
+            : '<p style="color:#aaa;">Nessuna ricetta disponibile al momento (servono più ingranaggi, un robot nel party o un oggetto magico in magazzino).</p>')
+            + `<div style="margin-top:8px;"><label><input type="checkbox" id="artificeria-smontaggio" onchange="renderArtificeriaModal(${idx})" ${isSmontaggio ? 'checked' : ''}> Smontaggio</label></div>`;
         return;
     }
 
@@ -926,7 +947,7 @@ function renderArtificeriaModal(idx) {
             </select>
         </div>
         <div style="margin-bottom:12px;">
-            <label><input type="checkbox" id="artificeria-smontaggio"> Smontaggio</label>
+            <label><input type="checkbox" id="artificeria-smontaggio" onchange="renderArtificeriaModal(${idx})" ${isSmontaggio ? 'checked' : ''}> Smontaggio</label>
         </div>
         <button class="btn-hero" onclick="eseguiArtificeria(${idx})">Esegui</button>
     `;
@@ -1277,4 +1298,5 @@ window.calcolaCrafting = calcolaCrafting;
 window.aggiungiPuntiArtificeria = aggiungiPuntiArtificeria;
 window.artificeriaPersonaggio = artificeriaPersonaggio;
 window.eseguiArtificeria = eseguiArtificeria;
+window.eseguiCreazioneArtificeria = eseguiCreazioneArtificeria;
 

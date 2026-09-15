@@ -462,6 +462,22 @@ window.consumaIncantesimo = function(idx, level) {
     }
 };
 
+function getPerkCategory(nomePerk) {
+    if (!window.DATABASE_PERK) return null;
+    for (let [cat, perks] of Object.entries(window.DATABASE_PERK)) {
+        if (perks.some(p => p.nome === nomePerk)) return cat;
+    }
+    return null;
+}
+
+window.toggleCombattimento = function() {
+    window.combattimentoAttivo = !window.combattimentoAttivo;
+    mostraNotificaInAlto(window.combattimentoAttivo ? '⚔️ Combattimento iniziato!' : '🏳️ Combattimento terminato.', window.combattimentoAttivo ? 'pericolo' : 'info');
+    renderSpedizioneModal();
+};
+
+const EXTRA_PERK_COMBATTIMENTO = ['Stress fisico', "Fino all'ultimo", 'Guerriero', 'Nato per combattere','Flusso magico','Incantesimo preferito','Trasmettitore magico','Voce calma','Vendicativo', 'Mente ferrea', 'Vicinanza', 'Carapace/Esoscheletro duro', 'Sensibilità alle temperature', 'Guida', 'Lingua prensile', 'Produrre veleni', 'Termoregolazione', 'Scivolata(Pinguinosa)', 'Volo', 'Uniti siamo più forti', 'Protocollo Overclock', 'Scudo Energetico','Corsa a quattro zampe'];
+
 export function renderSchedaSpedizioneRidotta(p, idx) {
     const statiPerTS = ["Forza", "Destrezza", "Costituzione", "Intelligenza", "Saggezza", "Carisma"];
     const haCorsa4Zampe = window.hasPerk && window.hasPerk(p, 'Corsa a 4 zampe');

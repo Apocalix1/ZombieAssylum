@@ -1,11 +1,8 @@
 // spedizione-ui.js
-import { party } from '../state.js';
-import { magazzino, setMagazzino } from '../state.js'; // oppure importa da dove viene esportato
+import { magazzino, setMagazzino } from '../state.js';
 import { apiUrl, buildAuthHeaders, salvaPersonaggioCloud } from '../logic/logic.js';
-import {segnaVittoria} from '../ui/combattimento-ui.js';
+import { puoIniziareAzione } from "./cibo_e_acqua-ui.js";
 import { segnaVittoria, applyCucinaMaestriaBuffSeAttivo, renderSchedaSpedizioneRidotta, renderSchedaCombattimentoMaster } from '../ui/combattimento-ui.js';
-import{puoIniziareAzione} from "./cibo_e_acqua-ui.js";
-import { applyCucinaMaestriaBuffSeAttivo } from "./combattimento-ui.js";
 import { mostraNotificaInAlto } from '../ui/ui.js';
 
 
@@ -127,22 +124,6 @@ function lootIngranaggi(tiro) {
 window.lootIngranaggi = lootIngranaggi;
 
 // client/src/ui/spedizione-ui.js – renderSpedizioneModal (estratto modificato)
-
-function getPerkCategory(nomePerk) {
-    if (!window.DATABASE_PERK) return null;
-    for (let [cat, perks] of Object.entries(window.DATABASE_PERK)) {
-        if (perks.some(p => p.nome === nomePerk)) return cat;
-    }
-    return null;
-}
-
-window.toggleCombattimento = function() {
-    window.combattimentoAttivo = !window.combattimentoAttivo;
-    mostraNotificaInAlto(window.combattimentoAttivo ? '⚔️ Combattimento iniziato!' : '🏳️ Combattimento terminato.', window.combattimentoAttivo ? 'pericolo' : 'info');
-    renderSpedizioneModal();
-};
-
-const EXTRA_PERK_COMBATTIMENTO = ['Stress fisico', "Fino all'ultimo", 'Guerriero', 'Nato per combattere','Flusso magico','Incantesimo preferito','Trasmettitore magico','Voce calma','Vendicativo', 'Mente ferrea', 'Vicinanza', 'Carapace/Esoscheletro duro', 'Sensibilità alle temperature', 'Guida', 'Lingua prensile', 'Produrre veleni', 'Termoregolazione', 'Scivolata(Pinguinosa)', 'Volo', 'Uniti siamo più forti', 'Protocollo Overclock', 'Scudo Energetico','Corsa a quattro zampe'];
 
 async function renderSpedizioneModal() {
     const container = document.getElementById('spedizione-content');

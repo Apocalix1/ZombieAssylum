@@ -93,7 +93,7 @@ function renderAlchimiaModal(idx) {
     if (!content) return;
     const p = window.party[idx];
 
-    const haMaestriaNatura = p.masteries && p.masteries.map(m => m.toLowerCase()).includes('natura');
+    const haMaestriaNatura = p.getSkillRating && p.getSkillRating('Natura') === 2;
     const haCompetenzaNatura = haMaestriaNatura || p.hasCompetenza('Natura');
     const modInt = p.getStatDettagliata('Intelligenza').mod;
     const bonusComp = haCompetenzaNatura ? p.getBonusCompetenza() : 0;
@@ -126,7 +126,7 @@ function renderAlchimiaModal(idx) {
             </div>`;
 
         gruppo.forEach(r => {
-            const haMaestriaNatura = p.masteries && p.masteries.map(m => m.toLowerCase()).includes('natura');
+            const haMaestriaNatura = p.getSkillRating && p.getSkillRating('Natura') === 2;
             const soddisfaRequisito = (grado !== 'difficile') || haMaestriaNatura;
             const puoCrare = window.magazzino.materialiAlchemici >= gradoInfo.costo && soddisfaRequisito;
 
@@ -206,7 +206,7 @@ function avviaCreazione_Alchimia(idx, nomeRicetta, grado) {
 
     const gradoInfo = ALCHIMIA_GRADI[grado];
 
-    const haMaestriaNatura = p.masteries && p.masteries.map(m => m.toLowerCase()).includes('natura');
+    const haMaestriaNatura = p.getSkillRating && p.getSkillRating('Natura') === 2;
     if (grado === 'difficile' && !haMaestriaNatura) {
         alert(`${p.nome} necessita della Maestria in Natura per creare composti Difficili.`);
         return;

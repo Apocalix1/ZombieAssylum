@@ -85,10 +85,16 @@ function redactCharacterData(data) {
 app.get('/api/party', authenticateUser, async (req, res) => {
   try {
     const db = await dbPromise;
-    let characters = await db.all(`
-      SELECT p.*, u.username AS owner_username
-      FROM personaggi p JOIN utenti u ON u.id = p.user_id
-      WHERE p.status = 'vivo' ORDER BY p.created_at DESC`);
+    const campoBaseId = req.query.campoBaseId ? parseInt(req.query.campoBaseId, 10) : null;
+    let characters = campoBaseId
+      ? await db.all(`
+          SELECT p.*, u.username AS owner_username
+          FROM personaggi p JOIN utenti u ON u.id = p.user_id
+          WHERE p.status = 'vivo' AND p.campo_base_id = ? ORDER BY p.created_at DESC`, campoBaseId)
+      : await db.all(`
+          SELECT p.*, u.username AS owner_username
+          FROM personaggi p JOIN utenti u ON u.id = p.user_id
+          WHERE p.status = 'vivo' ORDER BY p.created_at DESC`);
 
     characters = characters.map(c => {
       if (c.data && typeof c.data === 'string') {
@@ -386,27 +392,20 @@ app.post('/api/auth/logout', authenticateUser, async (req, res) => {
 
 // ========================= ROUTE: PERSONAGGI =========================
 
-// GET /api/party?campoBaseId=X – party filtrato per campo base. Se campoBaseId è omesso,
-// mantiene il comportamento legacy (campo 1) per retrocompatibilità con client vecchi.
-app.get('/api/party', authenticateUser, async (req, res) => {
+app.get('/api/personaggi/:id', authenticateUser, async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) return res.status(400).json({ error: 'ID non valido' });
   try {
     const db = await dbPromise;
-    let characters;
-    if (req.user.role === 'master' || req.user.role === 'giocatore' || req.user.role === 'ospite') {
-      characters = await db.all(`
-        SELECT p.*, u.username AS owner_username
-        FROM personaggi p JOIN utenti u ON u.id = p.user_id
-        WHERE p.status = 'vivo' ORDER BY p.created_at DESC`);
-    } else {
-      characters = [];
+    const personaggio = await db.get(`
+      SELECT p.*, u.username AS owner_username
+      FROM personaggi p JOIN utenti u ON u.id = p.user_id
+      WHERE p.id = ?`, id);
+    if (!personaggio) return res.status(404).json({ error: 'Personaggio non trovato' });
+    if (req.user.role !== 'master' && personaggio.user_id !== req.user.id) {
+      return res.status(403).json({ error: 'Non autorizzato' });
     }
-    characters = characters.map(c => {
-      if (c.data && typeof c.data === 'string') {
-        try { c.data = JSON.parse(c.data); } catch (e) { c.data = {}; }
-      }
-      return c;
-    });
-    res.json({ party: characters });
+    res.json({ personaggio });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

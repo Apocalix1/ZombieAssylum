@@ -174,16 +174,19 @@ window.entraInGiocoDaLobby = async function(nome, id) {
         let stats = {};
         if (pData.data && typeof pData.data === 'object') stats = pData.data;
         else if (typeof pData.data === 'string') try { stats = JSON.parse(pData.data); } catch(e) {}
-        const p = Object.assign(new Personaggio(stats.nome || pData.nome, stats.giornoInizio || 0), stats);
-        p.id = pData.id;
-        p.user_id = pData.user_id;
-        p.ownerUsername = pData.owner_username || null;
-        if (pData.campo_base_id) {
-            window.setCampoBaseCorrente({ id: pData.campo_base_id, nome: window.campoBaseCorrente?.nome || '' });
-            await window.initCampoBaseCorrenteUI();
+          if (pData.campo_base_id) {
+            let nomeCampo = '';
+            try {
+                const campi = await window.fetchCampiBase();
+                nomeCampo = campi.find(c => c.id === pData.campo_base_id)?.nome || '';
+            } catch (e) { /* fallback silenzioso */ }
+            window.setCampoBaseCorrente({ id: pData.campo_base_id, nome: nomeCampo });
         }
-        if (!party.some(x => x.nome === p.nome)) party.push(p);
-        showGameScreen('Giocatore');
+        showGameScreen(window.isGuestUser && window.isGuestUser() ? 'Ospite' : 'Giocatore');
+        if (typeof window.ricaricaCampoCorrente === 'function') {
+            await window.ricaricaCampoCorrente();
+        }
+        window.aggiornaDisplayCampoBase && window.aggiornaDisplayCampoBase();
     } catch (e) {
         alert('Errore: ' + e.message);
     }
@@ -3440,10 +3443,10 @@ async function renderCharacterList() {
 
     const ruoloDestinazione = isMaster ? 'Master' : (window.isGuestUser && window.isGuestUser() ? 'Ospite' : 'Giocatore');
     const enterAction = isCaricatoOra
-        ? `showGameScreen('${ruoloDestinazione}')`
-        : (isLocale ? `mandaInGiocoDaLobby('${c.nome}')`
-          : (isInAttesa ? `riattivaPersonaggioInAttesa('${c.nome}', ${c.id})`
-          : `entraInGiocoDaLobby('${c.nome}', ${c.id})`));
+    ? `entraSuCampoGiaCaricato(${c.id}, '${ruoloDestinazione}')`
+    : (isLocale ? `mandaInGiocoDaLobby('${c.nome}')`
+      : (isInAttesa ? `riattivaPersonaggioInAttesa('${c.nome}', ${c.id})`
+      : `entraInGiocoDaLobby('${c.nome}', ${c.id})`));
     const btnLabel = isCaricatoOra ? 'In Gioco' : (isLocale || isInAttesa ? 'Manda in gioco' : 'Entra in gioco');
 
     html += `
@@ -3480,6 +3483,19 @@ async function renderCharacterList() {
 
     container.innerHTML = html;
 }
+
+window.entraSuCampoGiaCaricato = async function(id, ruolo) {
+    const p = party.find(x => x.id === id);
+    if (p && p.campoBaseId && (!window.campoBaseCorrente || window.campoBaseCorrente.id !== p.campoBaseId)) {
+        try {
+            const campi = await window.fetchCampiBase();
+            const nomeCampo = campi.find(c => c.id === p.campoBaseId)?.nome || '';
+            window.setCampoBaseCorrente({ id: p.campoBaseId, nome: nomeCampo });
+        } catch (e) {}
+    }
+    showGameScreen(ruolo);
+    if (typeof window.ricaricaCampoCorrente === 'function') await window.ricaricaCampoCorrente();
+};
 
 window.mostraNotificaInAlto = mostraNotificaInAlto;
 window.apriScheda = apriScheda;
