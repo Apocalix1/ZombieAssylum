@@ -100,8 +100,8 @@ export function avviaSincronizzazioneCompleta() {
         await syncDocumentiDalServer();
 
         // 3. Spingi le modifiche locali al server (per ogni personaggio)
-        for (const p of party) {
-            if (p.id) {
+          for (const p of party) {
+            if (p.id && (user.role === 'master' || p.user_id === user.id)) {
                 await sincronizzaPersonaggio(p);
             }
         }
@@ -485,55 +485,11 @@ export async function sincronizzaPersonaggio(personaggioLocale) {
         return localCopy;
     }
     try {
-        const cloudData = await fetchPersonaggioFromCloud(personaggioLocale.nome);
-        if (!cloudData) {
-            await salvaPersonaggioCloud(localCopy);
-            return localCopy;
-        }
-        const localUpdated = new Date(localCopy.updated_at || nowTimestamp());
-        const cloudUpdated = new Date(cloudData.updated_at || nowTimestamp());
-        if (localUpdated >= cloudUpdated) {
-            await salvaPersonaggioCloud(localCopy);
-            return localCopy;
-        } else {
-            // Il cloud è più aggiornato, ma preserviamo l'azione corrente se presente con onComplete
-            const merged = { ...cloudData.data, updated_at: cloudData.updated_at };
-            const idx = party.findIndex(p => p.nome === merged.nome);
-            if (idx !== -1) {
-                const localPersonaggio = party[idx];
-                // Se il personaggio locale ha un'azione corrente con onComplete (funzione) o ha una coda non vuota,
-                // preserviamo azioneCorrente e codaAzioni per non perdere il callback.
-                const hasLocalAction = localPersonaggio && localPersonaggio.azioneCorrente && typeof localPersonaggio.azioneCorrente.onComplete === 'function';
-                const hasLocalQueue = localPersonaggio && localPersonaggio.codaAzioni && localPersonaggio.codaAzioni.length > 0;
-                if (hasLocalAction || hasLocalQueue) {
-                    // Salva localmente le azioni in corso
-                    const azioneCorrenteLocale = localPersonaggio.azioneCorrente || null;
-                    const codaAzioniLocale = localPersonaggio.codaAzioni ? [...localPersonaggio.codaAzioni] : [];
-                    // Unisci i dati dal cloud
-                    Object.assign(localPersonaggio, merged);
-                    // Ripristina le azioni locali (che contengono onComplete)
-                    localPersonaggio.azioneCorrente = azioneCorrenteLocale;
-                    localPersonaggio.codaAzioni = codaAzioniLocale;
-                    // Aggiorna il timestamp locale per evitare che al prossimo polling il cloud sovrascriva di nuovo
-                    localPersonaggio.updated_at = nowTimestamp();
-                    salvaPersonaggioLocalmente(localPersonaggio);
-                    // Non salviamo subito sul cloud per non creare un conflitto; il prossimo ciclo di sync farà il merge
-                    return localPersonaggio;
-                }
-            }
-            // Nessuna azione critica da preservare: sovrascrivi normalmente
-            Object.assign(personaggioLocale, merged);
-            salvaPersonaggioLocalmente(personaggioLocale);
-            // Nota: se idx era -1, non facciamo nulla; se idx esisteva ma non è entrato nell'if, riusiamo lo stesso idx
-            if (idx !== -1) {
-                Object.assign(party[idx], merged);
-            }
-            return merged;
-        }
+        await salvaPersonaggioCloud(localCopy);
     } catch (error) {
         console.warn('Impossibile sincronizzare con il server:', error?.message || error);
-        return localCopy;
     }
+    return localCopy;
 }
 
 export async function syncStatiDalServer(personaggioId = null) {
@@ -2320,8 +2276,8 @@ export class Personaggio {
             'percezione': 'Saggezza',
             'persuasione': 'Carisma',
             'furtività': 'Destrezza',
-            'manodopera': 'Destrezza',
-            'cucina': 'Intelligenza',
+            'manodopera': 'Forza',
+            'cucina': 'Saggezza',
             'medicina': 'Intelligenza',
             'storia': 'Intelligenza',
             'natura': 'Intelligenza',

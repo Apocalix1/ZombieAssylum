@@ -427,7 +427,7 @@ function calcolaCrafting(leader, collaboratori, ricetta, isSmontaggio = false) {
         // Riduzione tempo da Artificeria Generale del Leader
         oreBase = oreBase * (1 - BONUS_AG_TEMPO[lvAG_Leader]);
 
-        // Riduzione tempo da Collaboratori
+                // Riduzione tempo da Collaboratori
         let moltiplicatoreFolla = 1; // 1 per il primo collaboratore, 0.5 per gli altri
         const leaderScienziatoPazzo = leader.hasPerk && leader.hasPerk('Scienziato Pazzo');
         collaboratori.forEach((collab) => {
@@ -436,13 +436,15 @@ function calcolaCrafting(leader, collaboratori, ricetta, isSmontaggio = false) {
             
             // Requisito minimo: il collaboratore deve avere almeno livello 1
             if (lvSpec_Collab >= 1) {
-                // Formula: (LS Collab / LS Leader) * 50% * malus folla
-                let percentualeRiduzione = (lvSpec_Collab / Math.max(1, lvSpec_Leader)) * 0.50 * moltiplicatoreFolla;
+                const rapportoLimitato = Math.min(1, lvSpec_Collab / Math.max(1, lvSpec_Leader));
+                let percentualeRiduzione = rapportoLimitato * 0.50 * moltiplicatoreFolla;
                 if (leaderScienziatoPazzo) percentualeRiduzione = Math.max(0, percentualeRiduzione - 0.13);
                 oreBase = oreBase * (1 - percentualeRiduzione);
                 moltiplicatoreFolla = 0.5; // I successivi valgono la metà
             }
         });
+        // Clamp di sicurezza: mai sotto mezz'ora, indipendentemente dalle riduzioni cumulate
+        oreBase = Math.max(0.5, oreBase);
     }
 
     return { cdFinale, oreStimate: oreBase.toFixed(1), senzaCompetenza, diffBase: diff };
@@ -456,7 +458,6 @@ function risolviAzioneArtificeria(leaderIdx, collaboratoriIdxs, ricettaId, isSmo
     const leader = window.party[leaderIdx];
     const ricettaBase = getArtificerRecipeById(ricettaId);
     if (!leader || !ricettaBase) return;
-
     // Riparare: cantrip pre-azione, stessa logica di Controllare Fiamme
     if ((leader.incantesimi || []).includes('Riparare') && !leader._ripareBonusCrea && !leader._ripareBonusSmonta) {
         const vuoleLanciare = confirm(`${leader.nome} conosce "Riparare": vuoi lanciarlo prima di iniziare?\n${isSmontaggio ? '(+5% ingranaggi recuperati allo smontaggio)' : '(-1 al CD della creazione)'}`);
@@ -899,13 +900,34 @@ function artificeriaPersonaggio(idx) {
     renderArtificeriaModal(idx);
 }
 
+function getRicetteSmontabili(p) {
+    const nomiPosseduti = new Set();
+    if (p.inventario && Array.isArray(p.inventario.armi)) {
+        p.inventario.armi.forEach(nome => nomiPosseduti.add(nome));
+    }
+    (window.magazzino.congegniFissi || []).forEach(c => nomiPosseduti.add(c.nome));
+    Object.entries(window.magazzino.congegniConteggio || {}).forEach(([nome, qta]) => {
+        if (qta > 0) nomiPosseduti.add(nome);
+    });
+    return ARTIFICER_RECIPES.filter(r => nomiPosseduti.has(r.name));
+}
+window.getRicetteSmontabili = getRicetteSmontabili;
+
 function renderArtificeriaModal(idx) {
     const container = document.getElementById('artificeria-content');
     if (!container) return;
     const p = party[idx];
-    const recipes = (typeof window.ricetteVisibili === 'function' ? window.ricetteVisibili(p) : (window.ARTIFICER_RECIPES || []));
+    const smontaggioCheckbox = document.getElementById('artificeria-smontaggio');
+    const isSmontaggio = smontaggioCheckbox ? smontaggioCheckbox.checked : false;
+    const recipes = isSmontaggio
+        ? getRicetteSmontabili(p)
+        : (typeof window.ricetteVisibili === 'function' ? window.ricetteVisibili(p) : (window.ARTIFICER_RECIPES || []));
+
     if (!recipes.length) {
-        container.innerHTML = '<p style="color:#aaa;">Nessuna ricetta disponibile al momento (servono più ingranaggi, un robot nel party o un oggetto magico in magazzino).</p>';
+        container.innerHTML = (isSmontaggio
+            ? '<p style="color:#aaa;">Nessun oggetto smontabile nell\'inventario di questo personaggio o nella base.</p>'
+            : '<p style="color:#aaa;">Nessuna ricetta disponibile al momento (servono più ingranaggi, un robot nel party o un oggetto magico in magazzino).</p>')
+            + `<div style="margin-top:8px;"><label><input type="checkbox" id="artificeria-smontaggio" onchange="renderArtificeriaModal(${idx})" ${isSmontaggio ? 'checked' : ''}> Smontaggio</label></div>`;
         return;
     }
 
@@ -926,7 +948,7 @@ function renderArtificeriaModal(idx) {
             </select>
         </div>
         <div style="margin-bottom:12px;">
-            <label><input type="checkbox" id="artificeria-smontaggio"> Smontaggio</label>
+            <label><input type="checkbox" id="artificeria-smontaggio" onchange="renderArtificeriaModal(${idx})" ${isSmontaggio ? 'checked' : ''}> Smontaggio</label>
         </div>
         <button class="btn-hero" onclick="eseguiArtificeria(${idx})">Esegui</button>
     `;
@@ -1277,4 +1299,5 @@ window.calcolaCrafting = calcolaCrafting;
 window.aggiungiPuntiArtificeria = aggiungiPuntiArtificeria;
 window.artificeriaPersonaggio = artificeriaPersonaggio;
 window.eseguiArtificeria = eseguiArtificeria;
+window.eseguiCreazioneArtificeria = eseguiCreazioneArtificeria;
 
