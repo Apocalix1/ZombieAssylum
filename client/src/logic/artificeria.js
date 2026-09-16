@@ -427,7 +427,7 @@ function calcolaCrafting(leader, collaboratori, ricetta, isSmontaggio = false) {
         // Riduzione tempo da Artificeria Generale del Leader
         oreBase = oreBase * (1 - BONUS_AG_TEMPO[lvAG_Leader]);
 
-        // Riduzione tempo da Collaboratori
+                // Riduzione tempo da Collaboratori
         let moltiplicatoreFolla = 1; // 1 per il primo collaboratore, 0.5 per gli altri
         const leaderScienziatoPazzo = leader.hasPerk && leader.hasPerk('Scienziato Pazzo');
         collaboratori.forEach((collab) => {
@@ -436,13 +436,15 @@ function calcolaCrafting(leader, collaboratori, ricetta, isSmontaggio = false) {
             
             // Requisito minimo: il collaboratore deve avere almeno livello 1
             if (lvSpec_Collab >= 1) {
-                // Formula: (LS Collab / LS Leader) * 50% * malus folla
-                let percentualeRiduzione = (lvSpec_Collab / Math.max(1, lvSpec_Leader)) * 0.50 * moltiplicatoreFolla;
+                const rapportoLimitato = Math.min(1, lvSpec_Collab / Math.max(1, lvSpec_Leader));
+                let percentualeRiduzione = rapportoLimitato * 0.50 * moltiplicatoreFolla;
                 if (leaderScienziatoPazzo) percentualeRiduzione = Math.max(0, percentualeRiduzione - 0.13);
                 oreBase = oreBase * (1 - percentualeRiduzione);
                 moltiplicatoreFolla = 0.5; // I successivi valgono la metà
             }
         });
+        // Clamp di sicurezza: mai sotto mezz'ora, indipendentemente dalle riduzioni cumulate
+        oreBase = Math.max(0.5, oreBase);
     }
 
     return { cdFinale, oreStimate: oreBase.toFixed(1), senzaCompetenza, diffBase: diff };
@@ -456,7 +458,6 @@ function risolviAzioneArtificeria(leaderIdx, collaboratoriIdxs, ricettaId, isSmo
     const leader = window.party[leaderIdx];
     const ricettaBase = getArtificerRecipeById(ricettaId);
     if (!leader || !ricettaBase) return;
-
     // Riparare: cantrip pre-azione, stessa logica di Controllare Fiamme
     if ((leader.incantesimi || []).includes('Riparare') && !leader._ripareBonusCrea && !leader._ripareBonusSmonta) {
         const vuoleLanciare = confirm(`${leader.nome} conosce "Riparare": vuoi lanciarlo prima di iniziare?\n${isSmontaggio ? '(+5% ingranaggi recuperati allo smontaggio)' : '(-1 al CD della creazione)'}`);
