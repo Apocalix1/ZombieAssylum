@@ -667,3 +667,4 @@ window.chiudiAlchimia = chiudiAlchimia;
 window.avviaCreazione_Alchimia = avviaCreazione_Alchimia;
 window.creaPostazioneAlchemica = creaPostazioneAlchemica;
 window.lootAlchemici = lootAlchemici;
+window.completaAlchimia = completaAlchimia;

@@ -23,13 +23,25 @@ export async function syncPartyFromServer() {
 
         // 1. Aggiorna o aggiungi personaggi
         for (const serverChar of serverChars) {
-            const existing = party.find(p => p.id === serverChar.id);
+                const existing = party.find(p => p.id === serverChar.id);
             if (existing) {
                 // Aggiorna solo se il server è più recente
                 if (serverChar.updated_at > existing.updated_at) {
                     // Unisci i dati (serverChar.data è un oggetto)
                     const newData = serverChar.data || {};
+                    // onComplete è una funzione: non sopravvive a JSON.stringify quando il
+                    // personaggio è stato salvato sul server. Se l'azione locale ha ancora
+                    // il suo onComplete vivo, la teniamo invece di quella "mutilata" del server.
+                    const azioneCorrenteLocale = existing.azioneCorrente;
+                    const codaAzioniLocale = existing.codaAzioni;
                     Object.assign(existing, newData);
+                    if (azioneCorrenteLocale && typeof azioneCorrenteLocale.onComplete === 'function') {
+                        existing.azioneCorrente = azioneCorrenteLocale;
+                    }
+                    if (Array.isArray(codaAzioniLocale) && codaAzioniLocale.length &&
+                        codaAzioniLocale.some(a => typeof a.onComplete === 'function')) {
+                        existing.codaAzioni = codaAzioniLocale;
+                    }
                     existing.id = serverChar.id;
                     existing.user_id = serverChar.user_id;
                     existing.ownerUsername = serverChar.owner_username;
@@ -935,8 +947,8 @@ export class Personaggio {
     get stazioneMobileCapacita() {
         return (this.hasPerk && this.hasPerk('Stazione mobile')) ? 17 : 12;
     }
-    
-    get robotRepairTotalLimit() {
+
+        get robotRepairTotalLimit() {
     if (this._robotRepairTotalLimit !== undefined) {
         return this._robotRepairTotalLimit;
     }
@@ -947,6 +959,11 @@ export class Personaggio {
     const corazzatoCount = (this.perks || []).filter(p => (typeof p === 'string' ? p : p.nome) === 'Corazzato').length;
     limit += corazzatoCount * 10;
     return Math.max(10, limit);
+}
+    set robotRepairTotalLimit(valore) {
+    // Permette a Object.assign/JSON di riassegnare vecchi salvataggi senza crashare;
+    // sovrascrive il valore calcolato con quello esplicito.
+    this._robotRepairTotalLimit = valore;
 }
     
     getPessimistaCDBonus() {
@@ -3304,7 +3321,7 @@ export class Personaggio {
                 } catch (e) {
                     console.warn('Errore in onComplete:', e);
                 }
-            } else {
+                        } else {
                 // FALLBACK: se manca onComplete, gestiamo i tipi di azione noti
                 const tipo = this.azioneCorrente.tipo;
                 if (tipo === 'esplora') {
@@ -3320,6 +3337,20 @@ export class Personaggio {
                 } else if (tipo === 'allenamento') {
                     // per allenamento, se non c'è onComplete, non possiamo recuperare la categoria, ma possiamo loggare
                     console.warn(`Allenamento completato senza onComplete per ${this.nome}`);
+                } else if (tipo === 'alchimia' && this.azioneCorrente.nomeRicetta && typeof window.completaAlchimia === 'function') {
+                    // onComplete perso (es. reload), ma i dati dell'azione (ricetta/CD/tiro) sono ancora presenti: ricostruiamo l'esito.
+                    window.completaAlchimia(
+                        this,
+                        this.azioneCorrente.nomeRicetta,
+                        this.azioneCorrente.grado,
+                        this.azioneCorrente.cdEffettiva,
+                        null,
+                        this.azioneCorrente.rollPrecalcolato || null
+                    );
+                } else if (tipo === 'artificeria-assistenza' || tipo === 'assistenza-medica') {
+                    if (typeof window.mostraNotificaInAlto === 'function') {
+                        window.mostraNotificaInAlto(`${this.nome} ha finito di assistere (onComplete perso: nessun bonus extra applicato).`, 'avviso');
+                    }
                 } else {
                     console.warn(`Azione ${tipo} completata ma senza onComplete e nessuna gestione predefinita.`);
                 }
