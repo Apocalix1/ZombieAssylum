@@ -437,6 +437,52 @@ window.apriStatiPersonaggio = function(idx) {
     modal.style.display = 'block';
 };
 
+window.masterCambiaProprieta = async function(idx) {
+    const user = getCurrentUser();
+    if (!user || user.role !== 'master') return;
+    
+    const p = party[idx];
+    if (!p || !p.id) return alert('Personaggio non valido o non ancora salvato sul server (assicurati che sia in gioco).');
+
+    const nuovoUserId = prompt(`Attuale proprietario di ${p.nome}: ${p.ownerUsername || 'Nessuno'} (ID: ${p.user_id})\n\nInserisci il nuovo ID UTENTE (numero) del giocatore a cui vuoi assegnare il personaggio:`);
+    if (!nuovoUserId || isNaN(parseInt(nuovoUserId))) return;
+
+    const nuovoUsername = prompt(`Inserisci il nuovo USERNAME del giocatore (opzionale, serve per la visualizzazione nella card):`, "Giocatore");
+
+    if (!confirm(`Vuoi davvero trasferire la proprietà di ${p.nome} all'utente ID ${nuovoUserId} (${nuovoUsername})?`)) return;
+
+    // Aggiorna i dati sul client
+    p.user_id = parseInt(nuovoUserId);
+    p.ownerUsername = nuovoUsername || "Giocatore";
+
+    try {
+        // Invia l'aggiornamento al server includendo i campi di proprietà nel body
+        const res = await fetch(apiUrl(`/api/personaggi/${p.id}`), {
+            method: 'PUT',
+            headers: buildAuthHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify({ 
+                data: JSON.stringify(p), 
+                user_id: p.user_id, 
+                owner_username: p.ownerUsername 
+            })
+        });
+
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error(err.error || 'Errore durante il trasferimento sul server.');
+        }
+        
+        if (typeof window.mostraNotificaInAlto === 'function') {
+            window.mostraNotificaInAlto(`👤 ${p.nome} è stato assegnato con successo a ${p.ownerUsername}.`, 'successo');
+        }
+        
+        if (typeof window.salvaPersonaggioCloud === 'function') window.salvaPersonaggioCloud(p);
+        aggiornaInterfaccia();
+    } catch(e) {
+        alert('Errore nel cambio di proprietà: ' + e.message);
+    }
+};
+
 window.modificatoriCorrenti = [];
 
 window.apriPannelloMaster = async function apriPannelloMaster() {
@@ -587,10 +633,13 @@ window.apriPannelloMaster = async function apriPannelloMaster() {
         const dataCim = await fetch(apiUrl('/api/cimitero'), { headers: buildAuthHeaders() }).then(r => r.json());
         const listEl = document.getElementById('master-cimitero-list');
         if (listEl) {
-            listEl.innerHTML = (dataCim.cimitero || []).map(c => `
+                    listEl.innerHTML = (dataCim.cimitero || []).map(c => `
                 <div style="display:flex; justify-content:space-between; align-items:center; padding:4px 0; border-bottom:1px solid #222;">
                     <span>💀 ${c.nome} ${c.data?.causaMorte ? `(${c.data.causaMorte})` : ''}</span>
-                    <button onclick="eliminaDefinitivamenteCaduto(${c.id}, '${(c.nome || '').replace(/'/g, "\\'")}')" style="background:#c0392b !important; padding:3px 8px; font-size:0.75rem;">🗑️</button>
+                    <div style="display:flex; gap:4px;">
+                        <button onclick="masterResuscitaPersonaggio(${c.id}, '${(c.nome || '').replace(/'/g, "\\'")}')" style="background:#27ae60 !important; padding:3px 8px; font-size:0.75rem;">⚡</button>
+                        <button onclick="eliminaDefinitivamenteCaduto(${c.id}, '${(c.nome || '').replace(/'/g, "\\'")}')" style="background:#c0392b !important; padding:3px 8px; font-size:0.75rem;">🗑️</button>
+                    </div>
                 </div>
             `).join('') || '<div style="color:#888;">Cimitero vuoto.</div>';
         }
@@ -1270,21 +1319,6 @@ async function passaTempoGlobale() {
     }
     const giornoAttuale = Math.floor(oreTotali / 24);
 
-    const cicliPrima = Math.floor(oreTotaliPrima / 3);
-    const cicliDopo = Math.floor(oreTotali / 3);
-    const numCicli3h = cicliDopo - cicliPrima;
-    if (numCicli3h > 0 && ((magazzino.cadaveriUmani || 0) > 0 || (magazzino.cadaveriRobot || 0) > 0)) {
-        for (let c = 0; c < numCicli3h; c++) {
-            party.forEach(p => {
-                if (p.isRobot || p.inSpedizione) return;
-                const tiro = rollDice(1, 4);
-                p.follia = Math.min(20, p.follia + tiro);
-                if (typeof p.aggiornaSintomiFollia === 'function') p.aggiornaSintomiFollia();
-            });
-        }
-        mostraNotificaInAlto(`⚰️ La presenza di cadaveri nella base turba i sopravvissuti: +1d4 Follia ogni 3 ore (x${numCicli3h}).`, 'pericolo');
-    }
-
     // Frigorifero
     const haFrigo = magazzino.congegniFissi.some(c => c.nome === 'Frigorifero');
     const scortaProtetta = haFrigo ? Math.min(50, magazzino.cibo) : 0;
@@ -1528,18 +1562,24 @@ export function aggiornaInterfaccia() {
             card.className = `card-personaggio ${p.inSpedizione ? 'spedizione-active' : ''}`;
             card.dataset.nome = p.nome;
 
-            // Header: nome + badge fatica (solo se canManage)
             let headerHtml = `
                 <div class="card-header" style="position:relative;">
                     <h3 style="margin:0">${p.nome}</h3>
                     <div style="font-size:0.75em; color:#aaa;">👤 ${p.ownerUsername || 'Sconosciuto'}</div>
                     ${canManage ? `<span class="fatica-badge">Fatic. ${p.faticaTotale}</span>` : ''}
+                    
                     ${isMaster ? `<button onclick="masterEliminaPersonaggio(${idx})" title="Elimina personaggio"
                         style="position:absolute; top:0; right:0; background:#c0392b !important; border:1px solid #c0392b !important; padding:4px 8px; font-size:0.75rem;">🗑️</button>` : ''}
-                                                 ${isMaster ? `<button onclick="masterAggiungiOggetto(${idx})" title="Aggiungi oggetto"
+                    
+                    ${isMaster ? `<button onclick="masterAggiungiOggetto(${idx})" title="Aggiungi oggetto"
                         style="position:absolute; top:-26px; right:2.2rem; background:#27ae60 !important; border:1px solid #27ae60 !important; padding:4px 8px; font-size:0.75rem;">🎁</button>` : ''}
+                    
                     ${isMaster ? `<button onclick="masterDaiLibro(${idx})" title="Dai libro"
                         style="position:absolute; top:-26px; right:5.4rem; background:#8e44ad !important; border:1px solid #8e44ad !important; padding:4px 8px; font-size:0.75rem;">📖</button>` : ''}
+                    
+                    <!-- NUOVO PULSANTE CAMBIO PROPRIETÀ -->
+                    ${isMaster ? `<button onclick="masterCambiaProprieta(${idx})" title="Cambia Proprietario"
+                        style="position:absolute; top:-26px; right:8.6rem; background:#3498db !important; border:1px solid #3498db !important; padding:4px 8px; font-size:0.75rem;">👤</button>` : ''}
                 </div>
             `;
 
@@ -1733,13 +1773,26 @@ window.apriPreghieraFedele = function(idx) {
 export async function entraInGioco() {
     const user = getCurrentUser();
     if (!user) { alert('Devi accedere prima.'); return; }
+    
     try {
-        const campoId = window.getCampoBaseId ? window.getCampoBaseId() : 1;
+        // Chiedi al giocatore in quale campo base vuole entrare
+        const campoScelto = await window.chiediCampoBase();
+        if (!campoScelto) return; // L'utente ha chiuso il modal o annullato
+
+        // Imposta il campo base selezionato a livello globale
+        if (typeof window.setCampoBaseCorrente === 'function') {
+            window.setCampoBaseCorrente({ id: campoScelto.id, nome: campoScelto.nome });
+        }
+        
+        const campoId = campoScelto.id;
+        
+        // Recupera i personaggi per quel campo
         const response = await fetch(apiUrl(`/api/party?campoBaseId=${campoId}`), { headers: buildAuthHeaders() });
         const data = await response.json();
         const partyData = data.party || [];
         party.length = 0;
-        // Carica tutti i personaggi per permettere a tutti di vedere chi è in gioco
+        
+        // Carica i personaggi
         const filtered = partyData;
         filtered.forEach(pData => {
             const stats = (pData.data && typeof pData.data === 'object') ? pData.data : pData;
@@ -1752,7 +1805,13 @@ export async function entraInGioco() {
     } catch (e) {
         console.warn('Errore caricamento personaggi:', e);
     }
+    
     showGameScreen(isGuestUser() ? 'Ospite' : 'Giocatore');
+    
+    // Assicurati che il nome del campo in alto venga aggiornato
+    if (typeof window.aggiornaDisplayCampoBase === 'function') {
+        window.aggiornaDisplayCampoBase();
+    }
 }
 
 // --- LOGICA DELLE AZIONI (Thread e Code) ---
@@ -3054,6 +3113,14 @@ function renderInventarioHtml(p) {
             <strong>Zaino equipaggiato:</strong> ${p.zainoEquipaggiato ? p.zainoEquipaggiato.nome : 'Nessuno'}
             ${inv.zaini && inv.zaini.length ? `<br><strong>Altri zaini portati:</strong> ${inv.zaini.map(z => z.nome).join(' • ')}` : ''}
         </div>
+
+        <div style="margin-top:6px; font-size:0.85rem; color:#eee;">
+            <strong>Pergamene possedute:</strong>
+            ${(inv.pergameneVuote || 0) > 0 ? `<br>📜 Vuote: ${inv.pergameneVuote}` : ''}
+            ${inv.pergameneMagiche && inv.pergameneMagiche.length ? `<br>✨ Magiche: ${inv.pergameneMagiche.map(pm => pm.nome).join(' • ')}` : ''}
+            ${!(inv.pergameneVuote > 0) && !(inv.pergameneMagiche && inv.pergameneMagiche.length) ? 'Nessuna' : ''}
+        </div>
+        
                    <div style="margin-top:6px; font-size:0.85rem; color:#eee;">
             <strong>Consumabili:</strong>
             ${inv.consumabili && inv.consumabili.length ? `
