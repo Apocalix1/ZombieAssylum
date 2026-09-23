@@ -33,17 +33,21 @@ export async function renderCimitero() {
         return;
     }
 
-    lista.innerHTML = cimiteroArray.map(m => {
+        lista.innerHTML = cimiteroArray.map(m => {
         const nome = (m.nome || 'Sconosciuto').toUpperCase();
         const user = window.getCurrentUser ? window.getCurrentUser() : null;
         const puoEliminare = user && (user.role === 'master' || user.id === m.user_id);
+        const isMaster = user && user.role === 'master';
         return `
         <div class="morto-entry" style="background:#1a1a1a; padding:8px; margin-bottom:6px; border-left:3px solid #ff4444; border-radius:3px; text-align:left;">
             <b style="color:#ff4444;">💀 ${nome}</b><br>
             <small style="color:#aaa;">Di: ${m.ownerUsername}</small><br>
             <small style="color:#ccc;">Causa: ${m.causa}</small><br>
             <small style="color:#888;">Decesso: ${m.data} (Sopravvissuto ${m.giorni} giorni)</small>
-            ${puoEliminare ? `<div style="margin-top:6px;"><button onclick="eliminaDefinitivamenteCaduto(${m.id}, '${nome.replace(/'/g, "\\'")}')" style="background:#c0392b !important; font-size:0.75rem; padding:4px 8px;">🗑️ ELIMINA</button></div>` : ''}
+            <div style="margin-top:6px; display:flex; gap:6px; flex-wrap:wrap;">
+                ${isMaster ? `<button onclick="masterResuscitaPersonaggio(${m.id}, '${nome.replace(/'/g, "\\'")}')" style="background:#27ae60 !important; font-size:0.75rem; padding:4px 8px;">⚡ RESUSCITA</button>` : ''}
+                ${puoEliminare ? `<button onclick="eliminaDefinitivamenteCaduto(${m.id}, '${nome.replace(/'/g, "\\'")}')" style="background:#c0392b !important; font-size:0.75rem; padding:4px 8px;">🗑️ ELIMINA</button>` : ''}
+            </div>
         </div>`;
     }).reverse().join("");
 }
@@ -170,6 +174,72 @@ function completaCerimoniaBecchino(idCerimonia) {
     delete window._cerimonieBecchino[idCerimonia];
     aggiornaInterfaccia();
 }
+
+window.masterResuscitaPersonaggio = async function(id, nome) {
+    const user = window.getCurrentUser ? window.getCurrentUser() : null;
+    if (!user || user.role !== 'master') return;
+    if (!confirm(`Resuscitare "${nome}"? Tornerà in vita a piena salute (PF/PF Robotici al massimo).`)) return;
+
+    // Recupera i dati completi del personaggio dal cimitero (il server include
+    // già il campo "data" completo, non solo il riepilogo mostrato in lista).
+    let datiMorto = null;
+    try {
+        const res = await fetch(window.apiUrl('/api/cimitero'), { headers: window.buildAuthHeaders() });
+        if (!res.ok) throw new Error('Errore del server');
+        const data = await res.json();
+        const entry = (data.cimitero || []).find(c => c.id === id);
+        datiMorto = entry ? entry.data : null;
+    } catch (e) {
+        alert('Impossibile contattare il server per recuperare i dati del personaggio.');
+        return;
+    }
+    if (!datiMorto) {
+        alert('Dati del personaggio non trovati.');
+        return;
+    }
+
+    // Il master sceglie in quale campo base far rientrare il personaggio,
+    // come già avviene per la riattivazione dei personaggi "in attesa".
+    const campoScelto = window.chiediCampoBase ? await window.chiediCampoBase() : null;
+    if (!campoScelto) return;
+
+    const nuoviDati = { ...datiMorto };
+    if (nuoviDati.isRobot) {
+        nuoviDati.robotPF = nuoviDati.robotPFMax || 50;
+    } else {
+        nuoviDati.puntiFeritaReali = nuoviDati.puntiFeritaRealiMax || 5;
+    }
+    nuoviDati.woundTimer = 0;
+    nuoviDati.woundTreated = false;
+    nuoviDati.medicalHealPending = false;
+    delete nuoviDati.causaMorte;
+    delete nuoviDati.giornoMorte;
+    delete nuoviDati.giorniSopravvissuto;
+    delete nuoviDati.oraMorteGioco;
+
+    try {
+        const res = await fetch(window.apiUrl(`/api/personaggi/${id}`), {
+            method: 'PUT',
+            headers: window.buildAuthHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify({ data: JSON.stringify(nuoviDati), status: 'vivo', campoBaseId: campoScelto.id })
+        });
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error(err.error || 'Errore del server durante la resurrezione');
+        }
+    } catch (e) {
+        alert('Errore durante la resurrezione: ' + e.message);
+        return;
+    }
+
+    if (typeof window.mostraNotificaInAlto === 'function') {
+        window.mostraNotificaInAlto(`⚡ Il Master ha resuscitato ${nome} a "${campoScelto.nome}"!`, 'successo');
+    }
+    if (typeof window.renderCimitero === 'function') window.renderCimitero();
+    if (typeof window.caricaPartyMaster === 'function') await window.caricaPartyMaster();
+    if (typeof window.renderCharacterList === 'function') window.renderCharacterList();
+    if (typeof window.aggiornaInterfaccia === 'function') window.aggiornaInterfaccia();
+};
 
 window.eliminaDefinitivamenteCaduto = eliminaDefinitivamenteCaduto;
 window.toggleCimitero = toggleCimitero;
