@@ -1077,45 +1077,92 @@ function initArtificeriaBuilder(p) {
     }
 }
 
-function modificaArtificeriaGenerale(delta) {
+const LIVELLI_CHIAVI = ['Medicina', 'AG', 'Balistica', 'Meccanica', 'Elettronica'];
+const COSTI_MEDICINA = [0, 4, 6, 9, 12, 15];
+
+function costiLivello(chiave) {
+    if (chiave === 'Medicina') return COSTI_MEDICINA;
+    return chiave === 'AG' ? ARTIFICERIA_AG_COST : ARTIFICERIA_SPEC_COST;
+}
+function sommaCosti(chiave, n) {
+    return costiLivello(chiave).slice(1, Math.max(0, n) + 1).reduce((a, b) => a + b, 0);
+}
+function nodoArtificeria(p, chiave) {
+    initArtificeriaBuilder(p);
+    return chiave === 'AG' ? p.artificeria.generale : p.artificeria.specializzazioni[chiave];
+}
+
+function calcolaLivelliConcessi(p) {
+    const out = { Medicina: 0, AG: 0, Balistica: 0, Meccanica: 0, Elettronica: 0 };
+    (p.perks || []).forEach(perk => {
+        const nome = typeof perk === 'string' ? perk : perk?.nome;
+        const dati = (window.findPerkData && window.findPerkData(nome)) || (typeof perk === 'object' ? perk : null);
+        Object.entries(dati?.livelli || {}).forEach(([k, n]) => { out[k] = Math.min(5, (out[k] || 0) + n); });
+    });
+    return out;
+}
+
+function soddisfaRequisitoPerk(p, req) {
+    return [].concat(req || []).every(r => {
+        const m = /^Medicina Livello (\d)$/.exec(r);
+        return m ? (p.livelloMedicina || 0) >= parseInt(m[1], 10) : window.hasPerk(p, r);
+    });
+}
+
+// silenzioso = allinea i dati senza toccare i punti (personaggi salvati prima di questa feature)
+function sincronizzaLivelliDaPerk(p = window.tempP, silenzioso = false) {
+    if (!p) return;
+    if (!p.rimborsoLivelli) p.rimborsoLivelli = {};
+    const concessi = calcolaLivelliConcessi(p);
+    LIVELLI_CHIAVI.forEach(chiave => {
+        const G = concessi[chiave] || 0;
+        let rimborso = 0;
+        if (chiave === 'Medicina') {
+            (p.perks || []).forEach(perk => {
+                const nome = typeof perk === 'string' ? perk : perk?.nome;
+                const m = /^Medicina Livello (\d)$/.exec(nome || '');
+                if (m && parseInt(m[1], 10) <= G) {
+                    rimborso += (typeof perk === 'object' && typeof perk.costo === 'number') ? perk.costo : COSTI_MEDICINA[parseInt(m[1], 10)];
+                }
+            });
+        } else {
+            const nodo = nodoArtificeria(p, chiave);
+            if (nodo.acq === undefined) nodo.acq = nodo.livello || 0;
+            nodo.livello = Math.max(nodo.acq, G);
+            rimborso = sommaCosti(chiave, Math.min(nodo.acq, G));
+        }
+        if (!silenzioso) p.puntiCreazione += rimborso - (p.rimborsoLivelli[chiave] || 0);
+        p.rimborsoLivelli[chiave] = rimborso;
+    });
+    if (typeof p.sincronizzaLivelloMedicina === 'function') p.sincronizzaLivelloMedicina(true);
+}
+
+function modificaLivelloArtificeria(chiave, delta) {
     const p = window.tempP;
     if (!p) return;
-    initArtificeriaBuilder(p);
-    const attuale = p.artificeria.generale.livello;
+    const nodo = nodoArtificeria(p, chiave);
+    const G = calcolaLivelliConcessi(p)[chiave] || 0;
+    if (nodo.acq === undefined) nodo.acq = nodo.livello || 0;
+    const attuale = Math.max(nodo.acq, G);
+    let nuovoAcq;
     if (delta > 0) {
-        const next = attuale + 1;
-        if (next > 5) return;
-        const costo = ARTIFICERIA_AG_COST[next];
-        if (p.puntiCreazione < costo) { alert('Punti insufficienti per aumentare Artificeria Generale.'); return; }
-        p.puntiCreazione -= costo;
-        p.artificeria.generale.livello = next;
-    } else if (attuale > 0) {
-        p.puntiCreazione += ARTIFICERIA_AG_COST[attuale];
-        p.artificeria.generale.livello = attuale - 1;
+        if (attuale >= 5) return;
+        if (p.puntiCreazione < costiLivello(chiave)[attuale + 1]) { alert('Punti insufficienti.'); return; }
+        nuovoAcq = attuale + 1;
+    } else {
+        if (attuale <= G) { alert('Questo livello è concesso da un perk: rimuovi il perk per ridurlo.'); return; }
+        nuovoAcq = attuale - 1;
     }
+    p.puntiCreazione += sommaCosti(chiave, nodo.acq) - sommaCosti(chiave, nuovoAcq); // movimento lordo
+    nodo.acq = nuovoAcq;
+    sincronizzaLivelliDaPerk(p); // il rimborso dei livelli ≤ G viene ricalcolato qui
     renderSetupStats();
     renderSetupArtificeria();
 }
 
-function modificaArtificeriaSpec(spec, delta) {
-    const p = window.tempP;
-    if (!p) return;
-    initArtificeriaBuilder(p);
-    const attuale = p.artificeria.specializzazioni[spec].livello;
-    if (delta > 0) {
-        const next = attuale + 1;
-        if (next > 5) return;
-        const costo = ARTIFICERIA_SPEC_COST[next];
-        if (p.puntiCreazione < costo) { alert(`Punti insufficienti per aumentare ${spec}.`); return; }
-        p.puntiCreazione -= costo;
-        p.artificeria.specializzazioni[spec].livello = next;
-    } else if (attuale > 0) {
-        p.puntiCreazione += ARTIFICERIA_SPEC_COST[attuale];
-        p.artificeria.specializzazioni[spec].livello = attuale - 1;
-    }
-    renderSetupStats();
-    renderSetupArtificeria();
-}
+window.sincronizzaLivelliDaPerk = sincronizzaLivelliDaPerk;
+window.calcolaLivelliConcessi = calcolaLivelliConcessi;
+window.soddisfaRequisitoPerk = soddisfaRequisitoPerk;
 
 function renderSetupArtificeria() {
     const container = document.getElementById('artificeria-setup-container');
@@ -1273,7 +1320,6 @@ function eseguiSmantellamentoRobot(leader, targetRobot, daCadavere) {
         window.magazzino.cadaveriRobot = Math.max(0, window.magazzino.cadaveriRobot - 1);
         if (typeof window.updateMagazzinoFields === 'function') window.updateMagazzinoFields({ cadaveriRobot: window.magazzino.cadaveriRobot });
         alert(`Cadavere robot smantellato: +${ricompensa} ingranaggi.`);
-        if (typeof window.applicaFolliaSbarazzoCadavere === 'function') window.applicaFolliaSbarazzoCadavere(leader);
     } else {
         const idx = window.party.indexOf(targetRobot);
         if (idx !== -1) window.party.splice(idx, 1);

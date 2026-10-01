@@ -1385,7 +1385,6 @@ async function passaTempoGlobale() {
             if (p.isRobot) magazzino.cadaveriRobot = (magazzino.cadaveriRobot || 0) + 1;
             else magazzino.cadaveriUmani = (magazzino.cadaveriUmani || 0) + 1;
             window.updateMagazzinoFields({ cadaveriRobot: magazzino.cadaveriRobot, cadaveriUmani: magazzino.cadaveriUmani });
-            applicaFolliaMortePersonaggio(p);
             party.splice(i, 1);
             if (typeof chiudiScheda === 'function') chiudiScheda();
         }else {
@@ -1433,7 +1432,6 @@ export function aggiornaInterfaccia() {
                   alert(`NOTIZIA ESALATA: ${p.nome} è deceduto per ${p.causaMorte}.`);
                 magazzino.cadaveriUmani = (magazzino.cadaveriUmani || 0) + 1;
                 window.updateMagazzinoFields({ cadaveriUmani: magazzino.cadaveriUmani });
-                applicaFolliaMortePersonaggio(p);
                 party.splice(i, 1);
                 try {
                     const modal = document.getElementById('modal-scheda');
@@ -1880,7 +1878,6 @@ window.rimuoviCadaverePersonaggio = function(idx) {
         ? `${p.nome} avvia una commemorazione prima di occuparsi del corpo.`
         : `${p.nome} si è sbarazzato di un cadavere dalla base.`;
     mostraNotificaInAlto(messaggio, 'successo');
-    applicaFolliaSbarazzoCadavere(p);
     aggiornaInterfaccia();
 };
 
@@ -2932,18 +2929,23 @@ function togglePerk(nomePerk, forceRemove = false) {
 
         if (rimossiAggiuntivi) alert('Alcuni perk dipendenti sono stati rimossi perché mancava il prerequisito.');
 
+        window.sincronizzaLivelliDaPerk(p);
+        if (p.puntiCreazione < 0) alert('Togliendo questo perk perdi anche i punti rimborsati per i livelli che ti dava, e li avevi già spesi. Libera punti prima di salvare.');
         renderSetupStats();
-        if(typeof p.sincronizzaLivelloMedicina === 'function') p.sincronizzaLivelloMedicina();
         renderSetupPerks();
-        
-        return; // INTERROMPE LA FUNZIONE QUI, evitando di sottrarre punti a fine script
+        return;// INTERROMPE LA FUNZIONE QUI, evitando di sottrarre punti a fine script
     }
 
     // ==========================================
     // 2. GESTIONE AGGIUNTA PERK
     // ==========================================
-    if (perkDati.requires && !hasPerk(p, perkDati.requires)) {
-        alert(`Devi scegliere prima ${perkDati.requires} per poter prendere ${perkDati.nome}.`);
+    if (perkDati.requires && !window.soddisfaRequisitoPerk(p, perkDati.requires)) {
+        alert(`Devi scegliere prima ${[].concat(perkDati.requires).join(', ')} per poter prendere ${perkDati.nome}.`);
+        return;
+    }
+    const mLiv = /^Medicina Livello (\d)$/.exec(perkDati.nome);
+    if (mLiv && parseInt(mLiv[1], 10) <= (window.calcolaLivelliConcessi(p).Medicina || 0)) {
+        alert(`Il livello ${mLiv[1]} di Medicina ti è già concesso da un perk.`);
         return;
     }
     if (perkDati.nome === 'Arti marziali') {
@@ -3085,8 +3087,8 @@ function togglePerk(nomePerk, forceRemove = false) {
 
     // Viene eseguito SOLO in caso di aggiunta Perk avvenuta con successo
     p.puntiCreazione -= perkDati.costo;
+    window.sincronizzaLivelliDaPerk(p);
     renderSetupStats();
-    renderSetupPerks();
 }
 
 function renderInventarioHtml(p) {
