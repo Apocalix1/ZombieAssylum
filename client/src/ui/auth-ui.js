@@ -5,44 +5,12 @@ import { getPendingDeadIds,apiUrl, buildAuthHeaders,avviaSincronizzazioneComplet
 
 async function caricaPartyMaster() {
     try {
-        const campoId = window.getCampoBaseId ? window.getCampoBaseId() : 1;
-        const response = await fetch(apiUrl(`/api/party?campoBaseId=${campoId}`), {
-            headers: buildAuthHeaders()
-        });
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const data = await response.json();
-        const partyData = data.party || [];
-
-        // Svuota il party corrente
-        party.length = 0;
-
+        await syncPartyFromServer(); // merge sulle istanze esistenti: onComplete sopravvive
         const deadIds = getPendingDeadIds();
-
-        partyData.forEach(pData => {
-            // Salta i personaggi che sono in attesa di morte
-            if (deadIds.includes(pData.id)) return;
-
-            let stats = {};
-            if (pData.data && typeof pData.data === 'object') {
-                stats = pData.data;
-            } else {
-                stats = pData;
-            }
-
-            const nome = stats.nome || pData.nome || 'Sconosciuto';
-            const giornoInizio = stats.giornoInizio || 0;
-            const personaggio = new Personaggio(nome, giornoInizio);
-
-            Object.assign(personaggio, stats);
-            personaggio.id = pData.id;
-            personaggio.user_id = pData.user_id;
-            personaggio.ownerUsername = pData.owner_username || null;
-
-            party.push(personaggio);
-        });
-
+        for (let i = party.length - 1; i >= 0; i--) {
+            if (deadIds.includes(party[i].id)) party.splice(i, 1);
+        }
         aggiornaInterfaccia();
-        // Log only when party size changes to avoid spamming the console during polling
         window._lastPartyCount = window._lastPartyCount || null;
         if (window._lastPartyCount !== party.length) {
             console.log(`Party master caricato: ${party.length} personaggi`);

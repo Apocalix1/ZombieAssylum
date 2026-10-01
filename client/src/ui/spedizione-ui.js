@@ -540,6 +540,7 @@ function lootPiattiDeliziosi(tiro) {
 function terminaEsplorazione(p) {
     if (!p) return;
     try {
+        let bonus = (act.pericoloBonus ?? 0) + getExplorationBonus(p);
         const act = p.azioneCorrente || {};
         let bonus = act.pericoloBonus !== undefined ? act.pericoloBonus : getExplorationBonus(p);
         const mult = act.pericoloMultiplo || 1;
@@ -749,11 +750,12 @@ function apriSceltaEccedenza(idx) {
     modal.style.display = 'block';
 }
 
-function getExplorationBonus(p) {
-    const skill = p.getSkillModifierForCheck ? p.getSkillModifierForCheck('Sopravvivenza') : { modifier: 0, advantage: false, disadvantage: false };
+   function getExplorationBonus(p) {
+       let bonus = 0;
        if (p.hasPerk && p.hasPerk('Ricercatore')) bonus += 1;
-    return skill.modifier || 0;
-}
+       if (p.hasPerk && p.hasPerk('Raccattatore')) bonus += 2;
+       return bonus;
+   }
 
 function renderEccedenzaModal(idx) {
     const p = party[idx];

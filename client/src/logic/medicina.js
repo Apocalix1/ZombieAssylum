@@ -169,7 +169,7 @@ export function getRestMultiplier() {
     if (this.azioneCorrente && halfRestActions.includes(this.azioneCorrente.tipo)) multiplier *= 0.5;
     if (this.azioneCorrente && this.azioneCorrente.tipo === 'dormi') multiplier *= 1.5;
     if (this.hasPerk && this.hasPerk('Rigenerazione molto veloce')) multiplier += 0.25;
-     if (this._bendaAccellerataFinoA && (window.oreTotali || 0) < this._bendaAccellerataFinoA) ore *= 0.85;
+     if (this._bendaAccellerataFinoA && (window.oreTotali || 0) < this._bendaAccellerataFinoA) multiplier += 0.15;
     if (this._angeloCasaBonus) {
         multiplier += 0.1;
         this._angeloCasaBonus = false;

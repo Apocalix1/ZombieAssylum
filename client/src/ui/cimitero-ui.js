@@ -104,37 +104,6 @@ async function eliminaDefinitivamenteCaduto(id, nome) {
     }
 }
 
-function applicaFolliaMortePersonaggio(morto) {
-    party.forEach(p => {
-        if (p === morto || p.isRobot) return;
-        let tiro = rollDice(1, 8);
-        if (p.hasPerk && p.hasPerk('Nichilista')) tiro = Math.floor(tiro / 2);
-        if (tiro <= 0) return;
-        p.follia = Math.min(20, p.follia + tiro);
-        if (typeof p.aggiornaSintomiFollia === 'function') p.aggiornaSintomiFollia();
-        salvaPersonaggioCloud(p);
-    });
-    mostraNotificaInAlto(`💀 La morte di ${morto.nome} scuote il gruppo: Follia +1d8 per tutti i non-robot.`, 'pericolo');
-}
-window.applicaFolliaMortePersonaggio = applicaFolliaMortePersonaggio;
-
-function applicaFolliaSbarazzoCadavere(p) {
-    if (!p || p.isRobot) return;
-    if (p.hasPerk && p.hasPerk('Becchino')) {
-        avviaCerimoniaBecchino(p);
-        return;
-    }
-    let follia = rollDice(1, 4);
-    if (p.hasPerk && p.hasPerk('Nichilista')) follia = Math.floor(follia / 2);
-    if (follia > 0) {
-        p.follia = Math.min(20, p.follia + follia);
-        if (typeof p.aggiornaSintomiFollia === 'function') p.aggiornaSintomiFollia();
-        mostraNotificaInAlto(`${p.nome} si sbarazza di un cadavere: Follia +${follia}.`, 'avviso');
-    }
-    salvaPersonaggioCloud(p);
-}
-window.applicaFolliaSbarazzoCadavere = applicaFolliaSbarazzoCadavere;
-
 function avviaCerimoniaBecchino(becchino) {
     const altri = party.filter(p => p !== becchino);
     const idCerimonia = `cerimonia-${Date.now()}-${becchino.id}`;

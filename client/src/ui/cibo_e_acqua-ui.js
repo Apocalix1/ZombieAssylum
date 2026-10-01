@@ -37,26 +37,22 @@ function getWaterEfficiency(p) {
 }
 window.getWaterEfficiency = getWaterEfficiency;
 
-// Tempo di consumo: 10 minuti ogni 0.25 di cibo, 1 minuto ogni 0.2 di acqua.
-// Mangiare veloce dimezza il tempo (10% rischio indigestione), Mangiare lento lo raddoppia.
 function calcolaTempoConsumoCibo(p, qty) {
     let ore = (Math.max(0, qty) / 0.25) * (10 / 60);
-    if (p.hasPerk && p.hasPerk('Mangiare veloce')) ore *= 0.5;
-    if (p.hasPerk && p.hasPerk('Mangiare lento')) ore *= 2;
+    if (p.hasPerk && p.hasPerk('Mangiare velocemente')) ore *= 0.5;
+    if (p.hasPerk && p.hasPerk('Mangiare lentamente')) ore *= 2;
     return Math.max(1 / 60, ore); // minimo 1 minuto
 }
 window.calcolaTempoConsumoCibo = calcolaTempoConsumoCibo;
 
 function calcolaTempoConsumoAcqua(p, qty) {
-    let ore = (Math.max(0, qty) / 0.2) * (1 / 60);
-    if (p.hasPerk && p.hasPerk('Mangiare veloce')) ore *= 0.5;
-    if (p.hasPerk && p.hasPerk('Mangiare lento')) ore *= 2;
+    let ore = (Math.max(0, qty) / 0.15) * (1 / 60);
     return Math.max(1 / 60, ore);
 }
 window.calcolaTempoConsumoAcqua = calcolaTempoConsumoAcqua;
 
 function applicaChanceIndigestione(p) {
-    if (!(p.hasPerk && p.hasPerk('Mangiare veloce'))) return;
+    if (!(p.hasPerk && p.hasPerk('Mangiare velocemente'))) return;
     if (Math.random() < 0.10) {
         // Debuff attivo fino a fine giornata di gioco
         const oraAttuale = window.oreTotali || 0;
@@ -167,7 +163,6 @@ function eseguiNutrizioneDiretta(idx, dati) {
         else magazzino.piattiDeliziosi -= dati.qty;
     } else if (dati.tipo === 'avariato') {
         magazzino.ciboAvariato -= dati.qty;
-        applicaFollia(idx, 'cibo_avariato');
     } else {
         magazzino.cibo -= dati.qty;
     }
@@ -573,6 +568,17 @@ function completeConserva(p) {
     aggiornaInterfaccia();
 }
 
+function completaBevi(p, qty) {
+    applicaChanceIndigestione(p);
+    const guadagno = qty * getWaterEfficiency(p);
+    p.sete += guadagno;
+    if (p.sete > 4) { p.timers.buffSete = 6; p.sete = Math.min(10, p.sete); }
+    if (guadagno >= 0.25) p.timers.seteSoddisfatta = 2;
+    mostraNotificaInAlto(`${p.nome} ha bevuto: sete +${guadagno.toFixed(2)}.`, 'successo');
+    salvaPersonaggio(p);
+    aggiornaInterfaccia();
+}
+
 function bevi(idx, qty = null) {
     const p = party[idx];
     if (!p) return;
@@ -592,26 +598,13 @@ function bevi(idx, qty = null) {
     }
 
     const oreAzione = calcolaTempoConsumoAcqua(p, qty);
-    const nuovaAzione = {
+      const nuovaAzione = {
         tipo: 'bevi',
+        auto: isAuto ? 'sete' : undefined,
+        qty,
         oreTotali: oreAzione,
         oreRimanenti: oreAzione,
-        onComplete: () => {
-            applicaChanceIndigestione(p);
-            const eff = getWaterEfficiency(p);
-            const effectiveGain = qty * eff;
-            p.sete += effectiveGain;
-            if (p.sete > 4) {
-                p.timers.buffSete = 6;
-                p.sete = Math.min(10, p.sete);
-            }
-            if (effectiveGain >= 0.25) {
-                p.timers.seteSoddisfatta = 2;
-            }
-            mostraNotificaInAlto(`${p.nome} ha bevuto: sete +${effectiveGain.toFixed(2)}.`, 'successo');
-            salvaPersonaggio(p);
-            aggiornaInterfaccia();
-        }
+        onComplete: () => completaBevi(p, qty)
     };
     inserisciAzioneConPriorita(p, nuovaAzione, p.stadioSete >= 2);
     salvaPersonaggio(p);
@@ -667,9 +660,8 @@ function schedulaAzioneNutrizione(idx, dati, isAuto = false) {
         else if (usaMaestria) magazzino.piattiDeliziosiMaestria -= dati.qty;
         else magazzino.piattiDeliziosi -= dati.qty;
     }
-    else if (dati.tipo === 'avariato') {
+        else if (dati.tipo === 'avariato') {
         magazzino.ciboAvariato -= dati.qty;
-        applicaFollia(idx,'cibo_avariato');
     }
     else magazzino.cibo -= dati.qty;
 
@@ -975,6 +967,13 @@ window.lanciaCreaCiboAcqua = function(idx) {
     aggiornaInterfaccia();
 };
 
+window.AZIONI_RIPRISTINO = window.AZIONI_RIPRISTINO || {};
+Object.assign(window.AZIONI_RIPRISTINO, {
+    bevi: (p, a) => completaBevi(p, a.qty),
+    nutri: (p, a) => { applicaChanceIndigestione(p); eseguiNutrizione(p, a.dati); },
+    cucina: (p) => completeCucina(p),
+    conserva: (p) => completeConserva(p)
+});
 window.riduciRisorsaMaster = riduciRisorsaMaster;
 window.openRisorsaModal = openRisorsaModal;
 window.manualRisorsa = manualRisorsa;

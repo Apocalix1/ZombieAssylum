@@ -756,31 +756,13 @@ function ritiraDaMagazzino(idx, tipo, quantita) {
 /**
  * Sincronizza il magazzino dopo un trasferimento (usa la nuova route /api/magazzino/transfer)
  */
-async function syncMagazzinoAfterTransfer() {
-    try {
-        // Usa la nuova route per giocatori
-        const res = await fetch(apiUrl('/api/magazzino/transfer'), {
-            method: 'POST',
-            headers: buildAuthHeaders({ 'Content-Type': 'application/json' }),
-            body: JSON.stringify({
-                data: {
-                    materialiMedici: magazzino.materialiMedici,
-                    cibo: magazzino.cibo,
-                    acqua: magazzino.acqua,
-                    conserve: magazzino.conserve,
-                    piattiDeliziosi: magazzino.piattiDeliziosi,
-                    materialiAlchemici: magazzino.materialiAlchemici,
-                    ingranaggi: magazzino.ingranaggi
-                }
-            })
-        });
-        if (!res.ok) {
-            console.warn('Errore sincronizzazione magazzino:', await res.text());
-        }
-    } catch (e) {
-        console.warn('Errore di rete durante sincronizzazione magazzino:', e);
-    }
-}
+   async function syncMagazzinoAfterTransfer() {
+       await updateMagazzinoFields({
+           materialiMedici: magazzino.materialiMedici, cibo: magazzino.cibo, acqua: magazzino.acqua,
+           conserve: magazzino.conserve, piattiDeliziosi: magazzino.piattiDeliziosi,
+           materialiAlchemici: magazzino.materialiAlchemici, ingranaggi: magazzino.ingranaggi
+       });
+   }
 
 async function consumaMunizioneAttacco(personaggio, categoria) {
     // Mappa tra categoria arma e tipo di munizione

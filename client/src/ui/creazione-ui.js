@@ -1300,9 +1300,12 @@ function refundAndClearNonRobotPerks() {
 
     // Rimborsa Artificeria creata nel builder (vedi punto 5)
     if (p.artificeria) {
-        rimborso += (window.ARTIFICERIA_AG_COST || [0])[p.artificeria.generale.livello] || 0;
-        (window.ARTIFICERIA_SPECS || []).forEach(spec => {
-            rimborso += (window.ARTIFICERIA_SPEC_COST || [0])[p.artificeria.specializzazioni[spec].livello] || 0;
+            ['AG', ...(window.ARTIFICERIA_SPECS || [])].forEach(k => {
+            const nodo = k === 'AG' ? p.artificeria.generale : p.artificeria.specializzazioni[k];
+            const costi = k === 'AG' ? window.ARTIFICERIA_AG_COST : window.ARTIFICERIA_SPEC_COST;
+            const acq = nodo.acq ?? nodo.livello ?? 0;
+            rimborso += costi.slice(1, acq + 1).reduce((a, b) => a + b, 0) - ((p.rimborsoLivelli || {})[k] || 0);
+            if (p.rimborsoLivelli) p.rimborsoLivelli[k] = 0;
         });
         p.artificeria = {
             generale: { livello: 0, pag: 0 },
@@ -1315,6 +1318,7 @@ function refundAndClearNonRobotPerks() {
     }
 
     p.puntiCreazione += rimborso;
+    window.sincronizzaLivelliDaPerk(p);
     if (rimborso > 0) {
         alert(`Diventando Robot sono stati rimossi perk/incantesimi/artificeria non compatibili. Ti sono stati restituiti ${rimborso} punti.`);
     }

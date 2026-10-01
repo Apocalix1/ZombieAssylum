@@ -2,6 +2,8 @@ const BOOK_SUBJECT_TITLES = {
     'Addestrare animali': [
         '1250 animali che puoi accarezzare',
         '1250 animali che non puoi accarezzare',
+        'Come ho addomesticato mia moglie',
+        'Come ho messo al guinzaglio tua madre',
         'Come ho cresciuto il mio uccello- Absol',
         'Sono stato 1 settimana con un Druido e questo mi ha insegnato- Ferruccio'
     ],
@@ -15,6 +17,7 @@ const BOOK_SUBJECT_TITLES = {
         'Come usare ogni tipi di crema al proprio meglio-Orzo Scagliaguzza',
         'Sentimi: la carne delle razze umanoidi sai che...-Dr Milo',
         'Ricette da tutte le isole volanti',
+        'Ho fatto sesso con tuo zio?',
         'Mestolo d\'oro'
     ],
     'Indagare': [
@@ -26,11 +29,13 @@ const BOOK_SUBJECT_TITLES = {
     'Incantesimi':[
         'Come imporre la propria essenza: corso allungato con basi',
         'Incantesimi e tecniche magiche meta',
+        'Come ho svestito tua nonna con una bacchetta',
         'Come aura farmarmare come Flagello (corso non indirizzato ad essere effetivamente bravi)',
         'Come svillupare la propria tecnica speciale',
     ],
     'Lingue':[
         'Lingue di Teverat e come averle in bocca',
+        'Le lingue che ho messo in tua zia',
         'Grammatica per bambini e Dragonidi',
         'Hia hia ah, ye ye ye (Come tradurre ogni stupidone)',
         'Perchè odiare queste lingue: Non hanno senso',
@@ -38,11 +43,13 @@ const BOOK_SUBJECT_TITLES = {
     'Giochi di carte': [
         'Corso allenamento per battere tua nonna a carte 2/5',
         'Non è azzardo, è strategia da vero Baro',
+        'Come ho vinto tua sorella a carte',
         'Tecniche vincenti dei giochi più comuni',
         'I giochi più bizzarri di Teverat'
     ],
     'Inganno': [
         'Come nascondere ai tuoi la tua sessualità',
+        'Ragazzi non sono performativo',
         'Manipolazione, 10 trucchi da Alpha',
         'Psicologia Oscura, i trucchi da sapere fin da bambino',
         'Come convincere chiunque a farti venderti l\'anima di qualcuno a metà prezzo-Nudar Chylligun'
@@ -50,11 +57,12 @@ const BOOK_SUBJECT_TITLES = {
     'Storia': [
         'Top 10 guerre (esclusa quelle delle città) (WacthmojoTeverat)',
         'Cuore dacciaio, tutti i riferimenti storici',
+        'La storia di come mi sono fatto tuo padre',
         'Storia della casata famigliare Papoulus, una retrospezione di 400 anni',
         '100 razze e perchè odiarle'
     ],
     'Strumenti da scasso': [
-        'Non solo balcani, adesso anche tu sei un pericolo',
+        'Secreto su come i balcani riescono entrare ovunque',
         'Voglio entrare in casa di qualcuno',
         'Come sblocco il lucchetto se non ho la chiave?',
         'Scassinare non è da ladri'
@@ -108,7 +116,7 @@ const BOOK_SUBJECT_TITLES = {
         'E\' morto con o senza cappello?',
         'Pene e vagina, come scegliere',
         'Primo succhiotto',
-        'Infermieristica',
+        'Malattie venerie derivate da Orzo Scagliaguzza',
         'Come capire se si ha perso la vista',
         'Cosa hanno di sbagliato i bambini',
     ]
@@ -988,7 +996,7 @@ function syncDocumentiDalServer() {
 }
 
 function caricaDocumentiArchiviati() {
-    return fetch(apiUrl('/api/documenti?personaggioId=0'), {
+    return fetch(apiUrl(`/api/documenti?personaggioId=0&campoBaseId=${window.getCampoBaseId ? window.getCampoBaseId() : 1}`), {
         headers: buildAuthHeaders()
     })
         .then(r => {

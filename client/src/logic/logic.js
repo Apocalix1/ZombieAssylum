@@ -763,6 +763,7 @@ export class Personaggio {
         if (!this.inventario.oggettiMagiciPersonali) this.inventario.oggettiMagiciPersonali = [];
         if (this.zainoEquipaggiato === undefined) this.zainoEquipaggiato = null;
     }
+    
 
     aggiornaStatoDiabete() {
         const haTipoI = this.hasPerk('Diabete di Tipo I');
@@ -1186,76 +1187,6 @@ export class Personaggio {
     this.biocarburanteDeficit = false;
     return true;
 }
-
-        castSpell(level, target = null) {
-        const check = this.canCastSpell(level);
-        if (!check.allowed) {
-            return {success: false, message: check.reason};
-        }
-
-        const cost = check.cost;
-        let message = '';
-        let stadiPersi = 0;
-
-        // 1. Applica il consumo mana (anche sotto zero, entro il limite -LM)
-        const manaAfter = this.manaAttuale - cost;
-        const negativo = manaAfter < 0 ? Math.min(-manaAfter, this.livelloMagia) : 0;
-        this.manaAttuale = Math.max(-this.livelloMagia, manaAfter);
-
-        // 2. Sovraccarico Vitale: ogni punto mana speso sotto lo 0 riduce i PF Fortuna massimi di 2.
-        //    Se i PF Fortuna si esauriscono, si perde 1 stadio di ferita ogni 3 punti spesi sotto zero.
-        if (negativo > 0) {
-            const riduzioneMax = negativo * 2;
-            // Applichiamo la riduzione ma tracciamo quanto è stato tolto
-            const realeRidotto = Math.min(this.puntiFortunaMax, riduzioneMax);
-            this.puntiFortunaMax = Math.max(0, this.puntiFortunaMax - realeRidotto);
-            this._sovraccaricoFortunaLost = (this._sovraccaricoFortunaLost || 0) + realeRidotto;
-            this.puntiFortuna = Math.min(this.puntiFortuna, this.puntiFortunaMax);
-            message += `Sovraccarico Vitale: -${realeRidotto} PF Fortuna massimi.`;
-            if (this.puntiFortuna <= 0) {
-                stadiPersi = Math.floor(negativo / 3);
-                if (stadiPersi > 0) {
-                    this.puntiFeritaReali = Math.max(0, this.puntiFeritaReali - stadiPersi);
-                    message += ` PF Fortuna esauriti: -${stadiPersi} stadio/i di ferita.`;
-                }
-            }
-        }
-
-        // 3. Esaurimento Magico: ha raggiunto il limite negativo massimo di mana
-        if (this.manaAttuale <= -this.livelloMagia) {
-            this._magicExhausted = true;
-            this.faticaBase = Math.min(6, this.faticaBase + 2);
-            message += ' Esaurimento magico: +2 fatica, incantesimi bloccati fino al prossimo riposo lungo.';
-            if (typeof window.mostraNotificaInAlto === 'function') {
-                window.mostraNotificaInAlto(`${this.nome} è esausto magicamente! +2 fatica, incantesimi bloccati.`, 'pericolo');
-            }
-        }
-
-        // 4. Affaticamento Arcano (>50% della mana massima spesa in 1 minuto)
-        this.checkArcaneFatigue(cost);
-
-        // 5. Effetto su bersaglio, se applicabile (gestione danni resta a carico del combattimento)
-        if (target && typeof target.applyDamage === 'function') {
-            const damage = cost * 2 + this.getCastingModifier();
-            target.applyDamage(damage);
-            message += ` Inflitto ${damage} danni a ${target.nome}.`;
-        }
-
-        message = `Consumati ${cost} mana. ` + message;
-        if (this._arcaneFatigueApplied) message += ' (Affaticato arcano)';
-        if (this._magicExhausted) message += ' (Esaurito magicamente)';
-
-        this.incantesimiUltimoLancio = this.incantesimiUltimoLancio || {};
-        if (this._nextCastSpellName) {
-            this.incantesimiUltimoLancio[this._nextCastSpellName] = window.oreTotali || 0;
-        }
-
-        if (typeof window.aggiornaInterfaccia === 'function') {
-            window.aggiornaInterfaccia();
-        }
-
-        return {success: true, manaSpent: cost, stadiPersi, message};
-    }
 
     castSpell(level, target = null) {
         const check = this.canCastSpell(level);
@@ -1878,8 +1809,13 @@ export class Personaggio {
                     motivi.push("Anziana Carismatica (+2)");
                 }
                 if (haPerk("Muto")){
-                    valoriBase-=2;
+                    valoriBase -=2;
                     motivi.push("Muto (suka non parli) (-2)");
+                }
+
+                if (haPerk("Genitore modello")) {
+                    valoreBase += 1;
+                    motivi.push("Genitore modello (+1)");
                 }
             }
             if (statNome === "Saggezza") {
@@ -1899,34 +1835,6 @@ export class Personaggio {
                 if(haPerk("Obeso")) {
                     valoreBase -= 2;
                     motivi.push("Obeso (-2)");
-                }
-            }
-            if (statNome === "Carisma") {
-                if (haPerk("Bel viso")) {
-                    valoreBase += 1;
-                    motivi.push("Bel viso (+1)");
-                }
-                if (haAnzianaVariante("Anziana_Bilanciata")) {
-                    valoreBase += 1;
-                    motivi.push("Anziana Saggia (+1)");
-                }
-                if (haAnzianaVariante("Anziana_Carisma")) {
-                    valoreBase += 2;
-                    motivi.push("Anziana Carismatica (+2)");
-                }
-                if (haPerk("Genitore modello")) {
-                    valoreBase += 1;
-                    motivi.push("Genitore modello (+1)");
-                }
-            }
-            if (statNome === "Saggezza") {
-                if (haAnzianaVariante("Anziana_Bilanciata")) {
-                    valoreBase += 1;
-                    motivi.push("Anziana Saggia (+1)");
-                }
-                if (haAnzianaVariante("Anziana_Saggezza")) {
-                    valoreBase += 2;
-                    motivi.push("Anziana Venerabile (+2)");
                 }
             }
             if (statNome === "Intelligenza") {
@@ -2395,16 +2303,27 @@ export class Personaggio {
         };
     }
 
-    sincronizzaLivelloMedicina() {
-        let livello = 0;
+    sincronizzaLivelloMedicina(consentiRiduzione = false) {
+        const possedute = new Set();
+        let concessi = 0;
         (this.perks || []).forEach(perk => {
             const nome = typeof perk === 'string' ? perk : perk?.nome;
-            const match = /^Medicina Livello (\d)$/.exec(nome || '');
-            if (match) livello = Math.max(livello, parseInt(match[1], 10));
+            const m = /^Medicina Livello (\d)$/.exec(nome || '');
+            if (m) possedute.add(parseInt(m[1], 10));
+            const dati = (window.findPerkData && window.findPerkData(nome)) || (typeof perk === 'object' ? perk : null);
+            concessi += (dati?.livelli?.Medicina) || 0;
         });
-        if (this.hasPerk('Medico')) livello = Math.max(livello, 3);           // perk robotico
-        if (this.hasPerk('Scansione biomedica')) livello = Math.max(livello, 1);
-        if (livello > this.livelloMedicina) this.livelloMedicina = livello;
+        concessi = Math.min(5, concessi);
+        let livello = 0; // catena contigua: i livelli concessi valgono come posseduti
+        while (livello < 5 && (possedute.has(livello + 1) || livello + 1 <= concessi)) livello++;
+        if (consentiRiduzione) {
+            const soglie = [0, 8, 24, 40, 56, 72]; // non scendere sotto ciò che hanno dato i PM
+            let daPM = 0;
+            soglie.forEach((s, lv) => { if (lv > 0 && (this.pmMedicina || 0) >= s) daPM = lv; });
+            this.livelloMedicina = Math.max(livello, daPM);
+        } else if (livello > this.livelloMedicina) {
+            this.livelloMedicina = livello;
+        }
     }
 
     resetDailyStudy(currentHour) {
@@ -3323,8 +3242,12 @@ export class Personaggio {
                 }
                         } else {
                 // FALLBACK: se manca onComplete, gestiamo i tipi di azione noti
-                const tipo = this.azioneCorrente.tipo;
-                if (tipo === 'esplora') {
+                                const tipo = this.azioneCorrente.tipo;
+                const ripristino = window.AZIONI_RIPRISTINO && window.AZIONI_RIPRISTINO[tipo];
+                if (ripristino) {
+                    try { ripristino(this, this.azioneCorrente); }
+                    catch (e) { console.warn(`Ripristino azione ${tipo} fallito:`, e); }
+                } else if (tipo === 'esplora') {
                     if (typeof window.terminaEsplorazione === 'function') {
                         window.terminaEsplorazione(this);
                     } else {
