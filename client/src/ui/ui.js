@@ -345,8 +345,13 @@ if (document.readyState === 'loading') {
 } else {
     initUI();
 }
-caricaProposte();
-renderProposte();
+window._proposte = window._proposte || [];
+if (!window._propostePolling) {
+    window._propostePolling = setInterval(() => {
+        const u = getCurrentUser();
+        if (u && u.token && u.role !== 'ospite') sincronizzaProposteDalServer();
+    }, 3000);
+}
 window.passaTempoGlobale = window.passaTempoGlobale || (typeof passaTempoGlobale === 'function' ? passaTempoGlobale : undefined);
 
 let oreTotali = 0;
@@ -398,6 +403,133 @@ function mostraCongegniBase() {
 }
 
 import { masterInviaDocumento, masterApplicaStato } from '../logic/master_action.js';
+
+
+function rimborsaAzione(az, p) {
+    const campi = {};
+    const aggiungi = (k, q) => { if (q > 0) { magazzino[k] = (magazzino[k] || 0) + q; campi[k] = magazzino[k]; } };
+
+    switch (az.tipo) {
+        case 'alchimia':
+        case 'conserva':
+            aggiungi('materialiAlchemici', az.costoMateriali || 0); break;
+        case 'artificeria':
+            aggiungi('ingranaggi', az.costoIngranaggi || 0);
+            if (az.dettagliExtra && az.dettagliExtra.tipo === 'estrazione_robot') {
+                aggiungi('ingranaggi', az.dettagliExtra.qta * 2);
+                const src = party.find(q => q.id === az.dettagliExtra.sorgenteId);
+                if (src) { src.batteryHours = Math.min(src.batteryHoursMax, (src.batteryHours || 0) + az.dettagliExtra.qta); salvaPersonaggioCloud(src); }
+            }
+            break;
+        case 'cucina':
+            aggiungi('cibo', az.costoCibo || 0); aggiungi('acqua', az.costoAcqua || 0); break;
+        case 'bevi':
+            aggiungi('acqua', az.qty || 0); break;
+        case 'nutri': {
+            const d = az.dati; if (!d) break;
+            const q = d.qty || 1;
+            if (d.tipo === 'delizioso') aggiungi(d.potenziato ? 'piattiDeliziosiPotenziati' : (d.daMaestria ? 'piattiDeliziosiMaestria' : 'piattiDeliziosi'), q);
+            else if (d.tipo === 'avariato') aggiungi('ciboAvariato', q);
+            else aggiungi('cibo', q);
+            break;
+        }
+        case 'cuoco_miserabile': aggiungi('ciboAvariato', 15); break;
+        case 'alchimista_disperato': aggiungi('ciboAvariato', 10); break;
+        case 'igienizza':
+            aggiungi('materialiAlchemici', Math.ceil(((az.pezziBase || 0) + (az.pezziAvanzati || 0)) / 3)); break;
+        case 'ricarica_robot':
+            if (magazzino.stazioneRicarica) {
+                magazzino.stazioneRicarica.batterie += (az.oreTotali || 0) * 5;
+                magazzino.stazioneRicarica.robotIdOccupante = null;
+                campi.stazioneRicarica = magazzino.stazioneRicarica;
+            }
+            break;
+        case 'trascrivi_pergamena':
+            if (az.costoMana) p.manaAttuale = Math.min(p.manaMax, (p.manaAttuale || 0) + az.costoMana);
+            if (az.pergamenaVuota) {
+                const { luogo, ...perg } = az.pergamenaVuota;
+                p.initInventarioBase();
+                p.inventario.pergamenePersonali = p.inventario.pergamenePersonali || [];
+                p.inventario.pergamenePersonali.push(perg);
+            }
+            break;
+        // igienizza_magica, proiettile esplosivo: la carica / l'esplosivo consumati non tornano
+    }
+    if (Object.keys(campi).length && typeof window.updateMagazzinoFields === 'function') window.updateMagazzinoFields(campi);
+}
+
+function tutteLeAzioni(q) { return [q.azioneCorrente, ...(q.codaAzioni || [])].filter(Boolean); }
+
+// Per un'azione di assistenza, ritrova l'azione del capogruppo
+function trovaCapogruppo(assistente, az) {
+    for (const q of party) {
+        if (q === assistente) continue;
+        for (const a of tutteLeAzioni(q)) {
+            if (az.tipo === 'alchimia-assistenza' && a.tipo === 'alchimia' && a.collaboratoreNome === assistente.nome && a.nomeRicetta === az.nomeRicetta) return { p: q, az: a };
+            if (az.tipo === 'artificeria-assistenza' && (a.tipo === 'artificeria' || a.tipo === 'artificeria-smontaggio') && (a.collaboratoriIds || []).includes(assistente.id) && a.ricettaNome === az.ricettaNome) return { p: q, az: a };
+        }
+    }
+    return null;
+}
+
+// Azioni di assistenza legate a un'azione capogruppo
+function trovaAssistenti(capo, azCapo) {
+    const out = [];
+    party.forEach(q => {
+        if (q === capo) return;
+        tutteLeAzioni(q).forEach(a => {
+            if (azCapo.tipo === 'alchimia' && a.tipo === 'alchimia-assistenza' && q.nome === azCapo.collaboratoreNome && a.nomeRicetta === azCapo.nomeRicetta) out.push({ p: q, az: a });
+            if ((azCapo.tipo === 'artificeria' || azCapo.tipo === 'artificeria-smontaggio') && a.tipo === 'artificeria-assistenza' && (azCapo.collaboratoriIds || []).includes(q.id) && a.ricettaNome === azCapo.ricettaNome) out.push({ p: q, az: a });
+        });
+    });
+    return out;
+}
+
+function rimuoviAzioneDaPg(q, a) {
+    if (q.azioneCorrente === a) q.azioneCorrente = (q.codaAzioni || []).shift() || null;
+    else q.codaAzioni = (q.codaAzioni || []).filter(x => x !== a);
+}
+
+window.annullaAzione = async function(idx, posizione) {
+    const p = party[idx];
+    const user = getCurrentUser();
+    const isMaster = user && user.role === 'master';
+    if (!p || !user || !(isMaster || p.user_id === user.id)) return;
+
+    const haCorrente = !!p.azioneCorrente;
+    const az = haCorrente ? (posizione === 0 ? p.azioneCorrente : (p.codaAzioni || [])[posizione - 1])
+                          : (p.codaAzioni || [])[posizione];
+    if (!az) return;
+    if (az.tipo === 'esplora') return alert("Un'esplorazione si interrompe con il ritiro, non da qui.");
+
+    // Se è un'assistenza, si annulla tutto il lavoro di gruppo partendo dal capogruppo
+    let capo = p, azCapo = az;
+    if (az.tipo === 'alchimia-assistenza' || az.tipo === 'artificeria-assistenza') {
+        const trovato = trovaCapogruppo(p, az);
+        if (trovato) { capo = trovato.p; azCapo = trovato.az; }
+    }
+    const assistenti = trovaAssistenti(capo, azCapo);
+    const coinvolti = [{ p: capo, az: azCapo }, ...assistenti];
+
+    // Un giocatore può toccare solo i propri personaggi
+    if (!isMaster && coinvolti.some(c => c.p.user_id !== user.id)) {
+        return alert('Questa azione coinvolge personaggi di altri giocatori: chiedi al Master di annullarla.');
+    }
+
+    const iniziata = capo.azioneCorrente === azCapo && azCapo.oreRimanenti < azCapo.oreTotali;
+    const rimborsa = isMaster || !iniziata;
+    const nomi = coinvolti.length > 1 ? ` (coinvolge anche ${coinvolti.slice(1).map(c => c.p.nome).join(', ')})` : '';
+    const avviso = rimborsa ? 'Le risorse impegnate verranno restituite.' : 'Era già in corso: le risorse impegnate andranno perse.';
+    if (!confirm(`Annullare "${azCapo.tipo.toUpperCase()}" di ${capo.nome}${nomi}?\n${avviso}`)) return;
+
+    if (rimborsa) rimborsaAzione(azCapo, capo);
+    coinvolti.forEach(c => rimuoviAzioneDaPg(c.p, c.az));
+
+    for (const c of coinvolti) await salvaPersonaggioCloud(c.p);
+    mostraNotificaInAlto(`Azione di ${capo.nome} annullata.`, 'avviso');
+    if (document.getElementById('modal-riorganizza')?.style.display === 'block') renderRiorganizzaModal(idx);
+    aggiornaInterfaccia();
+};
 
 window.apriStatiPersonaggio = function(idx) {
     const p = party[idx];
@@ -601,7 +733,7 @@ window.apriPannelloMaster = async function apriPannelloMaster() {
         <div style="margin-top:12px; display:flex; align-items:center; gap:10px;">
         <button class="btn-hero" onclick="masterAggiungiCadavereRobot()">🤖🪦 +1 Cadavere Robot (${magazzino.cadaveriRobot||0})</button>
 <button class="btn-hero" onclick="masterAggiungiCadavereUmano()">💀 +1 Cadavere (${magazzino.cadaveriUmani||0})</button>
-</div>apriPanne
+</div>
          <div style="margin-top:20px; border-top:1px solid #333; padding-top:10px;">
             <h3 style="color:#f1c40f;">📋 Log Transazioni Magazzino</h3>
             <div id="master-magazzino-log" style="max-height:200px; overflow-y:auto; background:#111; padding:8px; border:1px solid #333; font-size:0.85rem;"></div>
@@ -702,19 +834,22 @@ window.apriRiorganizzaAzioni = function(idx) {
 function renderRiorganizzaModal(idx) {
     const p = party[idx];
     const modal = document.getElementById('modal-riorganizza');
+    if (!p || !modal) return;
     const azioni = [];
     if (p.azioneCorrente) azioni.push({ ...p.azioneCorrente, corrente: true });
     (p.codaAzioni || []).forEach(a => azioni.push(a));
 
     let html = `<div class="modal-content" style="max-width:520px;">
-        <h2 style="color:#f1c40f;">🔀 Riorganizza Azioni — ${p.nome}</h2>
+        <h2 style="color:#f1c40f;">🔀 Azioni — ${p.nome}</h2>
         <div style="display:grid; gap:8px; text-align:left; margin:12px 0;">`;
+    if (!azioni.length) html += `<div style="color:#888;">Nessuna azione programmata.</div>`;
     azioni.forEach((a, i) => {
         html += `<div style="display:flex; justify-content:space-between; align-items:center; background:#111; padding:8px; border:1px solid #333;">
-            <span>${i === 0 ? '▶️ ' : ''}${a.tipo.toUpperCase()}${a.subject ? ' ' + a.subject : ''} (${a.oreRimanenti}h)${a.corrente ? ' <small style="color:#888;">(in corso)</small>' : ''}</span>
+            <span>${i === 0 && a.corrente ? '▶️ ' : ''}${a.tipo.toUpperCase()}${a.subject ? ' ' + a.subject : ''}${a.ricettaNome ? ' ' + a.ricettaNome : ''}${a.nomeRicetta ? ' ' + a.nomeRicetta : ''} (${a.oreRimanenti}h)${a.corrente ? ' <small style="color:#888;">(in corso)</small>' : ''}</span>
             <div style="display:flex; gap:4px;">
                 <button ${i <= 1 ? 'disabled' : ''} onclick="window.spostaAzione(${idx}, ${i}, -1)">▲</button>
                 <button ${i === 0 || i === azioni.length - 1 ? 'disabled' : ''} onclick="window.spostaAzione(${idx}, ${i}, 1)">▼</button>
+                <button ${a.tipo === 'esplora' ? 'disabled' : ''} title="Annulla azione" style="background:#c0392b !important; color:#fff !important;" onclick="window.annullaAzione(${idx}, ${i})">✕</button>
             </div>
         </div>`;
     });
@@ -952,187 +1087,139 @@ function getPerkCount(personaggio, nomePerk) {
 // ========================= SISTEMA PROPOSTE =========================
 window._proposte = window._proposte || [];
 
-function salvaProposte() {
+async function sincronizzaProposteDalServer() {
     try {
-        localStorage.setItem('proposte', JSON.stringify(window._proposte));
-    } catch(e) {}
+        const res = await fetch(apiUrl('/api/proposte'), { headers: buildAuthHeaders() });
+        if (!res.ok) return;
+        const data = await res.json();
+        window._proposte = (data.proposte || []).map(r => ({
+            id: r.id, mittenteId: r.mittente_id, destinatarioId: r.destinatario_id, tipo: r.tipo,
+            dati: (() => { try { return JSON.parse(r.dati || '{}'); } catch { return {}; } })(),
+            stato: r.stato, scade_il: new Date(r.scade_il).getTime()
+        }));
+        renderProposte();
+        const u = getCurrentUser();
+        if (u && u.role === 'master') await eseguiProposteAccettate();
+    } catch (e) { /* offline: tiene la cache */ }
 }
-
-function caricaProposte() {
-    try {
-        const data = localStorage.getItem('proposte');
-        if (data) {
-            const parsed = JSON.parse(data);
-            const now = Date.now();
-            window._proposte = parsed.filter(p => p.scade_il > now && p.stato === 'in_attesa');
-        } else {
-            window._proposte = [];
-        }
-    } catch(e) {
-        window._proposte = [];
-    }
-}
+window.sincronizzaProposteDalServer = sincronizzaProposteDalServer;
 
 function inviaProposta(mittenteId, destinatarioId, tipo, dati) {
     const mittente = party.find(p => p.id === mittenteId);
     const destinatario = party.find(p => p.id === destinatarioId);
-    if (!mittente || !destinatario) {
-        console.error('Personaggio mittente o destinatario non trovato.');
-        return null;
-    }
+    if (!mittente || !destinatario) { console.error('Mittente/destinatario non trovato.'); return null; }
 
     const user = getCurrentUser();
-    const stessoGiocatore = (mittente.user_id === destinatario.user_id) && (mittente.user_id === user?.id);
     const isMaster = user && user.role === 'master';
-
+    const stessoGiocatore = mittente.user_id === destinatario.user_id && mittente.user_id === user?.id;
     const id = `prop-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
-    const scade_il = Date.now() + 120000;
+    const proposta = { id, mittenteId, destinatarioId, tipo, dati, stato: 'in_attesa', scade_il: Date.now() + 120000 };
 
-    const proposta = {
-        id,
-        mittenteId,
-        destinatarioId,
-        tipo,
-        dati,
-        stato: 'in_attesa',
-        scade_il
-    };
-
-    window._proposte.push(proposta);
-    salvaProposte();
-
-    if (stessoGiocatore || isMaster) {
+    if (stessoGiocatore || isMaster) {            // auto-accettata, mai sul server
+        proposta._locale = true;
+        window._proposte.push(proposta);
         accettaProposta(id);
-    } else {
-        const msg = `📨 Proposta da ${mittente.nome}: ${tipo}`;
-        mostraNotificaInAlto(msg, 'info');
-        renderProposte();
-        setTimeout(() => {
-            const prop = window._proposte.find(p => p.id === id);
-            if (prop && prop.stato === 'in_attesa') {
-                prop.stato = 'scaduta';
-                salvaProposte();
-                mostraNotificaInAlto(`⏰ Proposta "${tipo}" da ${mittente.nome} scaduta.`, 'avviso');
-                renderProposte();
-                setTimeout(() => {
-                    const idx = window._proposte.indexOf(prop);
-                    if (idx > -1) window._proposte.splice(idx, 1);
-                    salvaProposte();
-                }, 5000);
-            }
-        }, 120000);
+        return id;
     }
-
+    window._proposte.push(proposta);
+    fetch(apiUrl('/api/proposte'), {
+        method: 'POST',
+        headers: buildAuthHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ id, mittenteId, destinatarioId, tipo, dati })
+    }).catch(e => console.warn('Invio proposta fallito:', e));
+    mostraNotificaInAlto(`📨 Proposta da ${mittente.nome}: ${tipo}`, 'info');
+    renderProposte();
     return id;
 }
 
-function accettaProposta(id) {
-    const prop = window._proposte.find(p => p.id === id);
-    if (!prop) return;
-    if (prop.stato !== 'in_attesa') {
-        mostraNotificaInAlto('Proposta già gestita.', 'avviso');
-        return;
-    }
-
-    prop.stato = 'accettata';
-    salvaProposte();
-    setTimeout(() => {
-        const idx = window._proposte.indexOf(prop);
-        if (idx > -1) window._proposte.splice(idx, 1);
-        salvaProposte();
-        renderProposte();
-    }, 1000);
-
-    eseguiAzioneProposta(prop);
+async function rispondiProposta(prop, risposta) {
+    if (prop._locale) return true;
+    try {
+        const res = await fetch(apiUrl(`/api/proposte/${encodeURIComponent(prop.id)}/rispondi`), {
+            method: 'POST',
+            headers: buildAuthHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify({ risposta })
+        });
+        if (!res.ok) {
+            mostraNotificaInAlto('Proposta già gestita o scaduta.', 'avviso');
+            await sincronizzaProposteDalServer();
+            return false;
+        }
+        return true;
+    } catch (e) { return false; }
 }
 
-function rifiutaProposta(id) {
+let _eseguendoProposte = false;
+async function claimProposta(id) {
+    try {
+        const r = await fetch(apiUrl(`/api/proposte/${encodeURIComponent(id)}/esegui`), { method: 'POST', headers: buildAuthHeaders() });
+        return r.ok;
+    } catch { return false; }
+}
+
+async function eseguiProposteAccettate() {
+    if (_eseguendoProposte) return;
+    _eseguendoProposte = true;
+    try {
+        const gruppiFatti = new Set();
+        for (const prop of window._proposte.filter(p => p.stato === 'accettata')) {
+            if (prop.tipo === 'artificeria-gruppo') {
+                const gid = prop.dati.groupId;
+                if (gruppiFatti.has(gid)) continue;
+                const membri = window._proposte.filter(q => q.dati && q.dati.groupId === gid);
+                const attesi = (prop.dati.consensoIds || []).length;
+                if (membri.length !== attesi || !membri.every(q => q.stato === 'accettata')) continue;  // aspetta tutti
+                gruppiFatti.add(gid);
+                const esiti = await Promise.all(membri.map(m => claimProposta(m.id)));
+                if (esiti.every(Boolean)) eseguiAzioneProposta(prop);
+                continue;
+            }
+            if (await claimProposta(prop.id)) eseguiAzioneProposta(prop);
+        }
+        window._proposte = window._proposte.filter(p => p.stato === 'in_attesa');
+        renderProposte();
+    } finally { _eseguendoProposte = false; }
+}
+window.eseguiProposteAccettate = eseguiProposteAccettate;
+
+async function accettaProposta(id) {
     const prop = window._proposte.find(p => p.id === id);
-    if (!prop) return;
-    if (prop.stato !== 'in_attesa') {
-        mostraNotificaInAlto('Proposta già gestita.', 'avviso');
+    if (!prop || prop.stato !== 'in_attesa') return;
+    if (!(await rispondiProposta(prop, 'accetta'))) return;
+    prop.stato = 'accettata';
+    if (prop._locale) {
+        window._proposte = window._proposte.filter(p => p.id !== id);
+        renderProposte();
+        eseguiAzioneProposta(prop);
         return;
     }
+    renderProposte();
+    const u = getCurrentUser();
+    if (u && u.role === 'master') await eseguiProposteAccettate();
+    else mostraNotificaInAlto('Proposta accettata: la avvierà il Master.', 'successo');
+}
 
-    prop.stato = 'rifiutata';
+async function rifiutaProposta(id) {
+    const prop = window._proposte.find(p => p.id === id);
+    if (!prop || prop.stato !== 'in_attesa') return;
+    if (!(await rispondiProposta(prop, 'rifiuta'))) return;
     const mittente = party.find(p => p.id === prop.mittenteId);
-    mostraNotificaInAlto(`❌ Proposta rifiutata da ${mittente?.nome || 'sconosciuto'}.`, 'avviso');
-
-    if (prop.tipo === 'artificeria-gruppo' && prop.dati.groupId) {
-        const gruppo = window._artificeriaGruppiPendenti && window._artificeriaGruppiPendenti[prop.dati.groupId];
-        if (gruppo && !gruppo.rifiutato) {
-            gruppo.rifiutato = true;
-            mostraNotificaInAlto(`⚠️ Gruppo di artificeria annullato: un collaboratore ha rifiutato.`, 'pericolo');
-            delete window._artificeriaGruppiPendenti[prop.dati.groupId];
-        }
-    }
-
-    salvaProposte();
-    const idx = window._proposte.indexOf(prop);
-    if (idx > -1) window._proposte.splice(idx, 1);
-    salvaProposte();
+    mostraNotificaInAlto(`❌ Proposta rifiutata (${mittente?.nome || '?'}).`, 'avviso');
+    window._proposte = window._proposte.filter(p => p.id !== id);
     renderProposte();
 }
 
-function renderProposte() {
-    let container = document.getElementById('proposte-container');
-    if (!container) {
-        container = document.createElement('div');
-        container.id = 'proposte-container';
-        container.style.position = 'fixed';
-        container.style.bottom = '20px';
-        container.style.right = '20px';
-        container.style.width = '300px';
-        container.style.maxHeight = '300px';
-        container.style.overflowY = 'auto';
-        container.style.backgroundColor = '#1a1a2e';
-        container.style.border = '1px solid #444';
-        container.style.borderRadius = '8px';
-        container.style.padding = '10px';
-        container.style.zIndex = '9999';
-        container.style.boxShadow = '0 4px 12px rgba(0,0,0,0.6)';
-        container.style.display = 'none';
-        document.body.appendChild(container);
-    }
-
-    const proposteInAttesa = window._proposte.filter(p => p.stato === 'in_attesa');
-    if (proposteInAttesa.length === 0) {
-        container.style.display = 'none';
-        return;
-    }
-
-    container.style.display = 'block';
-    let html = `<div style="font-weight:bold; color:#f1c40f; margin-bottom:8px;">📨 Proposte in sospeso (${proposteInAttesa.length})</div>`;
-
-    proposteInAttesa.forEach(prop => {
-        const mittente = party.find(p => p.id === prop.mittenteId);
-        const destinatario = party.find(p => p.id === prop.destinatarioId);
-        const user = getCurrentUser();
-        const isDestinatario = (destinatario && destinatario.user_id === user?.id);
-        const isMaster = user && user.role === 'master';
-
-        let azioni = '';
-        if (isDestinatario || isMaster) {
-            azioni = `
-                <button onclick="accettaProposta('${prop.id}')" style="background:#27ae60; padding:4px 8px; border:none; border-radius:4px; color:white; cursor:pointer;">Accetta</button>
-                <button onclick="rifiutaProposta('${prop.id}')" style="background:#c0392b; padding:4px 8px; border:none; border-radius:4px; color:white; cursor:pointer;">Rifiuta</button>
-            `;
-        } else {
-            azioni = `<span style="color:#888;">In attesa di risposta...</span>`;
-        }
-
-        const tempoRimasto = Math.max(0, Math.round((prop.scade_il - Date.now()) / 1000));
-        html += `
-            <div style="background:#111; padding:8px; margin-bottom:6px; border-radius:4px; border-left:3px solid #f1c40f;">
-                <div><strong>${mittente?.nome || '?'}</strong> → <strong>${destinatario?.nome || '?'}</strong></div>
-                <div style="font-size:0.85rem; color:#ccc;">${prop.tipo} ${prop.dati?.nomeRicetta || ''} ${prop.dati?.ricettaId || ''}</div>
-                <div style="font-size:0.75rem; color:#888;">Scade tra ${tempoRimasto}s</div>
-                <div style="margin-top:4px; display:flex; gap:4px;">${azioni}</div>
-            </div>
-        `;
-    });
-
-    container.innerHTML = html;
+async function verificaProposteInSospeso() {
+    await sincronizzaProposteDalServer();
+    const pending = window._proposte.filter(p => (p.stato === 'in_attesa' || p.stato === 'accettata') && !p.eseguita);
+    if (!pending.length) return true;
+    const nomi = pending.map(p => {
+        const mitt = party.find(pp => pp.id === p.mittenteId);
+        const dest = party.find(pp => pp.id === p.destinatarioId);
+        return `${mitt?.nome || '?'} → ${dest?.nome || '?'} (${p.tipo})`;
+    }).join('\n');
+    alert(`⚠️ ${pending.length} proposte in sospeso:\n${nomi}\n\nAttendi che vengano gestite prima di avanzare il tempo.`);
+    return false;
 }
 
 function eseguiAzioneProposta(prop) {
@@ -1157,45 +1244,33 @@ function eseguiAzioneProposta(prop) {
             avviaCreazione_AlchimiaConCollaboratore(mittente, destinatario, prop.dati.nomeRicetta, prop.dati.grado, prop.dati.cdEffettiva);
             break;
 
-        case 'artificeria-gruppo': {
-            const groupId = prop.dati.groupId;
-            const gruppo = window._artificeriaGruppiPendenti && window._artificeriaGruppiPendenti[groupId];
-            if (!gruppo || gruppo.rifiutato) break;
-
-            gruppo.accettati.add(destinatario.id);
-            const tuttiAccettati = gruppo.collaboratoriIds.every(id => gruppo.accettati.has(id));
-
-            if (tuttiAccettati) {
-                const leaderP = party.find(p => p.id === gruppo.leaderId);
-                const collaboratoriIdxs = gruppo.collaboratoriIds
-                    .map(id => party.findIndex(p => p.id === id))
-                    .filter(i => i !== -1);
-                const ricetta = window.getArtificerRecipeById(gruppo.ricettaId);
-                if (leaderP && ricetta) {
-                    window.eseguiCreazioneArtificeria(
-                        leaderP, collaboratoriIdxs, ricetta,
-                        gruppo.costoIngranaggi, gruppo.isSmontaggio, gruppo.dettagliExtra, gruppo.costoBase
-                    );
-                }
-                delete window._artificeriaGruppiPendenti[groupId];
-            } else {
-                const mancanti = gruppo.collaboratoriIds.length - gruppo.accettati.size;
-                mostraNotificaInAlto(`${destinatario.nome} ha accettato. In attesa di altri ${mancanti} collaboratori...`, 'info');
+             case 'artificeria-gruppo': {
+            const d = prop.dati;
+            const leaderP = party.find(p => p.id === d.leaderId);
+            const base = window.getArtificerRecipeById(d.ricettaId);
+            if (!leaderP || !base) break;
+            const ricetta = Object.assign({}, base, d.timeOverride ? { time: d.timeOverride } : {});
+            if (d.robotTargetId) ricetta._robotTargetId = d.robotTargetId;
+            const idxs = (d.collaboratori || []).map(id => party.findIndex(p => p.id === id)).filter(i => i !== -1);
+            window.eseguiCreazioneArtificeria(leaderP, idxs, ricetta, d.costoIngranaggi, d.isSmontaggio, d.dettagliExtra, d.costoBase);
+            break;
+        }
+        case 'cerimonia-becchino': {
+            const az = [mittente.azioneCorrente, ...(mittente.codaAzioni || [])].find(a => a && a.idCerimonia === prop.dati.idCerimonia);
+            if (az) {
+                az.partecipanti = az.partecipanti || [];
+                if (!az.partecipanti.includes(destinatario.id)) az.partecipanti.push(destinatario.id);
+                salvaPersonaggioCloud(mittente);
+                mostraNotificaInAlto(`${destinatario.nome} parteciperà alla cerimonia.`, 'info');
             }
             break;
         }
-
         case 'intrattieni': {
             if (!destinatario.azioneCorrente) {
                 destinatario.azioneCorrente = {
-                    tipo: 'intrattieni', oreTotali: 2, oreRimanenti: 2,
-                    onComplete: () => {
-                        const riduzione = rollDice(1, 4);
-                        destinatario.follia = Math.max(0, destinatario.follia - riduzione);
-                        mostraNotificaInAlto(`${destinatario.nome} si è distratto: Follia -${riduzione}.`, 'successo');
-                        salvaPersonaggioCloud(destinatario);
-                        aggiornaInterfaccia();
-                    }
+                    tipo: 'intrattieni',
+                    oreTotali: 2,
+                    oreRimanenti: 2
                 };
                 salvaPersonaggioCloud(destinatario);
                 aggiornaInterfaccia();
@@ -1222,14 +1297,10 @@ function eseguiAzioneProposta(prop) {
             if (!destinatario.azioneCorrente) {
                 const modCar = mittente.getStatDettagliata('Carisma').mod;
                 destinatario.azioneCorrente = {
-                    tipo: 'intrattenuto_musica', oreTotali: 2, oreRimanenti: 2,
-                    onComplete: () => {
-                        const riduzioneRichiesta = Math.max(0, rollDice(1, 6) + modCar);
-                        const riduzione = destinatario.riduciFollia(riduzioneRichiesta, 'musicista');
-                        mostraNotificaInAlto(`${destinatario.nome} si distrae con la musica di ${mittente.nome}: Follia -${riduzione}.`, 'successo');
-                        salvaPersonaggioCloud(destinatario);
-                        aggiornaInterfaccia();
-                    }
+                    tipo: 'intrattenuto_musica',
+                    modCar: mittente.getStatDettagliata('Carisma').mod,
+                    oreTotali: 2,
+                    oreRimanenti: 2
                 };
                 salvaPersonaggioCloud(destinatario);
                 aggiornaInterfaccia();
@@ -1241,20 +1312,6 @@ function eseguiAzioneProposta(prop) {
             console.warn('Tipo di proposta non riconosciuto:', prop.tipo);
     }
     
-}
-
-function verificaProposteInSospeso() {
-    const pending = window._proposte.filter(p => p.stato === 'in_attesa');
-    if (pending.length > 0) {
-        const nomi = pending.map(p => {
-            const mitt = party.find(pp => pp.id === p.mittenteId);
-            const dest = party.find(pp => pp.id === p.destinatarioId);
-            return `${mitt?.nome || '?'} → ${dest?.nome || '?'} (${p.tipo})`;
-        }).join('\n');
-        alert(`⚠️ Ci sono ${pending.length} proposte in sospeso:\n${nomi}\n\nAttendi che vengano gestite prima di avanzare il tempo.`);
-        return false;
-    }
-    return true;
 }
 
 const MEDICINA_LIVELLI = [
@@ -1302,7 +1359,7 @@ async function passaTempoGlobale() {
         return;
     }
     console.log('[ATTENDI] ruolo utente:', user.role, '| proposte pendenti:', window._proposte.filter(p=>p.stato==='in_attesa').length);
-    if (!verificaProposteInSospeso()) {
+    if (!(await verificaProposteInSospeso())) {
         return;
     }
 
@@ -1311,12 +1368,9 @@ async function passaTempoGlobale() {
     if (isNaN(ore) || ore <= 0) return;
 
        const giornoPrecedente = Math.floor(oreTotali / 24);
-    const oreTotaliPrima = oreTotali;
     oreTotali += ore;
     window.oreTotali = oreTotali;
-    if (typeof window.updateMagazzinoFields === 'function') {
-        window.updateMagazzinoFields({ oreTotali });
-    }
+    window._tempoInCorso = Date.now() + 15000;
     const giornoAttuale = Math.floor(oreTotali / 24);
 
     // Frigorifero
@@ -1391,6 +1445,10 @@ async function passaTempoGlobale() {
             processAutomaticActions(p);
         }
     }
+        window.updateMagazzinoFields({
+        cibo: magazzino.cibo, ciboAvariato: magazzino.ciboAvariato, conserve: magazzino.conserve,
+        piattiDeliziosi: magazzino.piattiDeliziosi, acqua: magazzino.acqua, batterie: magazzino.batterie
+    });
     aggiornaInterfaccia();
 }
 
@@ -1414,29 +1472,28 @@ export function aggiornaInterfaccia() {
     window._isUpdatingUI = true;
     try {
         // Controllo morte immediato
-        party.forEach((p, i) => {
-                        if (p.puntiFeritaReali <= 0 && !p.isRobot) {
+        for (let i = party.length - 1; i >= 0; i--) {
+            const p = party[i];
+            if (p.puntiFeritaReali <= 0 && !p.isRobot) {
                 p.causaMorte = p.causaMorte || "emorragia";
                 const giornoAttuale = Math.floor(oreTotali / 24);
                 p.giorniSopravvissuto = giornoAttuale - (p.giornoInizio || 0);
                 p.giornoMorte = giornoAttuale;
                 p.oraMorteGioco = oreTotali;
-                
-                // Notifica server
+
                 fetch(apiUrl(`/api/personaggi/${p.id}`), {
                     method: 'PUT',
                     headers: buildAuthHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify({ data: JSON.stringify(p), status: 'morto' })
                 }).catch(err => console.warn('Errore salvataggio morte automatica:', err));
 
-                  alert(`NOTIZIA ESALATA: ${p.nome} è deceduto per ${p.causaMorte}.`);
+                alert(`NOTIZIA ESALATA: ${p.nome} è deceduto per ${p.causaMorte}.`);
                 magazzino.cadaveriUmani = (magazzino.cadaveriUmani || 0) + 1;
                 window.updateMagazzinoFields({ cadaveriUmani: magazzino.cadaveriUmani });
                 party.splice(i, 1);
                 try {
                     const modal = document.getElementById('modal-scheda');
                     if (modal && modal.style.display === 'block') {
-                        // Verifica se la scheda aperta è quella del morto
                         const h2 = modal.querySelector('h2');
                         if (h2 && h2.innerText.toLowerCase() === p.nome.toLowerCase()) {
                             chiudiScheda();
@@ -1445,11 +1502,11 @@ export function aggiornaInterfaccia() {
                 } catch (e) {}
                 if (typeof chiudiScheda === 'function') chiudiScheda();
             } else if (p.isRobot && p.robotPF <= 0) {
-                 // Logica robot distrutto se necessaria
+                // Logica robot distrutto se necessaria
             }
-        });
+        }
 
-        if (typeof window.oreTotali === 'number' && window.oreTotali > oreTotali) {
+        if (typeof window.oreTotali === 'number') {
             oreTotali = window.oreTotali;
         }
         const giornoAttuale = Math.floor(oreTotali / 24);
@@ -1689,8 +1746,9 @@ export function aggiornaInterfaccia() {
                     // --- Visualizzazione ospite: solo lettura ---
                     detailsHtml += `
                         <div style="text-align:center; color:#888; font-style:italic; padding:8px 0;">
-                            👁️ Visualizzazione in sola lettura – azioni non disponibili
+                        👁️ Visualizzazione in sola lettura – azioni non disponibili
                         </div>
+                        <button class="btn-big guest-allow" style="width:100%; background:#16a085;" onclick="apriInventario(${idx})">🎒 Inventario</button>
                     `;
                 }
             } else {
@@ -1729,13 +1787,9 @@ window.apriIntrattieniModal = function(idx) {
 
     // Il leader inizia subito la sua parte
     leader.azioneCorrente = {
-        tipo: 'intrattieni', oreTotali: 2, oreRimanenti: 2,
-        onComplete: () => {
-            const riduzione = leader.riduciFollia(rollDice(1, 4), 'intrattieni');
-            mostraNotificaInAlto(`${leader.nome} si è distratto: Follia -${riduzione}.`, 'successo');
-            salvaPersonaggioCloud(leader);
-            aggiornaInterfaccia();
-        }
+        tipo: 'intrattieni',
+        oreTotali: 2,
+        oreRimanenti: 2
     };
     salvaPersonaggioCloud(leader);
 
@@ -1755,13 +1809,7 @@ window.apriPreghieraFedele = function(idx) {
     p.azioneCorrente = {
         tipo: 'preghiera_fedele',
         oreTotali: 1,
-        oreRimanenti: 1,
-        onComplete: () => {
-            const riduzione = p.riduciFollia(rollDice(1, 4), 'preghiera_fedele');
-            mostraNotificaInAlto(`${p.nome} prega: Follia -${riduzione}.`, 'successo');
-            salvaPersonaggioCloud(p);
-            aggiornaInterfaccia();
-        }
+        oreRimanenti: 1
     };
     salvaPersonaggioCloud(p);
     mostraNotificaInAlto(`${p.nome} inizia a pregare (1h). Preghiere rimaste oggi: ${info.residue - 1}/3.`, 'info');
@@ -1868,24 +1916,18 @@ function renderAiutoModal() {
     html += '</div>';
     content.innerHTML = html;
 }
-
 window.rimuoviCadaverePersonaggio = function(idx) {
-    if (magazzino.cadaveriUmani <= 0) return;
     const p = party[idx];
+    if (!p || magazzino.cadaveriUmani <= 0) return;
     magazzino.cadaveriUmani -= 1;
     window.updateMagazzinoFields({ cadaveriUmani: magazzino.cadaveriUmani });
-    const messaggio = hasPerk(p, 'Becchino')
-        ? `${p.nome} avvia una commemorazione prima di occuparsi del corpo.`
-        : `${p.nome} si è sbarazzato di un cadavere dalla base.`;
-    mostraNotificaInAlto(messaggio, 'successo');
-    aggiornaInterfaccia();
-};
-
-window.rimuoviCadaverePersonaggio = function(idx) {
-    if (magazzino.cadaveriUmani <= 0) return;
-    magazzino.cadaveriUmani -= 1;
-    window.updateMagazzinoFields({ cadaveriUmani: magazzino.cadaveriUmani });
-    mostraNotificaInAlto(`${party[idx].nome} ha rimosso un cadavere dalla base.`, 'successo');
+    if (hasPerk(p, 'Becchino')) {
+        window.avviaCerimoniaBecchino(p);
+    } else {
+        const r = p.subisciFollia('cadavere');
+        mostraNotificaInAlto(`${p.nome} si è sbarazzato di un cadavere: Follia +${r.punti}.`, 'avviso');
+        salvaPersonaggioCloud(p);
+    }
     aggiornaInterfaccia();
 };
 
@@ -1931,15 +1973,7 @@ window.apriRicaricaRobot = function(idx) {
     p.azioneCorrente = {
         tipo: 'ricarica_robot',
         oreTotali: ore,
-        oreRimanenti: ore,
-        onComplete: () => {
-            p.batteryHours = Math.min(p.batteryHoursMax, p.batteryHours + ore * 5);
-            magazzino.stazioneRicarica.robotIdOccupante = null;
-            window.updateMagazzinoFields({ stazioneRicarica: magazzino.stazioneRicarica });
-            mostraNotificaInAlto(`${p.nome} ha finito di ricaricarsi (+${ore * 5}h batteria).`, 'successo');
-            salvaPersonaggioCloud(p);
-            aggiornaInterfaccia();
-        }
+        oreRimanenti: ore
     };
     salvaPersonaggioCloud(p);
     mostraNotificaInAlto(`${p.nome} sale sulla piattaforma di ricarica per ${ore}h. Non può fare altre azioni nel frattempo.`, 'info');
@@ -2022,8 +2056,7 @@ function scheduleDinamo(idx, ore) {
     const nuovaAzione = {
         tipo: 'dinamo',
         oreTotali: ore,
-        oreRimanenti: ore,
-        onComplete: () => completeDinamo(p, ore)
+        oreRimanenti: ore
     };
     if (p.azioneCorrente) {
         if (confirm(`${p.nome} sta già facendo un'altra azione. Metterla in coda?`)) {
@@ -2077,11 +2110,9 @@ window.apriMusicistaModal = function(idx) {
     if (candidati.length === 0) alert('Nessuno è libero per ascoltare la musica ora.');
 
     leader.azioneCorrente = {
-        tipo: 'musicista', oreTotali: 1, oreRimanenti: 1,
-        onComplete: () => {
-            mostraNotificaInAlto(`${leader.nome} smette di suonare.`, 'info');
-            salvaPersonaggioCloud(leader);
-        }
+        tipo: 'musicista',
+        oreTotali: 1,
+        oreRimanenti: 1
     };
     salvaPersonaggioCloud(leader);
 
@@ -2155,8 +2186,7 @@ function scheduleAllenamento(idx, categoria) {
         tipo: 'allenamento',
         categoria: categoria,
         oreTotali: ore,
-        oreRimanenti: ore,
-        onComplete: () => completeAllenamento(p, categoria, ore)
+        oreRimanenti: ore
     };
 
     if (p.azioneCorrente) {
@@ -2480,28 +2510,11 @@ function pianificaAzione(idx, tipo, bookId = null, subject = null, bookTitle = n
         nuovaAzione.subject = subject;
         nuovaAzione.bookTitle = bookTitle;
         nuovaAzione.teacherName = teacherName;
-        nuovaAzione.onComplete = () => completaStudioBookAction(p, nuovaAzione);
     } else if (tipo === 'studio-lingua') {
         nuovaAzione.bookId = bookId;
         nuovaAzione.subject = subject;
         nuovaAzione.linguaTarget = bookTitle;
-        nuovaAzione.onComplete = () => completaStudioLinguaAction(p, nuovaAzione);
-    } else if (tipo === 'studio') {
-        nuovaAzione.onComplete = () => {
-            const guadagno = awardStudyPM(p, plannedHours);
-            if (guadagno > 0) {
-                alert(`${p.nome} impara Medicina: +${guadagno} PM (massimo ${getStudyPMCap(p)} totali per il livello corrente).`);
-            } else {
-                alert(`${p.nome} studia Medicina ma non ottiene PM aggiuntivi oltre il limite attuale.`);
-            }
-            salvaPersonaggio(p);
-        };
-    } else if (tipo === 'dormi') {
-    nuovaAzione.onComplete = () => {
-        p.applicaRisveglio(plannedHours);
-        salvaPersonaggio(p);
-    };
-}
+    }
     // ASMATICO: riposo breve (<8h) limita il recupero stamina a meno che non si usino risorse
     if (p.hasPerk && p.hasPerk('Asmatico') && plannedHours < 8 && !p._asmaShortRestBoost) {
         const vuoleBoost = confirm(`${p.nome} è Asmatico: durante un riposo breve recupererà al massimo 2 tacche di Stamina.\nVuoi usare 10 risorse mediche di base per superare questo limite?`);

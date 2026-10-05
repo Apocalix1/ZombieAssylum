@@ -90,19 +90,15 @@ function renderMedicaModal() {
         malati.forEach(p => {
             const targetIdx = window.party.indexOf(p);
             const grado = p.getGradoMalattia();
-            const haDiagnosi = p.malattia.diagnosiCorretta;
+            const haDiagnosi = p.malattia.diagnosiEffettuata;
             const inCura = p.malattia.inCura;
             const debuff = p.getMalattiaDebuff();
 
             let stato = `Grado ${grado}`;
             if (haDiagnosi && inCura) {
-                const fatte = p.malattia.oreCuraAccumulate;
-                const totali = p.malattia.oreCureNecessarie;
-                stato += ` (In cura: ${fatte.toFixed(1)}/${totali}h)`;
+                stato += ` (In cura)`;
             } else if (haDiagnosi) {
-                stato += ` (Diagnosi corretta, in attesa di cura)`;
-            } else if (p.malattia.diagnosiEffettuata) {
-                stato += ` (Diagnosi errata!)`;
+                stato += ` (Diagnosi effettuata, in attesa di cura)`;
             } else {
                 stato += ` (Da diagnosticare)`;
             }
@@ -143,7 +139,7 @@ function getMedicalData(woundState, tipo = 'cura', personaggio = null) {
 
     let data;
     if (woundState === 'Ferita lieve' && tipo === 'pronto_soccorso') {
-        data = { ...baseData['Ferita lieve'], pm: 2, tipo: 'pronto_soccorso' };
+        data = { ...baseData['Ferita lieve'], pm: 2, lvReq:1, tipo: 'pronto_soccorso' };
     } else {
         data = baseData[woundState] ? { ...baseData[woundState] } : null;
     }
@@ -168,16 +164,15 @@ export function getRestMultiplier() {
     const halfRestActions = ['cucina', 'conserva', 'studio', 'studio-libro', 'alchimia', 'alchimia-assistenza', 'artificeria', 'artificeria-smontaggio', 'artificeria-assistenza'];
     if (this.azioneCorrente && halfRestActions.includes(this.azioneCorrente.tipo)) multiplier *= 0.5;
     if (this.azioneCorrente && this.azioneCorrente.tipo === 'dormi') multiplier *= 1.5;
-    if (this.hasPerk && this.hasPerk('Rigenerazione molto veloce')) multiplier += 0.25;
      if (this._bendaAccellerataFinoA && (window.oreTotali || 0) < this._bendaAccellerataFinoA) multiplier += 0.15;
     if (this._angeloCasaBonus) {
         multiplier += 0.1;
         this._angeloCasaBonus = false;
     }
 
-    if (this.timers.buffFame > 0) multiplier += 0.2;
-    if (this.timers.buffSete > 0) multiplier += 0.2;
-    if (this.timers.buffSonno > 0) multiplier += 0.2;
+    if (this.timers.buffFame > 0) multiplier += 0.15;
+    if (this.timers.buffSete > 0) multiplier += 0.15;
+    if (this.timers.buffSonno > 0) multiplier += 0.15;
     multiplier -= 0.2 * this.faticaTotale;
 
     if (this.hasPerk && this.hasPerk('CroceRossina') && this.senseDiColpaStack > 0) {
@@ -238,17 +233,19 @@ function takeMedicalMaterials(req, opts = {}) {
     window.magazzino.materialiConsumatiLog = window.magazzino.materialiConsumatiLog || [];
     window.magazzino.materialiConsumatiLog.push({ ora: window.oreTotali || 0, base: usedBase, avanzati: usedAvanzati });
     if (window.magazzino.materialiConsumatiLog.length > 200) window.magazzino.materialiConsumatiLog.shift();
+    window.updateMagazzinoFields?.({ materialiMedici: window.magazzino.materialiMedici, materialiConsumatiLog: window.magazzino.materialiConsumatiLog });
 }
 
-function getMedicineLevelBonus(level) {
-    switch (level) {
-        case 2: return 1;
-        case 3: return 2;
-        case 5: return 3;
-        default: return 0;
-    }
+function getMedicineLevelBonus(level, p) {
+    const prof = p && p.getBonusCompetenza ? p.getBonusCompetenza() : 0;
+    let b = 0;
+    if (level >= 1) b += 1;       // Lv1: +1
+    if (level >= 2) b += prof;    // Lv2: competenza
+    if (level >= 3) b += 2;       // Lv3: +2
+    if (level >= 4) b += prof;    // Lv4: maestria (competenza raddoppiata)
+    if (level >= 5) b += 3;       // Lv5: +3
+    return b;
 }
-
 window.gestisciAiutoMedicoConSospensione = function(helper, medicoRichiedente) {
     const idxHelper = party.indexOf(helper);
     if (!helper.azioneCorrente) {
@@ -359,7 +356,7 @@ window.curaTarget = function(targetIdx, tipo = 'cura') {
     let oreAzione = 0.5;
     let rollPrecalcolato = null;
     if (medico.hasPerk && medico.hasPerk('Perfezionista')) {
-        const totale = rollDice(1, 20) + medico.getStatDettagliata('Intelligenza').mod + getMedicineLevelBonus(medico.livelloMedicina);
+        const totale = rollDice(1, 20) + medico.getStatDettagliata('Intelligenza').mod + getMedicineLevelBonus(medico.livelloMedicina, medico);
         rollPrecalcolato = totale;
         const modTempo = medico.getPerfezionistaTimeModifier(totale);
         oreAzione = Math.max(0.1, +(oreAzione * modTempo).toFixed(2));
@@ -370,12 +367,17 @@ window.curaTarget = function(targetIdx, tipo = 'cura') {
             );
         }
     }
-
-        const azione = {
+     const azione = {
         tipo: 'medicina',
         oreTotali: oreAzione,
         oreRimanenti: oreAzione,
-        onComplete: () => eseguiCuraTarget(medicoCorrente, targetIdx, tipo, rollPrecalcolato, bonusOggettoMagico, spellBonus)
+        medicoId: medico.id,
+        targetId: target.id,
+        tipoCura: tipo,
+        rollPrecalcolato,
+        bonusOggettoMagico,
+        spellBonus,
+        helperId: helperMedicina ? helperMedicina.id : null
     };
     if (!medico.azioneCorrente) medico.azioneCorrente = azione;
     else medico.codaAzioni.unshift(azione);
@@ -447,7 +449,7 @@ function eseguiCuraTarget(medicoIdx, targetIdx, tipo, rollPrecalcolato = null, b
     }
 
         // PERFEZIONISTA: riusa il tiro fatto all'avvio, altrimenti tira ora come prima
-    const modIntMedico = medico.getStatDettagliata('Intelligenza').mod + getMedicineLevelBonus(medico.livelloMedicina);
+    const modIntMedico = medico.getStatDettagliata('Intelligenza').mod + getMedicineLevelBonus(medico.livelloMedicina, medico);
     const tiroSingolo = () => rollDice(1, 20) + modIntMedico;
     const totale = rollPrecalcolato !== null
         ? rollPrecalcolato
@@ -470,8 +472,8 @@ function eseguiCuraTarget(medicoIdx, targetIdx, tipo, rollPrecalcolato = null, b
         medico.registraPessimista(false);
         takeMedicalMaterials(req, {
             divisorAvanzati: materialiAssistDimezzati ? 2 : 1,
-            divisorAll: divisorAllMedico,
-            dimezzaBase: dimezzaBase
+            divisorAll: divisorAllMedico * 2,
+            dimezzaBase: false
         });
         if (assistAvailable) window.assistenzaSelezionata = null;
         mostraNotificaInAlto(`❌ Cura fallita su ${target.nome}. Persi 50% materiali.`, 'pericolo');
@@ -540,33 +542,35 @@ window.diagnosticaMalattia = function(medicoIdx, pazienteIdx) {
     const medico = window.party[medicoIdx];
     const paziente = window.party[pazienteIdx];
     if (!medico || !paziente) return alert('Personaggio non trovato.');
+    if (!paziente.isMalato()) return alert(`${paziente.nome} non è malato.`);
+    if (paziente.malattia.diagnosiEffettuata) return alert('Diagnosi già effettuata per questo grado.');
+    if ((medico.livelloMedicina || 0) < 1) return alert('Serve almeno Medicina Livello 1 per diagnosticare.');
 
-    if (!paziente.isMalato()) {
-        return alert(`${paziente.nome} non è malato.`);
-    }
-
-    // Calcola CD della diagnosi in base al grado
     const grado = paziente.getGradoMalattia();
+    let certa = false;
     if (medico.hasPerk('Nessuno muore sotto le mie mani') && medico.livelloMedicina >= 2 && grado >= 9) {
         const criticiBase = window.magazzino.materialiMedici.critici || 0;
         const criticiInv = medico.inventario?.medCritici || 0;
         if (criticiBase > 0 || criticiInv > 0) {
-            let fonte = (criticiInv > 0 && criticiBase > 0)
+            const fonte = (criticiInv > 0 && criticiBase > 0)
                 ? prompt('Spendere 1 materiale critico per diagnosi CERTA? "base"/"inventario"/vuoto per no', 'base')
-                : (criticiInv > 0 ? (confirm('Spendere 1 materiale critico (inventario) per diagnosi certa?') ? 'inventario' : null)
-                    : (confirm('Spendere 1 materiale critico (base) per diagnosi certa?') ? 'base' : null));
-            if (fonte === 'base' || fonte === 'inventario') {
-                if (fonte === 'base') window.magazzino.materialiMedici.critici--;
-                else medico.inventario.medCritici--;
-                paziente.malattia.diagnosiCorretta = true;
-                paziente.malattia.diagnosiEffettuata = true;
-                paziente.malattia.oreCureNecessarie = paziente.calcolaOreCuraNecessarie(grado);
-                mostraNotificaInAlto(`${medico.nome} ottiene una diagnosi CERTA per ${paziente.nome}.`, 'successo');
-                aggiornaInterfaccia();
-                return;
+                : (criticiInv > 0 ? (confirm('Spendere 1 critico (inventario) per diagnosi certa?') ? 'inventario' : null)
+                                  : (confirm('Spendere 1 critico (base) per diagnosi certa?') ? 'base' : null));
+            if (fonte === 'base') { window.magazzino.materialiMedici.critici--; certa = true; }
+            else if (fonte === 'inventario') { medico.inventario.medCritici--; certa = true; }
+            if (certa && typeof window.updateMagazzinoFields === 'function') {
+                window.updateMagazzinoFields({ materialiMedici: window.magazzino.materialiMedici });
             }
         }
     }
+    const prob = [0, 0.40, 0.60, 0.70, 0.80, 0.90][Math.min(5, medico.livelloMedicina)];
+    const corretta = certa || Math.random() < prob;
+    paziente.malattia.diagnosiEffettuata = true;
+    paziente.malattia.diagnosiCorretta = corretta;
+    if (corretta) paziente.malattia.oreCureNecessarie = paziente.calcolaOreCuraNecessarie(grado);
+    mostraNotificaInAlto(`${medico.nome} ha diagnosticato ${paziente.nome}.`, 'info');
+    renderMedicaModal();
+    aggiornaInterfaccia();
 };
 
 window.iniziaCuraMalattia = function(medicoIdx, pazienteIdx) {
@@ -664,6 +668,22 @@ Personaggio.prototype.checkInfectionRisk = checkInfectionRisk;
 Personaggio.prototype.getRestMultiplier = getRestMultiplier;
 window.lootMedici = lootMedici;
 window.infestazioneWound = infestazioneWound;
+Personaggio.prototype.iniziaCuraMalattia = function(medico, materiali) {
+    if (!this.isMalato()) return { success: false, messaggio: 'Non è malato.' };
+    if (!this.malattia.diagnosiEffettuata) return { success: false, messaggio: 'Serve prima una diagnosi.' };
+    if (this.malattia.inCura) return { success: false, messaggio: 'Già in cura.' };
+    const req = this.calcolaMaterialiCura(this.malattia.grado, this.malattia.diagnosiCorretta);
+    if (materiali.base < req.base || materiali.avanzati < req.avanzati || materiali.critici < req.critici) {
+        return { success: false, messaggio: 'Materiali medici insufficienti.' };
+    }
+    materiali.base -= req.base; materiali.avanzati -= req.avanzati; materiali.critici -= req.critici;
+    if (typeof window.updateMagazzinoFields === 'function') window.updateMagazzinoFields({ materialiMedici: materiali });
+    this.malattia.inCura = true;
+    if (!this.malattia.oreCureNecessarie) this.malattia.oreCureNecessarie = this.calcolaOreCuraNecessarie(this.malattia.grado);
+    // Diagnosi sbagliata: si medica comunque, ma non guarisce e il degrado slitta del 50% (Word)
+    if (!this.malattia.diagnosiCorretta) this.malattia.timerPeggioramento *= 1.5;
+    return { success: true };
+};
 
 // --- Incantesimo "Rianimare": riporta in vita un personaggio morto nell'ultimo minuto di gioco ---
 window.lanciaRianimare = async function(idx) {

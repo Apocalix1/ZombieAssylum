@@ -178,7 +178,8 @@ window.masterImpostaGiorno = async function() {
 };
 
 window.masterRiduciGiorni = async function(giorni) {
-	oreTotali = Math.max(0, oreTotali - (giorni * 24));
+	const base = Number.isFinite(window.oreTotali) ? window.oreTotali : (Number.isFinite(oreTotali) ? oreTotali : 0);
+	oreTotali = Math.max(0, base - (giorni * 24));
 	window.oreTotali = oreTotali;
 	if (typeof window.updateMagazzinoFields === 'function') await window.updateMagazzinoFields({ oreTotali });
 	aggiornaDisplayGiorno();

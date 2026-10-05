@@ -243,7 +243,7 @@ export const ARTIFICER_RECIPES = [
         name: 'Lingua di Fuoco',
         category: 'Potenziamento Armi',
         difficulty: 'Difficile',
-        outerHeight: 'equipaggiamento',
+        outerHeight: 'lingua_di_fuoco',
         description:'Puoi implementare in un arma da mischia la capacità di andare a fuoco con una reazione. L arma ha 3 cariche, le quali ognuna fa durare la fiamma per  1 minuto.  Quando l arma è in fiamme infligge 1d4 danni da fuoco in più',
         cost:{ingranggi : 60},
         time:{hours: 6},
@@ -307,7 +307,7 @@ export const ARTIFICER_RECIPES = [
         outputType: 'fisso_base',
         description: 'Capacità 50 razioni. Aumenta tempo degrado cibo del +500%. Consuma 2 batt/giorno.',
         cost: { ingranaggi: 80 },
-        time: { hours: 16 },
+        time: { hours: 18 },
         specialization: { Elettronica: 4 }
     },
     {
@@ -342,6 +342,39 @@ export const ARTIFICER_RECIPES = [
         cost: { ingranaggi: 10 },
         time: { hours: 1 },
         specialization: { Balistica: 2 }
+    },
+     {
+        id: 'drone',
+        name: 'Drone',
+        category: 'Comunicazione, Sensori & Sorveglianza',
+        difficulty: 'Difficile',
+        outputType: 'conteggio',
+        description: 'Drone 30x20 cm, volo 9 m, 6 PF, CA 10. Si comanda telepaticamente entro 180 m dopo 10 min di sintonia (collegamento 1 ora); con un\'azione bonus si vede dalla sua prospettiva. Consumo: 2 batterie/ora.',
+        cost: { ingranaggi: 60 },
+        time: { hours: 7 },
+        specialization: { Elettronica: 4, Balistica: 3 }
+    },
+    {
+        id: 'pistola_laser',
+        name: 'Pistola Laser',
+        category: 'Balistica, Armi & Munizioni',
+        difficulty: 'Molto difficile',
+        outputType: 'equipaggiamento',
+        description: 'Stessi danni e competenza di una pistola, ma silenziosa. Va riscaldata con l\'azione Prepararsi; ogni sparo consuma 2 batterie. Capienza 6 batterie.',
+        cost: { ingranaggi: 50 },
+        time: { hours: 8 },
+        specialization: { Balistica: 4, Elettronica: 3 }
+    },
+    {
+        id: 'proiettile_esplosivo',
+        name: 'Proiettile Esplosivo',
+        category: 'Balistica, Armi & Munizioni',
+        difficulty: 'Difficile',
+        outputType: 'equipaggiamento',
+        description: 'Non valido per la pistola. Richiede 1 Esplosivo (alchimia). Dà 3 proiettili: all\'atterraggio esplosione di 2 m, 1d10 fuoco (metà con TS).',
+        cost: { ingranaggi: 15 },
+        time: { hours: 2 },
+        specialization: { Balistica: 4 }
     },
 ];
 
@@ -395,11 +428,11 @@ function calcolaCrafting(leader, collaboratori, ricetta, isSmontaggio = false) {
     const diff = DIFFICOLTA_CRAFTING[ricetta.difficulty] || DIFFICOLTA_CRAFTING['Media'];
     const specPrincipale = Object.keys(ricetta.specialization)[0];
     const lvAG_Leader = leader.artificeria.generale.livello;
-    const lvSpec_Leader = leader.artificeria.specializzazioni[specPrincipale].livello;
+    const lvSpec_Leader = getLivelloSpec(leader, specPrincipale);
     
     // Controlla se possiede la competenza (livello spec leader >= livello richiesto)
     const reqSpec = ricetta.specialization[specPrincipale];
-    const senzaCompetenza = lvSpec_Leader < reqSpec;
+    const senzaCompetenza = Object.entries(ricetta.specialization).some(([s, req]) => getLivelloSpec(leader, s) < req);
 
         // 1. CALCOLO DELLA CLASSE DIFFICOLTÀ (CD)
     let cdFinale;
@@ -433,7 +466,7 @@ function calcolaCrafting(leader, collaboratori, ricetta, isSmontaggio = false) {
         const leaderScienziatoPazzo = leader.hasPerk && leader.hasPerk('Scienziato Pazzo');
         collaboratori.forEach((collab) => {
             initArtificeria(collab);
-            const lvSpec_Collab = collab.artificeria.specializzazioni[specPrincipale].livello;
+            const lvSpec_Collab = getLivelloSpec(collab, specPrincipale);
             
             // Requisito minimo: il collaboratore deve avere almeno livello 1
             if (lvSpec_Collab >= 1) {
@@ -453,6 +486,28 @@ function calcolaCrafting(leader, collaboratori, ricetta, isSmontaggio = false) {
 
 function getRecipeBaseCost(ricetta) {
     return ricetta.cost.ingranaggi || ricetta.cost.ingranaggi_base || 0;
+}
+
+function aggiungiOggettoCreatoInventario(leader, nomeItem, { tipo = 'arma', quantita = 1 } = {}) {
+    leader.initInventarioBase();
+    leader.inventario.oggetti = leader.inventario.oggetti || [];
+    const inventarioTarget = tipo === 'arma' ? (leader.inventario.armi || []) : (leader.inventario.oggetti || []);
+    const pieno = Array.isArray(inventarioTarget) && inventarioTarget.length >= 20;
+
+    if (Array.isArray(inventarioTarget) && !pieno) {
+        for (let i = 0; i < quantita; i++) inventarioTarget.push(nomeItem);
+        if (tipo !== 'arma') leader.inventario.oggetti = inventarioTarget;
+        return { inInventario: true, nome: nomeItem };
+    }
+
+    const chiaveMagazzino = tipo === 'arma' ? 'armiTrovate' : 'oggetti';
+    window.magazzino[chiaveMagazzino] = window.magazzino[chiaveMagazzino] || [];
+    const nomeVisualizzato = quantita > 1 ? `${nomeItem} x${quantita}` : nomeItem;
+    window.magazzino[chiaveMagazzino].push({ nome: nomeVisualizzato, qta: quantita, tipo: tipo === 'arma' ? 'arma' : 'oggetto' });
+    if (typeof window.updateMagazzinoFields === 'function') {
+        window.updateMagazzinoFields({ [chiaveMagazzino]: window.magazzino[chiaveMagazzino] });
+    }
+    return { inInventario: false, nome: nomeVisualizzato };
 }
 
 function risolviAzioneArtificeria(leaderIdx, collaboratoriIdxs, ricettaId, isSmontaggio = false) {
@@ -534,7 +589,7 @@ function risolviAzioneArtificeria(leaderIdx, collaboratoriIdxs, ricettaId, isSmo
     let dettagliExtra = "";
 
     if (!isSmontaggio) {
-                    if (ricetta.outputType === 'fabbisogno_magico') {
+        if (ricetta.outputType === 'fabbisogno_magico') {
             leader.initInventarioBase();
             const raritaScelta = prompt("Quale rarità di oggetto magico vuoi usare?\n(comune, non_comune, raro, super_raro)");
             const candidati = [
@@ -554,7 +609,6 @@ function risolviAzioneArtificeria(leaderIdx, collaboratoriIdxs, ricettaId, isSmo
                 }
                 dettagliExtra = 'instance:' + scelta.uid;
             } else {
-                // Fallback legacy: nessuna istanza concreta trovata, usa i vecchi contatori generici
                 const mapKey = { comune: 'comuni', non_comune: 'nonComuni', raro: 'rari', super_raro: 'superRari' };
                 const key = mapKey[raritaScelta];
                 const inMagazzino = key ? (window.magazzino.oggettiMagici[key] || 0) : 0;
@@ -566,14 +620,27 @@ function risolviAzioneArtificeria(leaderIdx, collaboratoriIdxs, ricettaId, isSmo
                 dettagliExtra = raritaScelta;
             }
         } else if (ricetta.id === 'creazione_proiettili') {
-            const tipoMunProm = prompt('Che tipo di munizioni vuoi creare? (Freccia, Dardo balestra, Proiettile pistola)', 'Freccia') || 'Freccia';
-            const mappaMun = { Freccia: 'frecce', 'Dardo balestra': 'quadrelli', 'Proiettile pistola': 'proiettili' };
-            const chiave = mappaMun[tipoMunProm] || 'frecce';
+            const tipi = {
+                'Freccia': { chiave: 'frecce', ing: 1, ore: 20 / 60, qta: 10 },
+                'Dardo balestra': { chiave: 'quadrelli', ing: 3, ore: 0.5, qta: 10 },
+                'Proiettile pistola': { chiave: 'proiettili', ing: 10, ore: 1, qta: 10 }
+            };
+            const sceltaRaw = prompt('Che tipo di munizioni vuoi creare? (Freccia, Dardo balestra, Proiettile pistola)', 'Freccia') || 'Freccia';
+            const scelta = (typeof sceltaRaw === 'string' ? sceltaRaw.trim() : 'Freccia') || 'Freccia';
+            const t = tipi[scelta] || tipi['Freccia'];
+            costoIngranaggi = Number(t.ing) || 1;
+            ricetta.time = { hours: Number(t.ore) || 0.33 };
+            dettagliExtra = { tipo: 'munizioni', chiave: t.chiave, nome: scelta, quantita: Number(t.qta) || 10 };
+        } else if (ricetta.id === 'proiettile_esplosivo') {
             leader.initInventarioBase();
-            leader.inventario.munizioni[chiave] = (leader.inventario.munizioni[chiave] || 0) + 10;
-            alert(`${leader.nome} ha creato +10 ${tipoMunProm} (nel proprio inventario).`);
-            salvaPersonaggioCloud(leader);
-            return;
+            const composti = Array.isArray(leader.inventario?.composti) ? leader.inventario.composti : [];
+            const idxEsplosivo = composti.findIndex(c => c && typeof c.nome === 'string' && c.nome.toLowerCase() === 'esplosivo');
+            if (idxEsplosivo === -1) {
+                alert('Serve 1 Esplosivo tra i tuoi composti alchemici per creare i proiettili esplosivi.');
+                return;
+            }
+            leader.inventario.composti.splice(idxEsplosivo, 1);
+            dettagliExtra = { tipo: 'proiettile_esplosivo', quantita: 3 };
         } else if (ricetta.outputType === 'fabbisogno_robot') {
             const robotId = prompt("Scrivi il nome o l'ID del robot che vuoi utilizzare per questa azione:");
             if (!robotId) return;
@@ -592,26 +659,25 @@ function risolviAzioneArtificeria(leaderIdx, collaboratoriIdxs, ricettaId, isSmo
     }
 
     if (collaboratoriIdxs.length > 0) {
-        const collaboratoriIds = collaboratoriIdxs.map(idx => window.party[idx].id).filter(Boolean);
+        const user = window.getCurrentUser ? window.getCurrentUser() : null;
+        const isMaster = user && user.role === 'master';
+        const collaboratori = collaboratoriIdxs.map(i => window.party[i]).filter(Boolean);
+        const daConsenso = collaboratori.filter(c => !(isMaster || (c.user_id === leader.user_id && leader.user_id === user?.id)));
+
+        if (daConsenso.length === 0) {                      // tutti miei (o sono il Master): partenza immediata
+            eseguiCreazioneArtificeria(leader, collaboratoriIdxs, ricetta, costoIngranaggi, isSmontaggio, dettagliExtra, costoBase);
+            return;
+        }
         const groupId = `artgroup-${Date.now()}-${leader.id}`;
-
-        window._artificeriaGruppiPendenti = window._artificeriaGruppiPendenti || {};
-        window._artificeriaGruppiPendenti[groupId] = {
-            leaderId: leader.id,
-            collaboratoriIds: collaboratoriIds.slice(),
-            accettati: new Set(),
-            rifiutato: false,
-            ricettaId, isSmontaggio, costoIngranaggi, dettagliExtra, costoBase
+        const dati = {
+            groupId, leaderId: leader.id, ricettaId, isSmontaggio, costoIngranaggi, dettagliExtra, costoBase,
+            collaboratori: collaboratori.map(c => c.id),
+            consensoIds: daConsenso.map(c => c.id),
+            robotTargetId: ricetta._robotTargetId || null,
+            timeOverride: ricetta.time
         };
-
-        // Una proposta separata per OGNI collaboratore (fino a 3+)
-        collaboratoriIds.forEach(destId => {
-            window.inviaProposta(leader.id, destId, 'artificeria-gruppo', {
-                groupId, ricettaId, isSmontaggio, collaboratori: collaboratoriIds
-            });
-        });
-
-        mostraNotificaInAlto(`Proposte di artificeria inviate a ${collaboratoriIds.length} collaboratori. In attesa di risposta...`, 'info');
+        daConsenso.forEach(c => window.inviaProposta(leader.id, c.id, 'artificeria-gruppo', dati));
+        mostraNotificaInAlto(`Proposte di artificeria inviate a ${daConsenso.length} collaboratori. In attesa di risposta...`, 'info');
         return;
     }
 
@@ -630,7 +696,7 @@ function eseguiCreazioneArtificeria(leader, collaboratoriIdxs, ricetta, costoIng
     if (isSmontaggio) {
         const specPrincipale = Object.keys(ricetta.specialization)[0];
         const reqSpec = ricetta.specialization[specPrincipale] || 0;
-        const lvSpec_Leader = leader.artificeria?.specializzazioni?.[specPrincipale]?.livello || 0;
+        const lvSpec_Leader = getLivelloSpec(leader, specPrincipale);
         if (lvSpec_Leader < reqSpec) {
             alert(`Non hai competenza sufficiente per smontare questo oggetto. Richiesto: ${specPrincipale} livello ${reqSpec}.`);
             return;
@@ -651,7 +717,7 @@ function eseguiCreazioneArtificeria(leader, collaboratoriIdxs, ricetta, costoIng
     const modInt = leader.getStatDettagliata('Intelligenza').mod;
     const bonusComp = (leader.hasCompetenza('Artificeria') ? leader.getBonusCompetenza() : 0);
 
-    // PERFEZIONISTA: tira PRIMA di iniziare, il risultato determina il tempo E viene riusato all'esito
+    // PERFEZIONISTA: tira dopo l'inizio, il risultato determina il tempo e viene riusato all'esito
     let rollPrecalcolato = null;
     if (leader.hasPerk && leader.hasPerk('Perfezionista')) {
         const d20 = Math.floor(Math.random() * 20) + 1;
@@ -665,24 +731,28 @@ function eseguiCreazioneArtificeria(leader, collaboratoriIdxs, ricetta, costoIng
         );
     }
 
-    const azioneLeader = {
-    tipo: isSmontaggio ? 'artificeria-smontaggio' : 'artificeria',
-    oreTotali: oreFinali,
-    oreRimanenti: oreFinali,
-    ricettaNome: ricetta.name,
-    costoIngranaggi: isSmontaggio ? 0 : costoIngranaggi,
-    onComplete: () => risolviEsitoArtificeria(leader, collaboratori, ricetta, costoIngranaggi, isSmontaggio, dettagliExtra, costoBase, calcoli, rollPrecalcolato)
-};
-
-    const creaAzioneCollab = (collab) => ({
-        tipo: 'artificeria-assistenza',
+     const azioneLeader = {
+        tipo: isSmontaggio ? 'artificeria-smontaggio' : 'artificeria',
         oreTotali: oreFinali,
         oreRimanenti: oreFinali,
         ricettaNome: ricetta.name,
-        onComplete: () => {
-            mostraNotificaInAlto(`${collab.nome} ha finito di assistere alla creazione di "${ricetta.name}".`, 'successo');
-            salvaPersonaggio(collab);
-        }
+        costoIngranaggi: isSmontaggio ? 0 : costoIngranaggi,      // usato per i rimborsi
+        // --- dati per completare l'azione su qualunque client ---
+        ricettaId: ricetta.id,
+        robotTargetId: ricetta._robotTargetId || null,
+        costoIngranaggiReale: costoIngranaggi,
+        dettagliExtra,
+        costoBase,
+        calcoli: { cdFinale: calcoli.cdFinale, oreStimate: calcoli.oreStimate, senzaCompetenza: calcoli.senzaCompetenza, diffBase: calcoli.diffBase },
+        rollPrecalcolato,
+        collaboratoriIds: collaboratori.map(c => c.id)
+    };
+
+     const creaAzioneCollab = () => ({
+        tipo: 'artificeria-assistenza',
+        oreTotali: oreFinali,
+        oreRimanenti: oreFinali,
+        ricettaNome: ricetta.name
     });
 
     const tuttiLiberi = !leader.azioneCorrente && collaboratori.every(c => !c.azioneCorrente);
@@ -725,10 +795,25 @@ function risolviEsitoArtificeria(leader, collaboratori, ricetta, costoIngranaggi
             if (typeof window.updateMagazzinoFields === 'function') {
                 window.updateMagazzinoFields({ ingranaggi: window.magazzino.ingranaggi });
             }
-            eseguiCreazioneArtificeria(leader, collaboratori, ricetta, costoIngranaggi, false, dettagliExtra, costoBase);
+            eseguiCreazioneArtificeria(leader, collaboratori.map(c => window.party.indexOf(c)), ricetta, costoIngranaggi, false, dettagliExtra, costoBase);
             return;
         }
         alert(isSmontaggio ? "✅ SMONTAGGIO RIUSCITO!" : "✅ SUCCESSO! L'oggetto è stato creato.");
+
+        if (dettagliExtra && typeof dettagliExtra === 'object' && dettagliExtra.tipo === 'estrazione_robot') {
+            const qta = Number(dettagliExtra.qta) || 0;
+            const batterieGenerate = Math.max(0, qta - Math.floor(qta / 3));
+            leader.initInventarioBase();
+            leader.inventario.batterie = (leader.inventario.batterie || 0) + batterieGenerate;
+            const sorgente = window.party.find(p => p && p.id === dettagliExtra.sorgenteId) || null;
+            alert(`${leader.nome} ha estratto ${batterieGenerate} batterie dal robot${sorgente ? ` (${sorgente.nome})` : ''}.`);
+            if (typeof window.updateMagazzinoFields === 'function') {
+                window.updateMagazzinoFields({ batterie: leader.inventario.batterie });
+            }
+            salvaPersonaggio(leader);
+            if (sorgente) salvaPersonaggioCloud(sorgente);
+        }
+
         if (isSmontaggio) {
             let resaPercentuale = YIELD_SMONTAGGIO[leader.artificeria.generale.livello] || 0;
             if (leader.hasPerk && leader.hasPerk('Riciclatore disperato')) resaPercentuale += 0.20;
@@ -747,9 +832,14 @@ function risolviEsitoArtificeria(leader, collaboratori, ricetta, costoIngranaggi
                 });
             }
 
-            const PORTABILI_SPEDIZIONE = ['localizzatore','orologio_timer','torcia_direzionale','cassa_amplificata','innesco','trappola_orsi','taser','pistola_rampino','stivali_molla'];
+            const PORTABILI_SPEDIZIONE = ['localizzatore','orologio_timer','torcia_direzionale','cassa_amplificata','innesco','trappola_orsi','taser','pistola_laser','pistola_rampino','stivali_molla'];
                         // --- Casi specifici per ricetta ---
-                        if (ricetta.id === 'batterie_creazione') {
+                    if (dettagliExtra && dettagliExtra.tipo === 'estrazione_robot') {
+                    const batt = dettagliExtra.qta - Math.floor(dettagliExtra.qta / 3);   // ogni 3, 1 si perde
+                    leader.initInventarioBase();
+                    leader.inventario.batterie = (leader.inventario.batterie || 0) + batt;
+                    alert(`Estratte ${batt} batterie (nel tuo inventario).`);
+                } else if (ricetta.id === 'batterie_creazione') {
                 let battTrovate = 0;
                 if (typeof dettagliExtra === 'string' && dettagliExtra.startsWith('instance:')) {
                     const uid = dettagliExtra.replace('instance:', '');
@@ -764,7 +854,7 @@ function risolviEsitoArtificeria(leader, collaboratori, ricetta, costoIngranaggi
                 alert(`Hai generato ${battTrovate} Batterie (nel tuo inventario)!`);
             } else if (ricetta.id === 'riparazione_robot') {
                 const target = window.party.find(p => p.id === ricetta._robotTargetId) || leader;
-                target.repairRobot(Math.floor(target.robotPFMax * 0.5), leader);
+                target.repairRobot(Math.floor(target.robotPFMax * 0.70), leader);
                 alert(`${target.nome} è stato riparato.`);
                 salvaPersonaggioCloud(target);
             } else if (ricetta.id === 'stazione_ricarica') {
@@ -780,6 +870,20 @@ function risolviEsitoArtificeria(leader, collaboratori, ricetta, costoIngranaggi
             } else if (ricetta.id === 'stivali_molla') {
                 leader.inventario.armi.push('Stivali a Molla');
                 leader.stivaliCariche = 3;
+            } else if (ricetta.id === 'creazione_proiettili') {
+                leader.initInventarioBase();
+                if (typeof leader.inventario.munizioni !== 'object' || leader.inventario.munizioni === null) {
+                    leader.inventario.munizioni = { frecce: 0, quadrelli: 0, proiettili: 0 };
+                }
+                const chiaveMunizione = dettagliExtra && typeof dettagliExtra === 'object' ? dettagliExtra.chiave : null;
+                const quantitaMunizione = dettagliExtra && typeof dettagliExtra === 'object' ? Number(dettagliExtra.quantita) || 10 : 10;
+                if (chiaveMunizione && ['frecce', 'quadrelli', 'proiettili'].includes(chiaveMunizione)) {
+                    leader.inventario.munizioni[chiaveMunizione] = (leader.inventario.munizioni[chiaveMunizione] || 0) + quantitaMunizione;
+                    alert(`${leader.nome} ha creato ${quantitaMunizione} ${chiaveMunizione} in più.`);
+                } else {
+                    leader.inventario.munizioni.proiettili = (leader.inventario.munizioni.proiettili || 0) + quantitaMunizione;
+                    alert(`${leader.nome} ha creato ${quantitaMunizione} proiettili.`);
+                }
             } else {
             switch (ricetta.outputType) {
                 case 'fisso_base':
@@ -791,21 +895,41 @@ function risolviEsitoArtificeria(leader, collaboratori, ricetta, costoIngranaggi
                         }
                     }
                     break;
-                case 'conteggio':
-                    window.magazzino.congegniConteggio[ricetta.name] = (window.magazzino.congegniConteggio[ricetta.name] || 0) + 1;
-                    break;
                 case 'equipaggiamento':
-                    if (ricetta.id === 'creazione_proiettili') {
-                        // gestito a monte in eseguiCreazioneArtificeria/dettagliExtra
-                    } else if (ricetta.id === 'proiettile_frammentazione') {
+                    if (ricetta.id === 'proiettile_frammentazione') {
                         leader.initInventarioBase();
                         leader.inventario.proiettiliFrammentazione = (leader.inventario.proiettiliFrammentazione || 0) + 1;
                         alert(`${leader.nome} ha creato 1 Proiettile a Frammentazione.`);
+                    } else if (ricetta.id === 'drone') {
+                        const risultato = aggiungiOggettoCreatoInventario(leader, ricetta.name, { tipo: 'oggetto', quantita: 1 });
+                        alert(risultato.inInventario
+                            ? `${leader.nome} ha creato un ${ricetta.name} e lo tiene nell'inventario.`
+                            : `${leader.nome} ha creato un ${ricetta.name} e lo ha depositato nel magazzino generale.`);
+                    } else if (ricetta.id === 'pistola_laser') {
+                        const risultato = aggiungiOggettoCreatoInventario(leader, ricetta.name, { tipo: 'arma', quantita: 1 });
+                        alert(risultato.inInventario
+                            ? `${leader.nome} ha creato una ${ricetta.name} e la tiene nell'inventario.`
+                            : `${leader.nome} ha creato una ${ricetta.name} e la ha depositata nel magazzino generale.`);
+                    } else if (ricetta.id === 'proiettile_esplosivo') {
+                        const risultato = aggiungiOggettoCreatoInventario(leader, 'Proiettile Esplosivo', { tipo: 'oggetto', quantita: 3 });
+                        alert(risultato.inInventario
+                            ? `${leader.nome} ha creato 3 Proiettili Esplosivi e li tiene nell'inventario.`
+                            : `${leader.nome} ha creato 3 Proiettili Esplosivi e li ha depositati nel magazzino generale.`);
                     } else if (PORTABILI_SPEDIZIONE.includes(ricetta.id)) {
                         leader.inventario.armi.push(ricetta.name);
                     } else {
                         window.magazzino.congegniConteggio[ricetta.name] = (window.magazzino.congegniConteggio[ricetta.name] || 0) + 1;
                         alert(`${ricetta.name} aggiunto ai Dispositivi della Base.`);
+                    }
+                    break;
+                case 'conteggio':
+                    if (ricetta.id === 'drone') {
+                        const risultato = aggiungiOggettoCreatoInventario(leader, ricetta.name, { tipo: 'oggetto', quantita: 1 });
+                        alert(risultato.inInventario
+                            ? `${leader.nome} ha creato un ${ricetta.name} e lo tiene nell'inventario.`
+                            : `${leader.nome} ha creato un ${ricetta.name} e lo ha depositato nel magazzino generale.`);
+                    } else {
+                        window.magazzino.congegniConteggio[ricetta.name] = (window.magazzino.congegniConteggio[ricetta.name] || 0) + 1;
                     }
                     break;
                 case 'potenziamento_arma': {
@@ -841,6 +965,7 @@ function risolviEsitoArtificeria(leader, collaboratori, ricetta, costoIngranaggi
                     alert(`Oggetto ${ricetta.name} creato, ma senza logica di smistamento definita.`);
             }
             }
+            window.updateMagazzinoFields?.({ congegniFissi: window.magazzino.congegniFissi, congegniConteggio: window.magazzino.congegniConteggio });
             salvaPersonaggio(leader);
             collaboratori.forEach(c => salvaPersonaggio(c));
         }
@@ -1012,8 +1137,9 @@ function hasRequiredMaterials(p, recipe) {
 
 function ricetteVisibili(p) {
     const haRobot = window.party.some(m => m.isRobot);
-    const haOggettoMagico = window.magazzino.oggettiMagici &&
-        Object.values(window.magazzino.oggettiMagici).some(q => q > 0);
+    const haOggettoMagico = (window.magazzino.oggettiMagiciIstanze || []).length > 0 ||
+    (p?.inventario?.oggettiMagiciPersonali || []).length > 0 ||
+    (window.magazzino.oggettiMagici && Object.values(window.magazzino.oggettiMagici).some(q => q > 0));
     const livelloAG = p?.artificeria?.generale?.livello || 0;
     const specializzazioni = p?.artificeria?.specializzazioni || {};
 
@@ -1323,11 +1449,16 @@ function eseguiSmantellamentoRobot(leader, targetRobot, daCadavere) {
     } else {
         const idx = window.party.indexOf(targetRobot);
         if (idx !== -1) window.party.splice(idx, 1);
+        fetch(window.apiUrl(`/api/personaggi/${targetRobot.id}`), { method: 'DELETE', headers: window.buildAuthHeaders() })
+            .catch(e => console.warn('Eliminazione robot fallita:', e));
         alert(`${targetRobot.nome} è stato smantellato definitivamente: +${ricompensa} ingranaggi.`);
     }
     if (typeof window.aggiornaInterfaccia === 'function') window.aggiornaInterfaccia();
 }
 
+function modificaArtificeriaGenerale(delta) { modificaLivelloArtificeria('AG', delta); }
+function modificaArtificeriaSpec(spec, delta) { modificaLivelloArtificeria(spec, delta); }
+window.ARTIFICER_RECIPES = ARTIFICER_RECIPES;
 window.eseguiSmantellamentoRobot = eseguiSmantellamentoRobot;
 window.avviaSmantellamentoRobot = avviaSmantellamentoRobot;
 window.apriPotenziaRobotModal = apriPotenziaRobotModal;

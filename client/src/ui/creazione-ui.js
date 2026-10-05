@@ -109,7 +109,7 @@ function avviaCreazione(directAdd = false) {
     
     // Creazione unica
     window.tempP = new Personaggio("Nuovo", Math.floor((window.oreTotali || 0) / 24));
-    window.tempP.puntiCreazione = 63;
+    window.tempP.puntiCreazione = 70;
     window.tempP.livelloMagia = 0;
     window.tempP.spellsKnown = {0:0,1:0,2:0,3:0};
 
@@ -1171,11 +1171,8 @@ function gestisciDigitazionePerk(valore) {
     </div>`}
     `;
 }
-
-
-
      function getMagicLevelCost(livello) {
-        const costi = [0, 1, 2, 3, 3, 4, 4, 5, 5, 6];
+        const costi = [0,2,3,4,5,6,6];
         return costi[Math.min(Math.max(0, livello), costi.length - 1)] || 0;
     }
 
@@ -1338,7 +1335,7 @@ window.refundAndClearNonRobotPerks = refundAndClearNonRobotPerks;
     window.annullaCreazione = annullaCreazione;
     window.avviaCreazione = avviaCreazione;
     window.tempP = new Personaggio("Nuovo", Math.floor((window.oreTotali || 0) / 24));
-    window.tempP.puntiCreazione = 63;
+    window.tempP.puntiCreazione = 70;
     window.tempP.livelloMagia = 0;
     window.renderSetupStats = renderSetupStats;
     window.renderSetupPerks = renderSetupPerks;
