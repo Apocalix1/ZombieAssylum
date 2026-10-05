@@ -461,7 +461,6 @@ function avviaEsplorazioneGruppo(leader, compagni, pericolo, pericoloIdx) {
             oreRimanenti: oreSpedizione,
             isLeader: p === leader,
             membri: gruppoSpedizione.map(m => m.nome),
-            onComplete: () => terminaEsplorazione(p)
         };
         salvaPersonaggioCloud(p); // Salva lo stato aggiornato
     });
@@ -539,8 +538,7 @@ function lootPiattiDeliziosi(tiro) {
 
 function terminaEsplorazione(p) {
     if (!p) return;
-    try {
-        let bonus = (act.pericoloBonus ?? 0) + getExplorationBonus(p);
+       try {
         const act = p.azioneCorrente || {};
         let bonus = act.pericoloBonus !== undefined ? act.pericoloBonus : getExplorationBonus(p);
         const mult = act.pericoloMultiplo || 1;
@@ -706,6 +704,8 @@ function terminaEsplorazione(p) {
                 if (typeof window.updateMagazzinoFields === 'function') {
             window.updateMagazzinoFields({
                 oggettiMagici: magazzino.oggettiMagici,
+                oggettiMagiciIstanze: magazzino.oggettiMagiciIstanze,
+                libri: magazzino.libri,
                 armiTrovate: magazzino.armiTrovate,
                 pergamene: magazzino.pergamene
             });
@@ -880,3 +880,5 @@ window.rollZainoTrovato = rollZainoTrovato;
 window.segnaVittoria = segnaVittoria;
 window.getExplorationBonus = getExplorationBonus;
 window.terminaEsplorazione = terminaEsplorazione;
+window.AZIONI_RIPRISTINO = window.AZIONI_RIPRISTINO || {};
+window.AZIONI_RIPRISTINO.esplora = (p) => terminaEsplorazione(p);

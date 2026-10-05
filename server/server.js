@@ -69,9 +69,10 @@ async function createSession(db, userId) {
   return token;
 }
 
-function redactCharacterData(data) {
+function redactCharacterData(data, mostraInventario = false) {
   if (!data) return {};
   return {
+    inventario: mostraInventario ? data.inventario : undefined,
     nome: data.nome,
     isRobot: data.isRobot,
     inSpedizione: data.inSpedizione,
@@ -101,7 +102,7 @@ app.get('/api/party', authenticateUser, async (req, res) => {
         try { c.data = JSON.parse(c.data); } catch (e) { c.data = {}; }
       }
       if (req.user.role !== 'master' && c.user_id !== req.user.id) {
-        c.data = redactCharacterData(c.data);
+        c.data = redactCharacterData(c.data, req.user.role === 'ospite');
       }
       return c;
     });
@@ -390,6 +391,61 @@ app.post('/api/auth/logout', authenticateUser, async (req, res) => {
   }
 });
 
+// ========================= ROUTE: PROPOSTE =========================
+async function scadiProposte(db) {
+  await db.run("UPDATE proposte SET stato = 'scaduta' WHERE stato = 'in_attesa' AND scade_il < ?", new Date().toISOString());
+}
+
+app.post('/api/proposte', authenticateUser, requireNotGuest, async (req, res) => {
+  const { id, mittenteId, destinatarioId, tipo, dati } = req.body;
+  if (!id || !mittenteId || !destinatarioId || !tipo) return res.status(400).json({ error: 'Dati mancanti' });
+  try {
+    const db = await dbPromise;
+    const mitt = await db.get('SELECT user_id FROM personaggi WHERE id = ?', mittenteId);
+    if (!mitt || (req.user.role !== 'master' && mitt.user_id !== req.user.id)) {
+      return res.status(403).json({ error: 'Non sei il proprietario del mittente' });
+    }
+    const scadeIl = new Date(Date.now() + 2 * 60 * 1000).toISOString();
+    await db.run(
+      'INSERT INTO proposte (id, mittente_id, destinatario_id, tipo, dati, scade_il) VALUES (?, ?, ?, ?, ?, ?)',
+      id, mittenteId, destinatarioId, tipo, JSON.stringify(dati || {}), scadeIl
+    );
+    res.json({ success: true, scadeIl });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/proposte', authenticateUser, async (req, res) => {
+  try {
+    const db = await dbPromise;
+    await scadiProposte(db);
+    const proposte = req.user.role === 'master'
+      ? await db.all("SELECT * FROM proposte WHERE stato IN ('in_attesa','accettata')")
+      : await db.all(`
+          SELECT pr.* FROM proposte pr
+          JOIN personaggi d ON d.id = pr.destinatario_id
+          JOIN personaggi m ON m.id = pr.mittente_id
+          WHERE pr.stato = 'in_attesa' AND (d.user_id = ? OR m.user_id = ?)`, req.user.id, req.user.id);
+    res.json({ proposte });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/proposte/:id/rispondi', authenticateUser, requireNotGuest, async (req, res) => {
+  const { risposta } = req.body;
+  if (!['accetta', 'rifiuta'].includes(risposta)) return res.status(400).json({ error: 'Risposta non valida' });
+  try {
+    const db = await dbPromise;
+    await scadiProposte(db);
+    const pr = await db.get('SELECT * FROM proposte WHERE id = ?', req.params.id);
+    if (!pr) return res.status(404).json({ error: 'Proposta non trovata' });
+    if (pr.stato !== 'in_attesa') return res.status(409).json({ error: 'Proposta già gestita o scaduta' });
+    const dest = await db.get('SELECT user_id FROM personaggi WHERE id = ?', pr.destinatario_id);
+    if (req.user.role !== 'master' && (!dest || dest.user_id !== req.user.id)) {
+      return res.status(403).json({ error: 'Non sei il destinatario' });
+    }
+    await db.run('UPDATE proposte SET stato = ? WHERE id = ?', risposta === 'accetta' ? 'accettata' : 'rifiutata', pr.id);
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
 // ========================= ROUTE: PERSONAGGI =========================
 
 app.get('/api/personaggi/:id', authenticateUser, async (req, res) => {
@@ -526,12 +582,9 @@ app.post('/api/characters', authenticateUser, requireNotGuest, async (req, res) 
     const db = await dbPromise;
 
     if (req.user.role !== 'master') {
-      const count = await db.get(
-          'SELECT COUNT(*) as count FROM personaggi WHERE user_id = ? AND status != "morto"',
-          req.user.id
-      );
-      if (count.count >= 3) {
-        return res.status(403).json({ error: 'Hai già 3 personaggi attivi. Eliminane uno prima di crearne un altro.' });
+      const count = await db.get("SELECT COUNT(*) as count FROM personaggi WHERE user_id = ? AND status = 'vivo' AND nome != ?", req.user.id, nome);
+      if (count.count >= 4) {
+        return res.status(403).json({ error: 'Hai già 4 personaggi attivi. Eliminane uno prima di crearne un altro.' });
       }
     }
     if (!nome || !classe) {
@@ -545,7 +598,8 @@ app.post('/api/characters', authenticateUser, requireNotGuest, async (req, res) 
 
     const existing = await db.get('SELECT * FROM personaggi WHERE user_id = ? AND nome = ?', req.user.id, nome);
     if (existing) {
-      await db.run(
+  if (existing.status === 'morto') return res.status(409).json({ error: 'Questo personaggio è morto.' });
+  await db.run(
           'UPDATE personaggi SET data = ?, updated_at = ?, classe = ?, campo_base_id = ?, status = ? WHERE id = ?',
           typeof data === 'string' ? data : JSON.stringify(data || {}),
           updated_at || new Date().toISOString(), classe, campoFinale, 'vivo', existing.id
@@ -605,24 +659,33 @@ app.put('/api/personaggi/:id', authenticateUser, requireNotGuest, async (req, re
       return res.status(403).json({ error: 'Non hai il permesso di modificare questo personaggio' });
     }
 
-    // Solo il master può spostare un personaggio in un altro campo base
-    const { campoBaseId } = req.body;
+        const { campoBaseId } = req.body;
+    const isMaster = req.user.role === 'master';
+    const staRiattivando = !isMaster && personaggio.status === 'in_attesa' && status === 'vivo';
+
     let campoFinale = personaggio.campo_base_id;
-    if (req.user.role === 'master' && campoBaseId !== undefined) {
+    if (campoBaseId !== undefined && (isMaster || staRiattivando)) {
       const nuovoCampo = parseInt(campoBaseId, 10);
       const campoEsiste = await db.get('SELECT id FROM campi_base WHERE id = ?', nuovoCampo);
       if (!campoEsiste) return res.status(400).json({ error: 'Campo base non trovato' });
       campoFinale = nuovoCampo;
     }
 
-    // Se non è master, forziamo il mantenimento dello status attuale o comunque impediamo di resuscitare
-    let finalStatus = status || personaggio.status;
-    if (req.user.role !== 'master') {
-       finalStatus = personaggio.status; // I giocatori non possono cambiare lo status (es. da morto a vivo)
+    let finalStatus = personaggio.status;
+    if (isMaster) {
+      finalStatus = status || personaggio.status;
+    } else if (staRiattivando) {
+      const count = await db.get(
+          "SELECT COUNT(*) as count FROM personaggi WHERE user_id = ? AND status = 'vivo' AND id != ?",
+          req.user.id, personaggioId
+      );
+      if (count.count >= 2) {
+        return res.status(403).json({ error: 'Hai già 2 personaggi attivi. Eliminane uno prima di riattivarne un altro.' });
+      }
+      finalStatus = 'vivo';
+    } else if (status === 'morto' && personaggio.status === 'vivo') {
+      finalStatus = 'morto';
     }
-    const staRiattivando = req.user.role === 'master'
-        ? false
-        : (personaggio.status !== 'vivo' && status === 'vivo');
     if (staRiattivando) {
       const count = await db.get(
           'SELECT COUNT(*) as count FROM personaggi WHERE user_id = ? AND status = "vivo" AND id != ?',
@@ -865,6 +928,15 @@ app.put('/api/magazzino', authenticateUser, requireNotGuest, async (req, res) =>
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
+});
+
+app.post('/api/proposte/:id/esegui', authenticateUser, requireMaster, async (req, res) => {
+  try {
+    const db = await dbPromise;
+    const r = await db.run("UPDATE proposte SET stato = 'eseguita' WHERE id = ? AND stato = 'accettata'", req.params.id);
+    if (!r.changes) return res.status(409).json({ error: 'Proposta non eseguibile' });
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.post('/api/magazzino/transfer', authenticateUser, requireNotGuest, async (req, res) => {

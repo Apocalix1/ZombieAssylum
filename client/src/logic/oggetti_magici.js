@@ -108,6 +108,7 @@ function consumaCaricaCtx(ctx) {
     } else if (ctx.owner) {
         window.salvaPersonaggioCloud && window.salvaPersonaggioCloud(ctx.owner);
     }
+    else if (typeof window.updateMagazzinoFields === 'function') window.updateMagazzinoFields({ oggettiMagiciIstanze: window.magazzino.oggettiMagiciIstanze });
     return { def, esaurito, convertito };
 }
 window.consumaCaricaOggettoMagicoCtx = consumaCaricaCtx;

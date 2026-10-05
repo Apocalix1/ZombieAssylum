@@ -360,7 +360,7 @@ function renderMagazzinoModal() {
         const user = window.getCurrentUser ? window.getCurrentUser() : null;
         const isMaster = user && user.role === 'master';
         let destinatari = isMaster ? window.party : window.party.filter(p => p.user_id === user?.id);
-        const autoGive = destinatari.length === 1 ? `onclick="daiCompostoAPersonaggio(${destinatari[0]?.id ?? -1}, ${ci})"` : '';
+        const autoGive = destinatari.length === 1 ? `onclick="daiCompostoAPersonaggio(${party.indexOf(destinatari[0])}, ${ci})"` : '';
         let selectHtml = '';
         if (destinatari.length > 1) {
             selectHtml = `
@@ -371,7 +371,7 @@ function renderMagazzinoModal() {
                     `;
         } else if (destinatari.length === 1) {
             selectHtml = `<button class="btn-hero" ${autoGive}>Dai a ${destinatari[0].nome}</button>`;
-        } else {
+        } else {onclick="daiCompostoAPersonaggio(${party.indexOf(destinatari[0])}, ${ci})"
             selectHtml = '<span style="color:#888;">Nessun personaggio disponibile</span>';
         }
         return `
@@ -554,6 +554,8 @@ function ritiraOggettoPortatile(idx, nome) {
     }
     p.inventario.armi.push(nome);
     magazzino.congegniConteggio[nome]--;
+    window.updateMagazzinoFields({ congegniConteggio: magazzino.congegniConteggio });
+    salvaPersonaggioCloud(p);   
     aggiornaInterfaccia();
     mostraNotificaInAlto(`${p.nome} ha preso ${nome} dal magazzino.`, 'successo');
 }
@@ -810,13 +812,12 @@ function applicaPerkArmato(p) {
     p.armiLivello[categoria] = Math.max(livelloBase, livelloAttuale);
 
     let munText = '';
-    if (categoria === 'Archi' || categoria === 'Balestre') {
-        p.inventario.munizioni = (typeof p.inventario.munizioni === 'number' ? p.inventario.munizioni : 0) + 10;
-        munText = ' e 10 munizioni';
-    } else if (categoria === 'Armi da fuoco') {
-        p.inventario.munizioni = (typeof p.inventario.munizioni === 'number' ? p.inventario.munizioni : 0) + 3;
-        munText = ' e 3 munizioni';
-    }
+    if (typeof p.inventario.munizioni !== 'object' || !p.inventario.munizioni) {
+    p.inventario.munizioni = { frecce: 0, quadrelli: 0, proiettili: 0 };
+}
+if (categoria === 'Archi') { p.inventario.munizioni.frecce += 10; munText = ' e 10 munizioni'; }
+else if (categoria === 'Balestre') { p.inventario.munizioni.quadrelli += 10; munText = ' e 10 munizioni'; }
+else if (categoria === 'Armi da fuoco') { p.inventario.munizioni.proiettili += 3; munText = ' e 3 munizioni'; }
 
     alert(`${p.nome} inizia con: ${categoria} (competenza livello 1)${munText}.`);
 }

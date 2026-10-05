@@ -282,6 +282,7 @@ function avviaCreazione_Alchimia(idx, nomeRicetta, grado) {
     }
 
     window.magazzino.materialiAlchemici -= costoBase;
+    window.updateMagazzinoFields?.({ materialiAlchemici: window.magazzino.materialiAlchemici });
 
     const azione = {
         tipo: 'alchimia',
@@ -292,14 +293,15 @@ function avviaCreazione_Alchimia(idx, nomeRicetta, grado) {
         nomeRicetta, grado, cdEffettiva,
         collaboratoreNome: null,
         rollPrecalcolato,
-    onComplete: () => completaAlchimia(p, nomeRicetta, grado, cdEffettiva, null, rollPrecalcolato, antidotoVelenoTipo)
+        antidotoVelenoTipo
     };
 
     if (p.azioneCorrente) {
         if (confirm(`${p.nome} sta già facendo altro. Mettere in coda?`)) {
             p.codaAzioni.push(azione);
         } else {
-            window.magazzino.materialiAlchemici += gradoInfo.costo;
+            window.magazzino.materialiAlchemici += costoBase;
+            window.updateMagazzinoFields?.({ materialiAlchemici: window.magazzino.materialiAlchemici });
             return;
         }
     } else {
@@ -616,6 +618,7 @@ function avviaCreazione_AlchimiaConCollaboratore(mittente, collaboratore, nomeRi
         return;
     }
     window.magazzino.materialiAlchemici -= costoBase;
+    window.updateMagazzinoFields?.({ materialiAlchemici: window.magazzino.materialiAlchemici });
 
     let ricettaDati = null;
     if (window.RICETTE) {
@@ -629,15 +632,10 @@ function avviaCreazione_AlchimiaConCollaboratore(mittente, collaboratore, nomeRi
     const azione = {
         tipo: 'alchimia', oreTotali: gradoInfo.tempo, ricettaDati, oreRimanenti: gradoInfo.tempo,
         costoMateriali: gradoInfo.costo, nomeRicetta, grado, cdEffettiva,
-        collaboratoreNome: collaboratore.nome,
-        onComplete: () => completaAlchimia(mittente, nomeRicetta, grado, cdEffettiva, collaboratore)
+        collaboratoreNome: collaboratore.nome
     };
     const azioneCollab = {
-        tipo: 'alchimia-assistenza', oreTotali: gradoInfo.tempo, oreRimanenti: gradoInfo.tempo, nomeRicetta,
-        onComplete: () => {
-            mostraNotificaInAlto(`${collaboratore.nome} ha finito di assistere la creazione di "${nomeRicetta}".`, 'successo');
-            salvaPersonaggio(collaboratore);
-        }
+        tipo: 'alchimia-assistenza', oreTotali: gradoInfo.tempo, oreRimanenti: gradoInfo.tempo, nomeRicetta
     };
 
     // FIX: partono/si accodano SEMPRE insieme, mai separati
@@ -656,6 +654,17 @@ function avviaCreazione_AlchimiaConCollaboratore(mittente, collaboratore, nomeRi
     aggiornaInterfaccia();
 }
 
+window.AZIONI_RIPRISTINO = window.AZIONI_RIPRISTINO || {};
+Object.assign(window.AZIONI_RIPRISTINO, {
+    alchimia: (p, a) => completaAlchimia(
+        p, a.nomeRicetta, a.grado, a.cdEffettiva,
+        a.collaboratoreNome ? { nome: a.collaboratoreNome } : null,
+        a.rollPrecalcolato || null, a.antidotoVelenoTipo || null),
+    'alchimia-assistenza': (p, a) => {
+        mostraNotificaInAlto(`${p.nome} ha finito di assistere la creazione di "${a.nomeRicetta}".`, 'successo');
+        if (typeof salvaPersonaggio === 'function') salvaPersonaggio(p);
+    }
+});
 window.avviaCreazione_AlchimiaConCollaboratore = avviaCreazione_AlchimiaConCollaboratore;
 window.applicaConsumoComposto = applicaConsumoComposto;
 window.consumaComposto = consumaComposto;

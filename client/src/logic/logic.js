@@ -141,7 +141,6 @@ export function refreshPartyListeners() {
     if (typeof window.aggiornaInterfaccia === 'function') window.aggiornaInterfaccia();
 }
 
-
 async function executeCommand(cmd) {
     switch (cmd.type) {
         case 'updateMagazzino':
@@ -228,6 +227,7 @@ function startFastPoll() {
     }, fastPollDelay);
 }
 
+
 let isSyncingMagazzino = false;
 export async function syncMagazzinoDalServer() {
     if (isSyncingMagazzino) return;
@@ -238,8 +238,8 @@ export async function syncMagazzinoDalServer() {
         if (data.magazzino && data.magazzino.data) {
             setMagazzino(data.magazzino.data);
             window.magazzino = magazzino;
-            if (typeof magazzino.oreTotali === 'number' && magazzino.oreTotali > (window.oreTotali || 0)) {
-                window.oreTotali = magazzino.oreTotali;}
+            if (typeof magazzino.oreTotali === 'number' && Date.now() > (window._tempoInCorso || 0)) {
+                    window.oreTotali = magazzino.oreTotali; }
             if (typeof window.renderCimitero === 'function') {
                 window.renderCimitero();
             }
@@ -479,7 +479,7 @@ export async function salvaPersonaggioCloud(personaggio, campoBaseId = null) {
                 classe: personaggio.classe || 'Sopravvissuto',
                 data: JSON.stringify(personaggio),
                 updated_at: personaggio.updated_at,
-                campoBaseId: campoFinale
+                campoBaseId: campoFinale || undefined
             }),
         });
         if (risposta && risposta.character && risposta.character.id) {
@@ -493,12 +493,8 @@ export async function salvaPersonaggioCloud(personaggio, campoBaseId = null) {
 
 export async function sincronizzaPersonaggio(personaggioLocale) {
     const localCopy = salvaPersonaggioLocalmente(personaggioLocale);
-    if (!navigator.onLine) {
-        return localCopy;
-    }
-    try {
-        await salvaPersonaggioCloud(localCopy);
-    } catch (error) {
+if (!navigator.onLine) { return localCopy; }
+try { await salvaPersonaggioCloud(personaggioLocale); }catch (error) {
         console.warn('Impossibile sincronizzare con il server:', error?.message || error);
     }
     return localCopy;
@@ -588,7 +584,9 @@ export class Personaggio {
         this.diabeteTipoI = false;
         this.diabeteTipoII = false;
         this.diabeteUltimoPastoTimestamp = null;      // ora di gioco (oreTotali) ultimo pasto
-        this.diabeteTimerMax = 72;                    // 3 giorni
+        this.diabeteTimerMax = 72;    
+        this.diabeteTimer = 72;
+        this.diabeteGiorniSenzaInsulina = 0;                // 3 giorni
         this.diabeteStaminaSpesaLog = [];             // [{ora, qty}] finestra 4h iperglicemia
         this._diabeteInstabile = false;               // blocco guarigione PF (Diabete II)
         this.pesoCorporeo = { usiCuscinetto: null, benNutritoOreAccumulate: 0 };
@@ -609,8 +607,6 @@ export class Personaggio {
         this.puntiFeritaRealiMaxBase = 5;
         this.puntiFeritaReali = 5;
         this.puntiFortunaMax = 15;
-        // Tenere traccia di eventuali riduzioni temporanee del massimo PF Fortuna
-        // causate da sovraccarico mana (da ripristinare al prossimo riposo lungo)
         this._sovraccaricoFortunaLost = 0;
         this.rancoreDurataOre = null;
         this.puntiFortuna = 15;
@@ -703,7 +699,7 @@ export class Personaggio {
         this.lingue = ['Verbum'];
         this.corazzaAPiastreMax = 20;
         this.corazzaAPiastre = 20;
-        this.puntiCreazione = 63;
+        this.puntiCreazione = 70;
         this.livelloMagia = 0;
         this.manaMax = 0;
         this.manaAttuale = 0;
@@ -732,12 +728,42 @@ export class Personaggio {
         this.initInventarioBase();
     }
 
+        migraDati() {
+        const RINOMINATI = {
+            'Combattimento stratigico': 'Combattimento strategico',
+            'Ossessione del pulito': 'Ossessione del Pulito',
+            'Diabete tipo I': 'Diabete di Tipo I',
+            'Diabete tipo II': 'Diabete di Tipo II',
+            'Notveole': 'Notevole'
+        };
+        const SKILLS = {
+            'Frate di paese': ['Manodopera', 'Religione'],
+            'Contadino': ['Natura', 'Addestrare animali'],
+            'Ricattatore': ['Indagare', 'Intimidire'],
+            'Ricercatore magico': ['Arcano', 'Indagare']
+        };
+        (this.perks || []).forEach((perk, i) => {
+            if (typeof perk === 'string') {
+                if (RINOMINATI[perk]) this.perks[i] = RINOMINATI[perk];
+                return;
+            }
+            if (!perk) return;
+            if (RINOMINATI[perk.nome]) {
+                const nuovo = window.findPerkData ? window.findPerkData(RINOMINATI[perk.nome]) : null;
+                Object.assign(perk, nuovo ? { ...nuovo } : {}, { nome: RINOMINATI[perk.nome] });
+            }
+            if (SKILLS[perk.nome]) perk.skills = [...SKILLS[perk.nome]];
+            if (perk.nome === 'Teologo' && typeof perk.costo !== 'number') perk.costo = 4;
+        });
+        if (Array.isArray(this.lingue)) this.lingue = this.lingue.map(l => l === 'Yakzi' ? 'Yazyk' : l);
+    }
 
-
-    initInventarioBase() {
+       initInventarioBase() {
+        if (typeof this.migraDati === 'function') this.migraDati();
         if (!this.inventario) {
             this.inventario = {
                 armi: [],
+                oggetti: [],
                 zaini: [],
                 consumabili: [],
                 composti: [],
@@ -758,6 +784,7 @@ export class Personaggio {
         }
         if (!this.inventario.documenti) this.inventario.documenti = [];
         if (!this.inventario.composti) this.inventario.composti = [];
+        if (!this.inventario.oggetti) this.inventario.oggetti = [];
         if (!this.inventario.batterie) this.inventario.batterie = 0;
         if (!this.inventario.oggettiMagici) this.inventario.oggettiMagici = { comuni: 0, nonComuni: 0, rari: 0, superRari: 0 };
         if (!this.inventario.oggettiMagiciPersonali) this.inventario.oggettiMagiciPersonali = [];
@@ -796,7 +823,7 @@ export class Personaggio {
     get CA() {
      let CA =10+Math.floor((this.destrezza-10)/2);
      if (this.hasPerk('Cauto')) CA+=1;
-     if (this.hasPerk('Esoscheletro duro')) CA+=2;
+     if (this.hasPerk('Carapace/Esoscheletro')) CA+=2;
      if (this.hasPerk('Sfida')) CA+=2;
      if (this.hasPerk('Armatura del tenero')) 
      {
@@ -893,7 +920,7 @@ export class Personaggio {
         const canRecoverLeft = Math.max(0, this.robotRepairTotalLimit - this.robotRepairTotalDone);
         if (canRecoverLeft <= 0) return false;
         const maxRecoverPerFull = Math.floor(this.robotPFMax * 0.85);
-        const actual = Math.min(amount, canRecoverLeft, maxRecoverPerFull);
+        const actual = Math.min(amount, canRecoverLeft, maxRecoverPerFull, this.robotPFMax - this.robotPF);
         this.robotPF = Math.min(this.robotPFMax, this.robotPF + actual);
         this.robotRepairTotalDone += actual;
         this.robotMicroRepairsUsed = 0;
@@ -1034,17 +1061,7 @@ export class Personaggio {
         const azione = {
             tipo: 'ossessione_pulito',
             oreTotali: 2,
-            oreRimanenti: 2,
-            onComplete: () => {
-                const magNow = window.magazzino;
-                magNow.baseIgienizzataGiorno = Math.floor((window.oreTotali || 0) / 24);
-                if (typeof window.updateMagazzinoFields === 'function') {
-                    window.updateMagazzinoFields({ baseIgienizzataGiorno: magNow.baseIgienizzataGiorno });
-                }
-                if (typeof window.mostraNotificaInAlto === 'function') {
-                    window.mostraNotificaInAlto(`${this.nome} ha igienizzato la base. CD medicazioni -1 per oggi.`, 'successo');
-                }
-            }
+            oreRimanenti: 2
         };
         if (typeof window.inserisciAzioneConPriorita === 'function') {
             window.inserisciAzioneConPriorita(this, azione, true);
@@ -1188,87 +1205,53 @@ export class Personaggio {
     return true;
 }
 
-    castSpell(level, target = null) {
-        const check = this.canCastSpell(level);
-        if (!check.allowed) {
-            return {success: false, message: check.reason};
-        }
-
-        const cost = check.cost;
-        let manaSpent = cost;
-        let overloadDamage = 0;
-        let message = '';
-
-        // 1. Controlla se spendere mana sotto zero
-        const minAllowed = -this.livelloMagia;
-        let manaAfter = this.manaAttuale - cost;
-
-        // 2. Se manaAfter < 0, calcola danno da sovraccarico per la parte negativa
-        let negativeManaSpent = 0;
-        if (manaAfter < 0) {
-            negativeManaSpent = Math.min(-manaAfter, this.livelloMagia); // max negativo = -livelloMagia
-            const actualNegative = Math.min(negativeManaSpent, this.livelloMagia);
-            if (actualNegative > 0) {
-                // Danno 2d6 per punto mana sotto zero
-                for (let i = 0; i < actualNegative; i++) {
-                    overloadDamage += this.rollDice(2, 6);
-                }
-                // Applica danno (prima ai PF fortuna, poi reali)
-                this.applyOverloadDamage(overloadDamage);
-                // Riduci il mana negativo effettivo
-                manaAfter = this.manaAttuale - cost; // già calcolato, ma se supera il limite, tronchiamo
-                if (manaAfter < -this.livelloMagia) {
-                    manaAfter = -this.livelloMagia;
-                }
-            }
-        }
-
-        // 3. Applica il consumo mana (anche negativo)
-        this.manaAttuale = manaAfter;
-
-        // 4. Controlla se ha raggiunto il limite negativo (esaurimento magico)
-        if (this.manaAttuale <= -this.livelloMagia) {
-            this._magicExhausted = true;
-            // Aggiunge 2 livelli di fatica
-            this.faticaBase = Math.min(6, this.faticaBase + 2);
-            if (typeof window.mostraNotificaInAlto === 'function') {
-                window.mostraNotificaInAlto(`${this.nome} è esausto magicamente! +2 fatica, incantesimi bloccati.`, 'pericolo');
-            }
-        }
-
-        // 5. Controlla affaticamento arcano (speso >50% mana max in 1 minuto)
-        this.checkArcaneFatigue(cost);
-
-        // 6. Se l'incantesimo ha un target e fa danno, applica effetti (da implementare)
-        if (target && typeof target.applyDamage === 'function') {
-            // Esempio: danno magico = (cost * 2) + modifier
-            const damage = cost * 2 + this.getCastingModifier();
-            target.applyDamage(damage);
-            message += `Inflitto ${damage} danni a ${target.nome}. `;
-        }
-
-        // 7. Messaggio finale
-        message += `Consumati ${cost} mana.${overloadDamage > 0 ? ` Subiti ${overloadDamage} danni da sovraccarico.` : ''}`;
-        if (this._arcaneFatigueApplied) {
-            message += ' (Affaticato arcano)';
-        }
-        if (this._magicExhausted) {
-            message += ' (Esaurito magicamente)';
-        }
-
-        this.incantesimiUltimoLancio = this.incantesimiUltimoLancio || {};
-        if (this._nextCastSpellName) {
-            this.incantesimiUltimoLancio[this._nextCastSpellName] = window.oreTotali || 0;
-        }
-
-        // Aggiorna interfaccia
-        if (typeof window.aggiornaInterfaccia === 'function') {
-            window.aggiornaInterfaccia();
-        }
-
-        return {success: true, manaSpent: cost, overloadDamage, message};
+canCastSpell(level) {
+    if (this.isRobot) return this.canCastSpellRobot(level);
+    const cost = this.getSpellCost(level);
+    if (this._magicExhausted) return { allowed: false, reason: 'Esaurimento magico: serve un riposo lungo.' };
+    if (!this.canSpendMana(cost)) return { allowed: false, reason: 'Mana insufficiente.' };
+    const sottoZero = Math.max(0, cost - Math.max(0, this.manaAttuale));
+    if (sottoZero > 0 && this.puntiFortuna < sottoZero * 2) {
+        return { allowed: false, reason: 'PF Fortuna insufficienti per usare mana sotto lo zero.' };
     }
+    return { allowed: true, cost };
+}
 
+castSpell(level, target = null) {
+    const check = this.canCastSpell(level);
+    if (!check.allowed) return { success: false, message: check.reason };
+    if (this.isRobot) return this.castSpellRobot(level, target);
+
+    const cost = check.cost;
+    const sottoZero = Math.max(0, cost - Math.max(0, this.manaAttuale));
+    this.manaAttuale -= cost;
+    let message = `Consumati ${cost} mana.`;
+
+    if (sottoZero > 0) {
+        const perdita = sottoZero * 2;
+        this.puntiFortunaMax = Math.max(1, this.puntiFortunaMax - perdita);
+        this._sovraccaricoFortunaLost = (this._sovraccaricoFortunaLost || 0) + perdita;
+        this.puntiFortuna = Math.min(this.puntiFortuna, this.puntiFortunaMax);
+        message += ` Mana sotto lo zero: PF Fortuna max -${perdita}.`;
+        if (this.puntiFortuna <= 0) {
+            const stadi = Math.floor(sottoZero / 3);
+            if (stadi > 0) {
+                this.puntiFeritaReali = Math.max(0, this.puntiFeritaReali - stadi);
+                message += ` Senza PF Fortuna: -${stadi} stadio/i di ferita.`;
+            }
+        }
+    }
+    if (this.livelloMagia > 0 && this.manaAttuale <= -this.livelloMagia) {
+        this._magicExhausted = true;
+        this.faticaBase = Math.min(6, this.faticaBase + 2);
+        message += ' Esaurimento magico: +2 fatica.';
+    }
+    this.checkArcaneFatigue(cost);
+    this.incantesimiUltimoLancio = this.incantesimiUltimoLancio || {};
+    if (this._nextCastSpellName) this.incantesimiUltimoLancio[this._nextCastSpellName] = window.oreTotali || 0;
+    if (typeof window.aggiornaInterfaccia === 'function') window.aggiornaInterfaccia();
+    return { success: true, manaSpent: cost, message };
+}
     /**
      * Applica il danno da sovraccarico (PF fortuna prima, poi reali)
      */
@@ -1388,25 +1371,21 @@ export class Personaggio {
         if (idx !== -1) this.perks.splice(idx, 1);
     }
 
-    /**
-     * Recupera mana dopo un riposo breve (4 ore)
-     */
     recoverManaShortRest() {
-        if (this.livelloMagia === 0) return 0;
-        const base = this.livelloMagia;
-        const bonus = Math.floor(this.livelloMagia / 3);
-        const recovery = base + bonus;
-        const oldMana = this.manaAttuale;
-        this.manaAttuale = Math.min(this.manaMax, this.manaAttuale + recovery);
-        return this.manaAttuale - oldMana;
-    }
+    if (this.livelloMagia === 0) return 0;
+    let recovery = Math.max(0, this.livelloMagia + this.getCastingModifier());
+    if (this.hasArcanoMastery()) recovery += Math.floor(Math.random() * 4) + 1;
+    const old = this.manaAttuale;
+    this.manaAttuale = Math.min(this.manaMax, this.manaAttuale + recovery);
+    return this.manaAttuale - old;
+}
 
     /**
      * Recupera mana dopo un riposo lungo (8 ore)
      */
     recoverManaLongRest() {
         if (this.livelloMagia === 0) return 0;
-        const recovery = this.livelloMagia * 3;
+        const recovery = Math.max(0, this.livelloMagia * 2 + this.getCastingModifier());
         const oldMana = this.manaAttuale;
         this.manaAttuale = Math.min(this.manaMax, this.manaAttuale + recovery);
         // Resetta anche affaticamento arcano ed esaurimento magico
@@ -1495,7 +1474,7 @@ export class Personaggio {
     get woundEffectText() {
         switch (this.woundState) {
             case "Ferita lieve":
-                return "30% peggiora dopo 5h se non curata";
+                return "30% peggiora dopo 6h se non curata";
             case "Ferita profonda":
                 return "Dopo 3h diventa Funzionalità a rischio";
             case "Funzionalità a rischio":
@@ -1537,12 +1516,8 @@ export class Personaggio {
 
     get puntiFortunaMaxEffettivo() {
         // Malattia: -10 PF fortuna max per grado 7-8
-        const malFortunaMax = this.applicaEffettiMalattia('fortunaMax');
-        if (malFortunaMax !== 0) {
-            return Math.max(1, this.puntiFortunaMax + malFortunaMax);
-        }
-
-        return this.faticaTotale >= 4 ? Math.max(1, Math.ceil(this.puntiFortunaMax / 2)) : this.puntiFortunaMax;
+    let max = Math.max(1, this.puntiFortunaMax + this.applicaEffettiMalattia('fortunaMax'));
+    return this.faticaTotale >= 4 ? Math.max(1, Math.ceil(max / 2)) : max;
     }
 
     get woundTimeToWorsen() {
@@ -1701,7 +1676,7 @@ export class Personaggio {
         if (this.stadioSete >= 3) s -= 2;
         if (this.faticaTotale >= 2) s -= 1;
         if (this.puntiFeritaReali <= 3 && this.puntiFeritaReali > 0) s -= 1;
-        if (this.faticaTotale >= 5) s = 1;
+        if (this.faticaTotale >= 5) s = 0;
         return Math.max(0, s);
     }
 
@@ -1809,7 +1784,7 @@ export class Personaggio {
                     motivi.push("Anziana Carismatica (+2)");
                 }
                 if (haPerk("Muto")){
-                    valoriBase -=2;
+                    valoriBase -= 2;
                     motivi.push("Muto (suka non parli) (-2)");
                 }
 
@@ -2194,7 +2169,6 @@ export class Personaggio {
             'sopravvivenza': 'Saggezza',
             'inganno': 'Carisma',
             'indagare': 'Intelligenza',
-            'investigare': 'Intelligenza',
             'giochi di carte': 'Carisma',
             'giochi di Carte': 'Carisma',
             'rapidità di mano': 'Destrezza',
@@ -2896,15 +2870,14 @@ export class Personaggio {
 
         // ==================== 8. RECUPERO MANA ====================
         if (this.isRestAction() && this.livelloMagia > 0) {
-            this._restHoursAccumulated = (this._restHoursAccumulated || 0) + 1;
-            if (this._restHoursAccumulated >= 4) {
-                this.recoverManaShortRest();
-                this._restHoursAccumulated = 0;
-            }
-            if (this._restHoursAccumulated >= 8) {
-                this.recoverManaLongRest();
-                this._restHoursAccumulated = 0;
-            }
+        this._restHoursAccumulated = (this._restHoursAccumulated || 0) + 1;
+        const sBreve = this.hasPerk('Trance') ? 2 : 4;
+        const sLungo = this.hasPerk('Trance') ? 4 : 8;
+        if (this._restHoursAccumulated === sBreve) this.recoverManaShortRest();
+        if (this._restHoursAccumulated >= sLungo) {
+            this.recoverManaLongRest();
+            this._restHoursAccumulated = 0;
+        }
         } else {
             this._restHoursAccumulated = 0;
         }
@@ -2995,12 +2968,7 @@ export class Personaggio {
         // ==================== 10. AUTO‑SONNO (collasso) ====================
         if (this.sonno <= 0 && !this.inSpedizione && (!this.azioneCorrente || this.azioneCorrente.tipo !== 'dormi')) {
             const oreDormire = 15;
-            this.azioneCorrente = {
-                tipo: 'dormi',
-                oreTotali: oreDormire,
-                oreRimanenti: oreDormire,
-                onComplete: () => { this.applicaRisveglio(oreDormire); this.completaAzione(); }
-            };
+            this.azioneCorrente = { tipo: 'dormi', oreTotali: oreDormire, oreRimanenti: oreDormire };
             this.sonno = Math.min(8, this.sonno + 0.5);
             if (typeof mostraNotificaInAlto === 'function') {
                 mostraNotificaInAlto(`${this.nome} si addormenta automaticamente per evitare il collasso.`, 'avviso');
@@ -3010,7 +2978,7 @@ export class Personaggio {
         // ==================== 11. CONTROLLO MORTE (dopo le emergenze) ====================
         if (this.puntiFeritaReali <= 0) return "per emorragia";
         if (this.isRobot && this.robotPF <= 0) return "distrutto";
-        if (this.faticaTotale >= 6) return "sfinimento";
+        if (this.faticaTotale >= (this.hasPerk('Carroarmato') ? 7 : 6)) return "sfinimento";
         if (!this.isRobot) {
             if (this.fame <= 0) return "inedia";
             if (this.sete <= 0) return "disidratazione";
@@ -3073,7 +3041,7 @@ export class Personaggio {
 
     get velocitaAttuale() {
         let v = this.velcotiaBase || 9;
-        if (this.hasPerk('Grande taglia')) v -= 1;
+        if (this.hasPerk('Grande taglia')) v -= 2;
          if (this._corsaAQuattroZampeAttiva) v += 3;
         if (this.hasPerk('Piccola taglia')) v += 2;
         if (this.hasPerk('Corpo Leggero')) v += 1;
@@ -3084,6 +3052,8 @@ export class Personaggio {
         if (this.hasPerk('Carapace/Esoscheletro duro')) v -= 2;
         if (this.capacitaMax > 0 && !(this.hasPerk && this.hasPerk('Facchino esperto')) && (this.pesoAttuale / this.capacitaMax) > 0.70) v -= 2;
         v = Math.max(0, v);
+        if (this.faticaTotale >= 5) return 0;
+        if (this.faticaTotale >= 2) v = v / 2;
         if (this.hasPerk('Zoppo')) v = v / 2;
         return v;
     }
@@ -3142,7 +3112,7 @@ export class Personaggio {
         if (this.malattia.inCura && this.malattia.diagnosiCorretta) return false; // in cura corretta → non peggiora
 
         // Se ha diagnosi sbagliata, il timer è rallentato del 50%
-        const fattore = (this.malattia.diagnosiEffettuata && !this.malattia.diagnosiCorretta) ? 0.5 : 1;
+        const fattore = 1;
 
         // Sottrai le ore passate dal timer
         this.malattia.timerPeggioramento -= (ore * fattore);
@@ -3152,8 +3122,8 @@ export class Personaggio {
             this.malattia.grado = Math.min(12, this.malattia.grado + 3);
             this.malattia.timerPeggioramento = this.calcolaTimerPeggioramento(this.malattia.grado);
             // Resetta la diagnosi (va rifatta per il nuovo grado)
-            this.malattia.diagnosiCorretta = false;
-            this.malattia.diagnosiEffettuata = false;
+            if (this.malattia.diagnosiCorretta) this.malattia.oreCureNecessarie = this.calcolaOreCuraNecessarie(this.malattia.grado);
+            else this.malattia.diagnosiEffettuata = false;
             this.malattia.inCura = false;
             this.malattia.oreCuraAccumulate = 0;
 
@@ -3219,72 +3189,30 @@ export class Personaggio {
         }
         return requisiti;
     }
-
     completaAzione() {
-        if (this.azioneCorrente) {
-            const bugFail = window.hasPerk && window.hasPerk(this, 'Bug') && Math.random() < 0.10;
-            if (bugFail) {
-                if (typeof window.mostraNotificaInAlto === 'function') {
-                    window.mostraNotificaInAlto(`⚠️ Bug: l'azione di ${this.nome} si interrompe a metà e fallisce!`, 'pericolo');
-                }
-                this.azioneCorrente = this.codaAzioni.shift() || null;
-                if (typeof window.salvaPersonaggioCloud === 'function') {
-                    window.salvaPersonaggioCloud(this);
-                }
-                return;
+    if (this.azioneCorrente) {
+        const a = this.azioneCorrente;
+        const bugFail = window.hasPerk && window.hasPerk(this, 'Bug') && Math.random() < 0.10;
+        if (bugFail) {
+            if (typeof window.mostraNotificaInAlto === 'function') {
+                window.mostraNotificaInAlto(`⚠️ Bug: l'azione di ${this.nome} si interrompe a metà e fallisce!`, 'pericolo');
             }
-            // Se esiste onComplete, eseguilo
-            if (typeof this.azioneCorrente.onComplete === 'function') {
-                try {
-                    this.azioneCorrente.onComplete();
-                } catch (e) {
-                    console.warn('Errore in onComplete:', e);
-                }
-                        } else {
-                // FALLBACK: se manca onComplete, gestiamo i tipi di azione noti
-                                const tipo = this.azioneCorrente.tipo;
-                const ripristino = window.AZIONI_RIPRISTINO && window.AZIONI_RIPRISTINO[tipo];
-                if (ripristino) {
-                    try { ripristino(this, this.azioneCorrente); }
-                    catch (e) { console.warn(`Ripristino azione ${tipo} fallito:`, e); }
-                } else if (tipo === 'esplora') {
-                    if (typeof window.terminaEsplorazione === 'function') {
-                        window.terminaEsplorazione(this);
-                    } else {
-                        console.warn('terminaEsplorazione non disponibile');
-                    }
-                } else if (tipo === 'dormi') {
-                    if (typeof this.applicaRisveglio === 'function') {
-                        this.applicaRisveglio(this.azioneCorrente.oreTotali);
-                    }
-                } else if (tipo === 'allenamento') {
-                    // per allenamento, se non c'è onComplete, non possiamo recuperare la categoria, ma possiamo loggare
-                    console.warn(`Allenamento completato senza onComplete per ${this.nome}`);
-                } else if (tipo === 'alchimia' && this.azioneCorrente.nomeRicetta && typeof window.completaAlchimia === 'function') {
-                    // onComplete perso (es. reload), ma i dati dell'azione (ricetta/CD/tiro) sono ancora presenti: ricostruiamo l'esito.
-                    window.completaAlchimia(
-                        this,
-                        this.azioneCorrente.nomeRicetta,
-                        this.azioneCorrente.grado,
-                        this.azioneCorrente.cdEffettiva,
-                        null,
-                        this.azioneCorrente.rollPrecalcolato || null
-                    );
-                } else if (tipo === 'artificeria-assistenza' || tipo === 'assistenza-medica') {
-                    if (typeof window.mostraNotificaInAlto === 'function') {
-                        window.mostraNotificaInAlto(`${this.nome} ha finito di assistere (onComplete perso: nessun bonus extra applicato).`, 'avviso');
-                    }
-                } else {
-                    console.warn(`Azione ${tipo} completata ma senza onComplete e nessuna gestione predefinita.`);
-                }
-            }
+            this.azioneCorrente = this.codaAzioni.shift() || null;
+            if (typeof window.salvaPersonaggioCloud === 'function') window.salvaPersonaggioCloud(this);
+            return;
         }
-        // Passa alla prossima azione in coda
-        this.azioneCorrente = this.codaAzioni.shift() || null;
-        if (typeof window.salvaPersonaggioCloud === 'function') {
-            window.salvaPersonaggioCloud(this);
+        const handler = window.AZIONI_RIPRISTINO && window.AZIONI_RIPRISTINO[a.tipo];
+        try {
+            if (handler) handler(this, a);
+            else if (typeof a.onComplete === 'function') a.onComplete();   // solo azioni non ancora convertite
+            else console.warn(`Azione "${a.tipo}" completata senza handler.`);
+        } catch (e) {
+            console.warn(`Errore nel completamento di "${a.tipo}":`, e);
         }
     }
+    this.azioneCorrente = this.codaAzioni.shift() || null;
+    if (typeof window.salvaPersonaggioCloud === 'function') window.salvaPersonaggioCloud(this);
+}
 
     normalizePuntiFortuna() {
         const max = this.puntiFortunaMaxEffettivo;
@@ -3329,7 +3257,7 @@ export class Personaggio {
         if (!this.hasPerk('Incantatore')) return { allowed: false, reason: 'Serve il perk Incantatore.' };
         if (!this.hasSpellLevel(level)) return { allowed: false, reason: 'Incantesimo non conosciuto.' };
         const cost = this.getSpellCost(level);
-        const hoursNeeded = cost * (20 / 60);
+        const hoursNeeded = cost * 0.5;
         if ((this.batteryHours || 0) < hoursNeeded) return { allowed: false, reason: 'Batteria Arcana insufficiente.' };
         return { allowed: true, cost, hoursNeeded };
     }
@@ -3398,13 +3326,13 @@ export class Personaggio {
         if (stat === 'fortunaMax' && grado >= 7) {
             return -10;
         }
-        if (stat === 'tuttiMod' && grado >= 4 && grado <= 6) {
+        if (stat === 'tuttiMod' && grado >= 4) {
             return -1;
         }
         if (stat === 'pfRealiGiorno' && grado >= 9) {
             return -1; // da applicare una volta al giorno
         }
-        if (stat === 'tempoAzione' && grado <= 3) {
+        if (stat === 'tempoAzione' && grado >= 1) {
             return 0.15; // +15% tempo
         }
         return 0;
@@ -3422,28 +3350,6 @@ Personaggio.prototype.puoOttenereMaestria = function (materiaNuova) {
     return attuali.length < 3;
 };
 
-Personaggio.prototype.getModificatoreTempoAzione = function (tipoAzione, materia = null) {
-    let mult = 1;
-
-    // Rilassato: +10% tempo su ogni azione TRANNE guarire
-    if (this.hasPerk('Rilassato') && tipoAzione !== 'guarigione') {
-        mult *= 1.10;
-    }
-
-    // Ipocondriaco: +20% tempo su ogni azione se ha uno stadio di malattia attivo
-    if (this.hasPerk('Ipocondriaco') && this.isMalato && this.isMalato()) {
-        mult *= 1.20;
-    }
-
-    // Maldestro: +30% tempo per imparare/lavorare Manodopera, Rapidità di mano, Artificeria
-    if (materia && this.hasPerk('Maldestro') &&
-        ['Manodopera', 'Rapidità di mano', 'Artificeria'].includes(materia)) {
-        mult *= 1.30;
-    }
-
-    return mult;
-};
-
 Personaggio.prototype.getSogliaStudioGiornaliero = function () {
     return this.hasPerk('Studente devoto') ? 10 : 8; // +25%
 };
@@ -3454,10 +3360,7 @@ Personaggio.prototype.applicaRisveglio = function (oreDormite) {
     const oreSogliaBreve = this.hasPerk('Trance') ? 2 : 4;
     const oreSogliaLunga = this.hasPerk('Trance') ? 4 : 8;
 
-    if (oreDormite >= oreSogliaBreve && this.livelloMagia > 0) {
-        const cicli = Math.floor(oreEffettive / oreSogliaBreve);
-        for (let i = 0; i < cicli; i++) this.recoverManaShortRest();
-    }
+     if (this.livelloMagia > 0) this.recoverManaLongRest();
 
     // ASMATICO: cap recupero stamina su riposo breve, salvo boost pagato
     if (this.hasPerk('Asmatico') && oreDormite < oreSogliaLunga) {
@@ -3534,12 +3437,26 @@ Personaggio.prototype.getModificatoreTempoAzione = function (tipoAzione, materia
     if (this.isRobot && this.biocarburanteDeficit) {
         mult *= 1.25;
     }
+    
+    if (this.isMalato && this.isMalato()) mult *= 1.15;   
 
     return mult;
 };
+window.AZIONI_RIPRISTINO = window.AZIONI_RIPRISTINO || {};
+Object.assign(window.AZIONI_RIPRISTINO, {
+    sfogo_irascibile: () => {},
+    ossessione_pulito: (p) => {
+        const giorno = Math.floor((window.oreTotali || 0) / 24);
+        window.magazzino.baseIgienizzataGiorno = giorno;
+        window.updateMagazzinoFields?.({ baseIgienizzataGiorno: giorno });
+        window.mostraNotificaInAlto?.(`${p.nome} ha igienizzato la base. CD medicazioni -1 per oggi.`, 'successo');
+    }
+});
 window.Personaggio = Personaggio;
 window.buildAuthHeaders = buildAuthHeaders;
 window.caricaDatiDaLocalStorage = caricaDatiDaLocalStorage;
+window.syncPartyFromServer = syncPartyFromServer;
+window.syncMagazzinoDalServer = syncMagazzinoDalServer;
 window.salvaPersonaggioLocalmente = salvaPersonaggioLocalmente;
 window.salvaPersonaggioCloud = salvaPersonaggioCloud;
 window.salvaPersonaggio=salvaPersonaggio;

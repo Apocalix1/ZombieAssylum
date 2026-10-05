@@ -118,7 +118,7 @@ function avviaCerimoniaBecchino(becchino) {
         tipo: 'cerimonia_becchino',
         oreTotali: 0.5,
         oreRimanenti: 0.5,
-        onComplete: () => completaCerimoniaBecchino(idCerimonia)
+        onComplete: () => avviaCerimoniaBecchino(idCerimonia)
     };
     if (becchino.azioneCorrente) becchino.codaAzioni.push(azione);
     else becchino.azioneCorrente = azione;
@@ -127,22 +127,30 @@ function avviaCerimoniaBecchino(becchino) {
     aggiornaInterfaccia();
 }
 
-function completaCerimoniaBecchino(idCerimonia) {
-    const cerimonia = window._cerimonieBecchino && window._cerimonieBecchino[idCerimonia];
-    if (!cerimonia) return;
-    const becchino = party.find(p => p.id === cerimonia.becchinoId);
-        if (becchino && cerimonia.partecipanti.size > 0) {
-        const modCar = becchino.getStatDettagliata('Carisma').mod;
-        const riduzioneRichiesta = Math.max(0, rollDice(1, 4) + modCar);
-        const riduzione = becchino.riduciFollia(riduzioneRichiesta, 'cerimonia_becchino');
-        mostraNotificaInAlto(`La cerimonia di ${becchino.nome} si conclude: Follia -${riduzione} (${cerimonia.partecipanti.size} partecipanti).`, 'successo');
-        salvaPersonaggioCloud(becchino);
-    } else if (becchino) {
-        mostraNotificaInAlto(`La cerimonia di ${becchino.nome} si conclude senza partecipanti.`, 'info');
-    }
-    delete window._cerimonieBecchino[idCerimonia];
+function avviaCerimoniaBecchino(becchino) {
+    const altri = party.filter(p => p !== becchino);
+    const idCerimonia = `cerimonia-${Date.now()}-${becchino.id}`;
+    const azione = { tipo: 'cerimonia_becchino', oreTotali: 0.5, oreRimanenti: 0.5, idCerimonia, partecipanti: [] };
+    if (becchino.azioneCorrente) becchino.codaAzioni.push(azione); else becchino.azioneCorrente = azione;
+    salvaPersonaggioCloud(becchino);                       // prima l'azione, poi le proposte
+    altri.forEach(dest => window.inviaProposta(becchino.id, dest.id, 'cerimonia-becchino', { idCerimonia }));
+    mostraNotificaInAlto(`${becchino.nome} indice una cerimonia funebre (30 min).`, 'info');
     aggiornaInterfaccia();
 }
+window.avviaCerimoniaBecchino = avviaCerimoniaBecchino;
+
+window.AZIONI_RIPRISTINO = window.AZIONI_RIPRISTINO || {};
+window.AZIONI_RIPRISTINO.cerimonia_becchino = (becchino, a) => {
+    const n = (a.partecipanti || []).length;
+    if (n > 0) {
+        const modCar = becchino.getStatDettagliata('Carisma').mod;
+        const r = becchino.riduciFollia(Math.max(0, rollDice(1, 4) + modCar), 'cerimonia_becchino');
+        mostraNotificaInAlto(`La cerimonia di ${becchino.nome} si conclude: Follia -${r} (${n} partecipanti).`, 'successo');
+    } else {
+        mostraNotificaInAlto(`La cerimonia di ${becchino.nome} si conclude senza partecipanti.`, 'info');
+    }
+    salvaPersonaggioCloud(becchino);
+};
 
 window.masterResuscitaPersonaggio = async function(id, nome) {
     const user = window.getCurrentUser ? window.getCurrentUser() : null;

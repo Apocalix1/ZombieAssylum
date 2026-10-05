@@ -170,7 +170,7 @@ window.apriTrascriviPergamena = function(idx) {
         oreTotali: 4,
         oreRimanenti: 4,
         onComplete: () => {
-            const nuovaPergamena = { id: generaIdPergamena(), tipo: 'scritta', livello: spellScelto.livello, spellNome: spellScelto.nome };
+            const nuovaPergamena = { id: generaIdPergamena(), tipo: 'scritta', livello: spellScelto.livello, spellNome: spellScelto.nome, livello: spellScelto.livello,costoMana, pergamenaVuota: pergScelta };
             p.initInventarioBase();
             p.inventario.pergamenePersonali.push(nuovaPergamena);
             mostraNotificaInAlto(`${p.nome} ha trascritto "${spellScelto.nome}" su una pergamena.`, 'successo');

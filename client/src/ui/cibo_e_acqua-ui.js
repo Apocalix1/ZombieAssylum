@@ -263,7 +263,7 @@ export function processAutomaticActions(p) {
         }
         if (tipo === 'sete') {
             const needed = Math.min(target - current, magazzino.acqua);
-            if (needed > 0) { bevi(party.indexOf(p), needed); return; }
+            if (needed > 0) { bevi(party.indexOf(p), needed, true); return; }
         }
         if (tipo === 'sonno') {
             const oreNecessarie = Math.ceil(target - current);
@@ -272,12 +272,7 @@ export function processAutomaticActions(p) {
                     tipo: 'dormi',
                     auto: 'sonno',
                     oreTotali: oreNecessarie,
-                    oreRimanenti: oreNecessarie,
-                    onComplete: () => {
-                        if (typeof mostraNotificaInAlto === 'function') {
-                            mostraNotificaInAlto(`${p.nome} si è svegliato dopo il riposo automatico.`, 'successo');
-                        }
-                    }
+                    oreRimanenti: oreNecessarie
                 };
                 inserisciAzioneConPriorita(p, nuovaAzione);
                 mostraNotificaInAlto(`${p.nome} si addormenta automaticamente per raggiungere '${livello}'.`, 'info');
@@ -358,13 +353,7 @@ function scheduleCuocoMiserabile(idx) {
     if (typeof window.updateMagazzinoFields === 'function') window.updateMagazzinoFields({ ciboAvariato: magazzino.ciboAvariato });
     const nuovaAzione = {
         tipo: 'cuoco_miserabile',
-        oreTotali: 2, oreRimanenti: 2,
-        onComplete: () => {
-            magazzino.cibo = (magazzino.cibo || 0) + 1;
-            if (typeof window.updateMagazzinoFields === 'function') window.updateMagazzinoFields({ cibo: magazzino.cibo });
-            mostraNotificaInAlto(`${p.nome} ha riciclato cibo avariato: +1 cibo sano.`, 'successo');
-            aggiornaInterfaccia();
-        }
+        oreTotali: 2, oreRimanenti: 2
     };
     if (p.azioneCorrente) {
         if (confirm(`${p.nome} sta già facendo altro. Metterlo in coda?`)) p.codaAzioni.push(nuovaAzione);
@@ -384,15 +373,7 @@ function scheduleAlchimistaDisperato(idx) {
     if (typeof window.updateMagazzinoFields === 'function') window.updateMagazzinoFields({ ciboAvariato: magazzino.ciboAvariato });
     const nuovaAzione = {
         tipo: 'alchimista_disperato',
-        oreTotali: 3, oreRimanenti: 3,
-        onComplete: () => {
-            const modSag = p.getStatDettagliata('Saggezza').mod;
-            const guadagno = Math.max(0, rollDice(1, 4) + modSag);
-            magazzino.materialiAlchemici = (magazzino.materialiAlchemici || 0) + guadagno;
-            if (typeof window.updateMagazzinoFields === 'function') window.updateMagazzinoFields({ materialiAlchemici: magazzino.materialiAlchemici });
-            mostraNotificaInAlto(`${p.nome} ha trasformato cibo avariato: +${guadagno} materiali alchemici.`, 'successo');
-            aggiornaInterfaccia();
-        }
+        oreTotali: 3, oreRimanenti: 3
     };
     if (p.azioneCorrente) {
         if (confirm(`${p.nome} sta già facendo altro. Metterlo in coda?`)) p.codaAzioni.push(nuovaAzione);
@@ -431,16 +412,20 @@ function scheduleCucina(idx) {
     }
     const nuovaAzione = {
         tipo: 'cucina',
-        oreTotali: cucinaCost.ore,
-        oreRimanenti: cucinaCost.ore,
+        oreTotali: oreFinali,
+        oreRimanenti: oreFinali,
         costoCibo: cucinaCost.cibo,
-        costoAcqua: cucinaCost.acqua,
-        onComplete: () => completeCucina(p)
+        costoAcqua: cucinaCost.acqua
     };
     nuovaAzione._tiroCucina = null; // calcolato al momento del completamento
     if (p.azioneCorrente) {
-        if (confirm(`${p.nome} sta già facendo un'altra azione. Vuoi mettere la cucina in coda?`)) {
+         if (confirm(`${p.nome} sta già facendo un'altra azione. Vuoi mettere la cucina in coda?`)) {
             p.codaAzioni.push(nuovaAzione);
+        } else {
+            magazzino.cibo += cucinaCost.cibo;
+            magazzino.acqua += cucinaCost.acqua;
+            window.updateMagazzinoFields({ cibo: magazzino.cibo, acqua: magazzino.acqua });
+            return;
         }
     } else {
         p.azioneCorrente = nuovaAzione;
@@ -486,8 +471,7 @@ function scheduleConserva(idx) {
         tipo: 'conserva',
         oreTotali: 5,
         oreRimanenti: 5,
-        costoMateriali: 4,
-        onComplete: () => completeConserva(p)
+        costoMateriali: 4
     };
     if (p.azioneCorrente) {
         if (confirm(`${p.nome} sta già facendo un'altra azione. Vuoi mettere la creazione della conserva in coda?`)) {
@@ -579,7 +563,7 @@ function completaBevi(p, qty) {
     aggiornaInterfaccia();
 }
 
-function bevi(idx, qty = null) {
+function bevi(idx, qty = null, isAuto = false) {
     const p = party[idx];
     if (!p) return;
     if (qty === null) {
@@ -603,8 +587,7 @@ function bevi(idx, qty = null) {
         auto: isAuto ? 'sete' : undefined,
         qty,
         oreTotali: oreAzione,
-        oreRimanenti: oreAzione,
-        onComplete: () => completaBevi(p, qty)
+        oreRimanenti: oreAzione
     };
     inserisciAzioneConPriorita(p, nuovaAzione, p.stadioSete >= 2);
     salvaPersonaggio(p);
@@ -669,9 +652,9 @@ function schedulaAzioneNutrizione(idx, dati, isAuto = false) {
     const nuovaAzione = {
         tipo: 'nutri',
         auto: isAuto ? 'fame' : undefined,
+        dati,
         oreTotali: oreAzione,
-        oreRimanenti: oreAzione,
-        onComplete: () => { applicaChanceIndigestione(p); eseguiNutrizione(p, dati); }
+        oreRimanenti: oreAzione
     };
     // Fame stadio 3+ (tacche <=6): l'azione salta in cima alla coda
     inserisciAzioneConPriorita(p, nuovaAzione, p.stadioFame >= 3);
@@ -834,11 +817,7 @@ window.attivaModalitaRiposo = function(idx) {
     p.azioneCorrente = {
         tipo: 'modalita_riposo',
         oreTotali: ore,
-        oreRimanenti: ore,
-        onComplete: () => {
-            mostraNotificaInAlto(`${p.nome} esce dalla Modalità Riposo.`, 'successo');
-            salvaPersonaggio(p);
-        }
+        oreRimanenti: ore
     };
     salvaPersonaggio(p);
     aggiornaInterfaccia();
@@ -968,11 +947,32 @@ window.lanciaCreaCiboAcqua = function(idx) {
 };
 
 window.AZIONI_RIPRISTINO = window.AZIONI_RIPRISTINO || {};
+window.AZIONI_RIPRISTINO = window.AZIONI_RIPRISTINO || {};
 Object.assign(window.AZIONI_RIPRISTINO, {
     bevi: (p, a) => completaBevi(p, a.qty),
     nutri: (p, a) => { applicaChanceIndigestione(p); eseguiNutrizione(p, a.dati); },
     cucina: (p) => completeCucina(p),
-    conserva: (p) => completeConserva(p)
+    conserva: (p) => completeConserva(p),
+    cuoco_miserabile: (p) => {
+        magazzino.cibo = (magazzino.cibo || 0) + 1;
+        window.updateMagazzinoFields?.({ cibo: magazzino.cibo });
+        mostraNotificaInAlto(`${p.nome} ha riciclato cibo avariato: +1 cibo sano.`, 'successo');
+        aggiornaInterfaccia();
+    },
+    alchimista_disperato: (p) => {
+        const modSag = p.getStatDettagliata('Saggezza').mod;
+        const guadagno = Math.max(0, rollDice(1, 4) + modSag);
+        magazzino.materialiAlchemici = (magazzino.materialiAlchemici || 0) + guadagno;
+        window.updateMagazzinoFields?.({ materialiAlchemici: magazzino.materialiAlchemici });
+        mostraNotificaInAlto(`${p.nome} ha trasformato cibo avariato: +${guadagno} materiali alchemici.`, 'successo');
+        aggiornaInterfaccia();
+    },
+    dormi: (p, a) => {
+        p.applicaRisveglio(a.oreTotali);
+        if (a.auto) mostraNotificaInAlto(`${p.nome} si è svegliato dopo il riposo automatico.`, 'successo');
+        salvaPersonaggio(p);
+    },
+    modalita_riposo: (p) => { mostraNotificaInAlto(`${p.nome} esce dalla Modalità Riposo.`, 'successo'); salvaPersonaggio(p); }
 });
 window.riduciRisorsaMaster = riduciRisorsaMaster;
 window.openRisorsaModal = openRisorsaModal;

@@ -18,7 +18,8 @@ const RICETTE = {
         { nome: "Tonico dei Riflessi", cd: 16, costo: 12, tempo: 6, desc: "+3 Iniziativa, +1 CA e +5 PF Fortuna temporanei per 1 ora.", effetto: { tipo: 'bonus_iniziativa_ca_pf', iniziativa: 3, ca: 1, pf: 5, durata: 1 } },
         { nome: "Crema Pietrosa", cd: 16, costo: 12, tempo: 6, desc: "+3 CA contro il prossimo attacco, ma -3m movimento per il turno successivo.", effetto: { tipo: 'crema_pietrosa', ca: 3, slow: 3 } },
         { nome: "Liquido Irritante", cd: 16, costo: 12, tempo: 6, desc: "Lanciabile: TS Costituzione CD15 o lascia cadere l'arma e velocità a 0 per 1 turno.", effetto: { tipo: 'liquido_irritante', ts: { abilita: 'Costituzione', cd: 15 }, durata: 1 } },
-        { nome: "Pillole della Calma", cd: 16, costo: 12, tempo: 6, desc: "Riduce la Follia di 1d4. Monodose.", effetto: { tipo: 'riduci_follia', dado: '1d4' } }
+        { nome: "Pillole della Calma", cd: 16, costo: 12, tempo: 6, desc: "Riduce la Follia di 1d4. Monodose.", effetto: { tipo: 'riduci_follia', dado: '1d4' } },
+         { nome: "Esplosivo", cd: 16, costo: 12, tempo: 6, desc: "Panetto di esplosivo: se innescato esplode infliggendo 2d10 danni nel raggio di 1 m e la metà fino a 3 m (TS Destrezza per dimezzare).", effetto: { tipo: 'esplosivo', danno: '2d10', raggio_m: 1, raggio_meta_m: 3, ts: { abilita: 'Destrezza' } } },
     ],
     difficile: [
         { nome: "Adrenalina", cd: 22, costo: 24, tempo: 12, desc: "Ignora debuff/ferite/malus per 2 minuti; al termine incapacitato per 1 ora.", effetto: { tipo: 'adrenalina', durata_min: 2, post_incapacita_h: 1 } },
@@ -34,7 +35,7 @@ const RICETTE = {
         specialization: { AG: 3 }
     },
         { nome: "Risveglio Bestiale", cd: 22, costo: 24, tempo: 12, desc: "Raddoppia gli effetti benefici dei Perk Razziali per 1 ora.", effetto: { tipo: 'risveglio_razziale', durata: 1 } },
-        { nome: "Essenza di Invisibilità", cd: 22, costo: 24, tempo: 12, desc: "Nuvola gas 1.5m: invisibilità finché non esci o attacchi (3 turni). Percezione/Investigare CD18 per vedere.", effetto: { tipo: 'invisibilita', raggio_m: 1.5, durata_turni: 3, ts_percezione: 18 } },
+        { nome: "Essenza di Invisibilità", cd: 22, costo: 24, tempo: 12, desc: "Nuvola gas 1.5m: invisibilità finché non esci o attacchi (3 turni). Percezione/Indagare CD18 per vedere.", effetto: { tipo: 'invisibilita', raggio_m: 1.5, durata_turni: 3, ts_percezione: 18 } },
         { nome: "Neuro-Bloccante", cd: 22, costo: 24, tempo: 12, desc: "Tossina: TS Costituzione CD18 o non può usare Reazioni/Azioni Bonus per 1 ora.", effetto: { tipo: 'neuro_bloccante', ts: { abilita: 'Costituzione', cd: 18 }, durata_h: 1 } },
         { nome: "Antidoto Specifico", cd: 22, costo: 24, tempo: 12, desc: "Richiede 10ml del veleno originale. Tempo sviluppo 12h; produzione successiva richiede tempo e CD di grado Media.", effetto: { tipo: 'antidoto_specifico', richieste: { veleno_ml: 10 }, sviluppo_h: 12 } },
         { nome: "Veleno: Emotossine", cd: 22, costo: 6, tempo: 12, desc: "Veleno: danno massiccio (2d6 danni se il veleno riesce).", effetto: { tipo: 'veleno', sottotipo: 'emotossine', danno: '2d6' } },

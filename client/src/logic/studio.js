@@ -471,7 +471,7 @@ function completaStudioLinguaAction(p, action) {
     }
 
     p.oreStudioGiornaliere += hours;
-    p.studyOverload = p.oreStudioGiornaliere > getSogliaStudioGiornaliera(p);
+    p.studyOverload = p.oreStudioGiornaliere > p.getSogliaStudioGiornaliero();
 
     let currentPoints = p.getStudyPoints(subject);
     const attrMod = p.getStatDettagliata('Intelligenza').mod;
@@ -501,6 +501,7 @@ function completaStudioLinguaAction(p, action) {
     if (p.studyOverload) message += ' Sovraccarico attivo.';
     mostraNotificaInAlto(message, 'successo');
     salvaPersonaggioCloud(p);
+    window.updateMagazzinoFields?.({ libri: magazzino.libri });
 }
 
 window.avviaStudioLingua = avviaStudioLingua;
@@ -644,23 +645,6 @@ function selezionaLibroStudio(bookIdx) {
             if (!isNaN(scelta) && scelta > 0 && scelta <= compagni.length) teacherName = compagni[scelta - 1].nome;
         }
     } else {
-        // Solo chi ha competenza/maestria nella materia può insegnare
-        const candidates = party.filter((q, idx) => idx !== studioPersonaggioSelezionato && teacherCanTeach(q, book.subject, studyingForMastery));
-        if (candidates.length > 0) {
-            let list = '0) Nessun insegnante';
-            candidates.forEach((c, i) => list += `\n${i + 1}) ${c.nome}`);
-            const scelta = parseInt(prompt(`Vuoi un insegnante per ${book.subject}?\n${list}`, '0'));
-            if (!isNaN(scelta) && scelta > 0 && scelta <= candidates.length) {
-                const teacher = candidates[scelta - 1];
-                const conferma = (prompt(`${teacher.nome} ti chiede se gli puoi insegnare ${book.subject} per ${ore} ore. si/no/meno`, 'si') || '').trim().toLowerCase();
-                if (conferma === 'si') teacherName = teacher.nome;
-                else if (conferma === 'meno') {
-                    const nuoveOre = parseInt(prompt(`Quante ore vuoi che ${teacher.nome} ti insegni? (1-${ore})`, `${Math.max(1, Math.min(ore, 2))}`));
-                    if (!isNaN(nuoveOre) && nuoveOre > 0 && nuoveOre <= ore) { ore = nuoveOre; teacherName = teacher.nome; }
-                }
-            }
-        }
-    }
     const candidates = party.filter((q, idx) => idx !== studioPersonaggioSelezionato && teacherCanTeach(q, book.subject, studyingForMastery));
     if (candidates.length > 0) {
         let list = '0) Nessun insegnante';
@@ -687,6 +671,7 @@ function selezionaLibroStudio(bookIdx) {
             }
         }
     }
+}
 
     pianificaAzione(studioPersonaggioSelezionato, 'studio-libro', book.id, book.subject, book.title, ore, teacherName);
     document.getElementById('modal-studio').style.display = 'none';
@@ -869,6 +854,7 @@ function completaStudioBookAction(p, action) {
             const index = magazzino.libri.indexOf(book);
             if (index !== -1) magazzino.libri.splice(index, 1);
         }
+        window.updateMagazzinoFields?.({ libri: magazzino.libri });
 }
 
 // ---------- BIBLIOTECA ----------
@@ -961,7 +947,8 @@ function renderBibliotecaContent() {
 
 function syncDocumentiDalServer() {
     if (!Array.isArray(party)) return Promise.resolve();
-    const promises = party.map(personaggio => {
+    const user = window.getCurrentUser && window.getCurrentUser();
+    const promises = party.filter(pg => pg.id && user && (user.role === 'master' || pg.user_id === user.id)).map(personaggio => {
         return fetch(apiUrl(`/api/documenti?personaggioId=${personaggio.id || ''}`), {
             headers: buildAuthHeaders()
         })
@@ -981,7 +968,8 @@ function syncDocumentiDalServer() {
                             testo_criptato: parsed.testo_criptato || '',
                             stato: doc.stato || 'aperto',
                             personaggio_id: doc.personaggio_id,
-                            created_at: doc.created_at
+                            created_at: doc.created_at,
+                            traduzioni: (() => { try { return JSON.parse(doc.traduzioni || '[]'); } catch { return []; } })()
                         };
                     });
                 } else {
