@@ -3450,6 +3450,79 @@ Object.assign(window.AZIONI_RIPRISTINO, {
         window.magazzino.baseIgienizzataGiorno = giorno;
         window.updateMagazzinoFields?.({ baseIgienizzataGiorno: giorno });
         window.mostraNotificaInAlto?.(`${p.nome} ha igienizzato la base. CD medicazioni -1 per oggi.`, 'successo');
+    },
+    'studio-libro': (p, azione) => {
+        if (typeof window.completaStudioBookAction === 'function') {
+            window.completaStudioBookAction(p, azione);
+            return;
+        }
+        window.mostraNotificaInAlto?.(`${p.nome} ha finito lo studio del libro.`, 'successo');
+    },
+    'studio-lingua': (p, azione) => {
+        if (typeof window.completaStudioLinguaAction === 'function') {
+            window.completaStudioLinguaAction(p, azione);
+            return;
+        }
+        window.mostraNotificaInAlto?.(`${p.nome} ha finito di studiare la lingua.`, 'successo');
+    },
+    allenamento: (p, azione) => {
+        if (typeof window.completeAllenamento === 'function') {
+            window.completeAllenamento(p, azione?.categoria || 'Generica', Number(azione?.oreTotali || 0));
+            return;
+        }
+        window.mostraNotificaInAlto?.(`${p.nome} ha completato l'allenamento.`, 'successo');
+    },
+    dinamo: (p, azione) => {
+        if (typeof window.completeDinamo === 'function') {
+            window.completeDinamo(p, Number(azione?.oreTotali || 0));
+            return;
+        }
+        const ore = Number(azione?.oreTotali || 0);
+        const totBatterie = Array.from({ length: Math.max(0, ore) }, () => (typeof rollDice === 'function' ? rollDice(1, 4) : 1)).reduce((sum, n) => sum + n, 0);
+        p.initInventarioBase?.();
+        p.inventario.batterie = (p.inventario.batterie || 0) + totBatterie;
+        window.mostraNotificaInAlto?.(`${p.nome} ha generato ${totBatterie} batterie con la Dinamo.`, 'successo');
+    },
+    intrattieni: (p) => {
+        const riduzione = Math.max(0, 1 + (p.getStatDettagliata ? p.getStatDettagliata('Carisma').mod : 0));
+        p.follia = Math.max(0, (p.follia || 0) - riduzione);
+        if (typeof window.aggiornaInterfaccia === 'function') window.aggiornaInterfaccia();
+        window.mostraNotificaInAlto?.(`${p.nome} ha trascorso del tempo in compagnia e la follia è calata.`, 'successo');
+    },
+    musicista: (p) => {
+        const riduzione = Math.max(0, 2 + (p.getStatDettagliata ? p.getStatDettagliata('Carisma').mod : 0));
+        p.follia = Math.max(0, (p.follia || 0) - riduzione);
+        window.mostraNotificaInAlto?.(`${p.nome} ha suonato per il gruppo: follia ridotta di ${riduzione}.`, 'successo');
+    },
+    preghiera_fedele: (p) => {
+        const riduzione = Math.max(0, 1 + (p.getStatDettagliata ? p.getStatDettagliata('Saggezza').mod : 0));
+        p.follia = Math.max(0, (p.follia || 0) - riduzione);
+        window.mostraNotificaInAlto?.(`${p.nome} prega e raddrizza il cuore: follia ridotta di ${riduzione}.`, 'successo');
+    },
+    artificeria: (p, azione) => {
+        if (typeof window.finalizzaArtificeria === 'function') {
+            window.finalizzaArtificeria(p, azione);
+            return;
+        }
+        window.mostraNotificaInAlto?.(`${p.nome} ha completato l'azione di artificeria.`, 'successo');
+    },
+    smontaggio: (p, azione) => {
+        if (typeof window.finalizzaSmontaggio === 'function') {
+            window.finalizzaSmontaggio(p, azione);
+            return;
+        }
+        window.mostraNotificaInAlto?.(`${p.nome} ha concluso lo smontaggio.`, 'successo');
+    },
+    ricarica_robot: (p, azione) => {
+        const ore = Number(azione?.oreTotali || 0);
+        const carica = Math.max(0, ore * 5);
+        if (window.magazzino?.stazioneRicarica) {
+            window.magazzino.stazioneRicarica.batterie = (window.magazzino.stazioneRicarica.batterie || 0) + carica;
+            window.magazzino.stazioneRicarica.robotIdOccupante = null;
+            window.updateMagazzinoFields?.({ stazioneRicarica: window.magazzino.stazioneRicarica });
+        }
+        p.batteryHours = Math.min(p.batteryHoursMax || p.batteryHours || 0, (p.batteryHours || 0) + carica);
+        window.mostraNotificaInAlto?.(`${p.nome} ha completato la ricarica e recuperato ${carica}h di batteria.`, 'successo');
     }
 });
 window.Personaggio = Personaggio;

@@ -239,15 +239,15 @@ export const ARTIFICER_RECIPES = [
         specialization: { Balistica: 3 }
     },
     {
-         id: 'lingua_di_fuoco',
+        id: 'lingua_di_fuoco',
         name: 'Lingua di Fuoco',
         category: 'Potenziamento Armi',
         difficulty: 'Difficile',
-        outerHeight: 'lingua_di_fuoco',
-        description:'Puoi implementare in un arma da mischia la capacità di andare a fuoco con una reazione. L arma ha 3 cariche, le quali ognuna fa durare la fiamma per  1 minuto.  Quando l arma è in fiamme infligge 1d4 danni da fuoco in più',
-        cost:{ingranggi : 60},
-        time:{hours: 6},
-        specialization:{Balistica: 4}
+        outputType: 'lingua_di_fuoco',
+        description: 'Puoi implementare in un arma da mischia la capacità di andare a fuoco con una reazione. L arma ha 3 cariche, le quali ognuna fa durare la fiamma per 1 minuto. Quando l arma è in fiamme infligge 1d4 danni da fuoco in più.',
+        cost: { ingranaggi: 60 },
+        time: { hours: 6 },
+        specialization: { Balistica: 4 }
     },
 
     // === ROBOT & MECCANICA AVANZATA ===
@@ -1184,6 +1184,19 @@ function initArtificeria(p) {
             }
         };
     }
+}
+
+function getLivelloSpec(p, specializzazione) {
+    if (!p) return 0;
+    const nomeSpec = String(specializzazione || '').trim();
+    if (!nomeSpec) return 0;
+    initArtificeriaBuilder(p);
+    if (nomeSpec === 'AG') return p.artificeria.generale?.livello || 0;
+    return p.artificeria.specializzazioni?.[nomeSpec]?.livello || 0;
+}
+
+if (typeof window !== 'undefined') {
+    window.getLivelloSpec = getLivelloSpec;
 }
 
 const ARTIFICERIA_AG_COST = [0, 4, 7, 10, 15, 20];

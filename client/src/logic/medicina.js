@@ -291,10 +291,8 @@ window.aiutoMedico_Aspetta = function(idxHelper) {
         tipo: 'assistenza-medica',
         oreTotali: 0.5,
         oreRimanenti: 0.5,
-        onComplete: () => {
-            window.assistenzaSelezionata = { idx: idxHelper, tipo: 'medicina' };
-            mostraNotificaInAlto(`${helper.nome} è ora libero per assistere alla medicazione.`, 'successo');
-        }
+        helperId: helper.id,
+        helperIdx: idxHelper
     });
     mostraNotificaInAlto(`${helper.nome} finirà l'azione corrente prima di assistere.`, 'info');
     chiudiModal('modal-sospendi-azione');
@@ -629,7 +627,8 @@ window.apriIgienizzaModal = function(idx) {
         tipo: 'igienizza',
         oreTotali: oreAzione,
         oreRimanenti: oreAzione,
-        onComplete: () => completaIgienizza(p, pezziBase, pezziAvanzati)
+        pezziBase,
+        pezziAvanzati
     };
     if (p.azioneCorrente) {
         if (confirm(`${p.nome} sta già facendo altro. Metterlo in coda?`)) {
@@ -662,6 +661,21 @@ function completaIgienizza(p, pezziBase, pezziAvanzati) {
     mostraNotificaInAlto(`${p.nome} ha igienizzato i materiali: recuperati ${recuperatiBase} base e ${recuperatiAvanzati} avanzati.`, 'successo');
     if (typeof window.aggiornaInterfaccia === 'function') window.aggiornaInterfaccia();
 }
+
+window.AZIONI_RIPRISTINO = window.AZIONI_RIPRISTINO || {};
+window.AZIONI_RIPRISTINO.igienizza = (p, azione) => {
+    const pezziBase = Number(azione?.pezziBase || 0);
+    const pezziAvanzati = Number(azione?.pezziAvanzati || 0);
+    completaIgienizza(p, pezziBase, pezziAvanzati);
+};
+window.AZIONI_RIPRISTINO['assistenza-medica'] = (p, azione) => {
+    const idx = typeof azione?.helperIdx === 'number' ? azione.helperIdx : party.findIndex(q => q && q.id === azione?.helperId);
+    const targetIdx = idx >= 0 ? idx : party.findIndex(q => q && q.id === p.id);
+    if (targetIdx >= 0) {
+        window.assistenzaSelezionata = { idx: targetIdx, tipo: 'medicina' };
+        mostraNotificaInAlto(`${p.nome} è ora libero per assistere alla medicazione.`, 'successo');
+    }
+};
 
 Personaggio.prototype.getOreNecessarieGuarigione = getOreNecessarieGuarigione;
 Personaggio.prototype.checkInfectionRisk = checkInfectionRisk;

@@ -491,7 +491,7 @@ function completaStudioLinguaAction(p, action) {
     }
     currentPoints = Math.min(70, currentPoints);
     p.apprendimento[subject] = currentPoints;
-    p.ultimoStudioOre = oreTotali;
+    p.ultimoStudioOre = hours;
 
     let message = `${p.nome} studia ${lingua} per ${hours}h (${summary.join(', ')}) e arriva a ${currentPoints}/70 punti.`;
     if (currentPoints >= 70 && !p.lingue.includes(lingua)) {
