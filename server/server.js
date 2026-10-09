@@ -3,7 +3,7 @@ import cors from 'cors';
 import crypto from 'crypto';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import { openDatabase } from './db.js';
+import { openDatabase, magazzinoVuoto } from './db.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -179,47 +179,6 @@ app.get('/api/campi', authenticateUser, async (req, res) => {
   }
 });
 
-function magazzinoVuoto() {
-  return {
-    materialiAlchemici: 0,
-    erbe: 0,
-    componentiElettronici: 0,
-    rottami: 0,
-    legname: 0,
-    tessuto: 0,
-    cibo: 0,
-    acqua: 0,
-    medicine: 0,
-    conserve: 0,
-    oreTotali: 0,
-    ciboAvariato: 0,
-    piattiDeliziosi: 0,
-    piattiDeliziosiPotenziati: 0,
-    piattiDeliziosiMaestria: 0,
-    ingranaggi: 0,
-    materialiMedici: { base: 0, avanzati: 0, critici: 0 },
-    postazioneAlchemica: false,
-    compounds: [],
-    composti: [],
-    congegniFissi: [],
-    congegniConteggio: {},
-    oggettiMagici: { comuni: 0, nonComuni: 0, rari: 0, superRari: 0 },
-    oggettiMagiciIstanze: [],
-    munizioni: { gomma: 0, reale: 0 },
-    batterie: 0,
-    cadaveriRobot: 0,
-    cadaveriUmani: 0,
-    stazioneRicarica: null,
-    consumabili: [],
-    pergamene: [],
-    libri: [],
-    armiTrovate: [],
-    armi: [],
-    oggetti: [],
-    logMovimenti: [],
-    smembramentoAbilitato: false
-  };
-}
 
 app.post('/api/campi', authenticateUser, requireMaster, async (req, res) => {
   const { nome } = req.body;
