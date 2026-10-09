@@ -161,7 +161,7 @@ async function continueAsGuest() {
             // Carica il party anche offline? Possiamo provare a caricare da localStorage.
             // Tuttavia, il server non risponde, meglio usare dati fittizi o mostrare un messaggio.
             // Per ora, mostriamo la schermata di gioco con party vuoto.
-            showGameScreen('Ospite');
+            await showGameScreen('Ospite');
             return;
         }
         const data = await res.json();
@@ -173,13 +173,13 @@ async function continueAsGuest() {
         await caricaPartyOspite();
 
         // Ora mostra la schermata di gioco
-        showGameScreen('Ospite');
+        await showGameScreen('Ospite');
     } catch (error) {
         console.error('Errore durante login ospite:', error);
         const guest = { id: 1, username: 'ospite', role: 'ospite' };
         localStorage.setItem('utente', JSON.stringify(guest));
         window.guestMode = true;
-        showGameScreen('Ospite');
+        await showGameScreen('Ospite');
     }
 }
 
@@ -384,7 +384,7 @@ window.masterEliminaPersonaggio = async function(idx) {
     }
 };
 
-function showGameScreen(role) {
+async function showGameScreen(role) {
     const attendiBtn = document.getElementById('btn-attendi');
     if (attendiBtn) attendiBtn.style.display = (role === 'Master') ? '' : 'none';
     currentRole = role;
@@ -431,8 +431,10 @@ function showGameScreen(role) {
         }
     }
 
+    // Va atteso: finché non risolve, party e magazzino potrebbero essere caricati
+    // con un id di campo diverso da quello che sta per diventare corrente.
     if (typeof window.initCampoBaseCorrenteUI === 'function') {
-        window.initCampoBaseCorrenteUI();
+        await window.initCampoBaseCorrenteUI();
     }
     }
 

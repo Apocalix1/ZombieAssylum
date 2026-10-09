@@ -42,6 +42,48 @@ function wrapDatabase(db) {
   };
 }
 
+export function magazzinoVuoto() {
+  return {
+    materialiAlchemici: 0,
+    erbe: 0,
+    componentiElettronici: 0,
+    rottami: 0,
+    legname: 0,
+    tessuto: 0,
+    cibo: 0,
+    acqua: 0,
+    medicine: 0,
+    conserve: 0,
+    oreTotali: 0,
+    ciboAvariato: 0,
+    piattiDeliziosi: 0,
+    piattiDeliziosiPotenziati: 0,
+    piattiDeliziosiMaestria: 0,
+    ingranaggi: 0,
+    materialiMedici: { base: 0, avanzati: 0, critici: 0 },
+    postazioneAlchemica: false,
+    compounds: [],
+    composti: [],
+    congegniFissi: [],
+    congegniConteggio: {},
+    oggettiMagici: { comuni: 0, nonComuni: 0, rari: 0, superRari: 0 },
+    oggettiMagiciIstanze: [],
+    munizioni: { gomma: 0, reale: 0 },
+    batterie: 0,
+    cadaveriRobot: 0,
+    cadaveriUmani: 0,
+    stazioneRicarica: null,
+    consumabili: [],
+    pergamene: [],
+    libri: [],
+    armiTrovate: [],
+    armi: [],
+    oggetti: [],
+    logMovimenti: [],
+    smembramentoAbilitato: false
+  };
+}
+
 export async function openDatabase() {
   const rawDb = new sqlite3.Database(dbPath, sqlite3.OPEN_READWRITE | sqlite3.OPEN_CREATE);
   const db = wrapDatabase(rawDb);
@@ -246,7 +288,7 @@ export async function openDatabase() {
   const campoSuga = await db.get('SELECT id FROM campi_base WHERE nome = ?', 'Suga Toddie');
   if (!campoSuga) {
     const result = await db.run('INSERT INTO campi_base (nome) VALUES (?)', 'Suga Toddie');
-    await db.run('INSERT OR IGNORE INTO magazzini (campo_base_id, data) VALUES (?, ?)', result.lastID, '{}');
+    await db.run('INSERT OR IGNORE INTO magazzini (campo_base_id, data) VALUES (?, ?)', result.lastID, JSON.stringify(magazzinoVuoto()));
   }
 
   // Migrazione: sposta l'unica riga legacy `magazzino` (id=1) dentro `magazzini` (campo 1),

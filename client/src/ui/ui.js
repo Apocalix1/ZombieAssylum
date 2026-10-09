@@ -6,6 +6,7 @@ import { Personaggio, syncPartyFromServer, salvaPersonaggioCloud,fetchUserCharac
 import { processAutomaticActions} from "./cibo_e_acqua-ui.js";
 import "../ui/magazzino-ui.js";
 import { getPendingDeadIds,queueCommand, processPendingCommands, syncStatiDalServer, syncDocumentiDalServer } from "../logic/logic.js";
+import { registraEventoCampoCorrente } from "../logic/campo.js";
 const party = stateParty;
 
 // Esposizioni Globali per compatibilità con HTML inline e altri script non-modulari
@@ -38,7 +39,7 @@ document.getElementById('overlay')?.addEventListener('click', function() {
 
 export async function showLobbyScreen(user) {
     if (user && user.role === 'master') {
-        showGameScreen('Master');
+        await showGameScreen('Master');
         await caricaPartyMaster();
         apriPannelloMaster();
         avviaPollingPartyMaster();
@@ -182,7 +183,7 @@ window.entraInGiocoDaLobby = async function(nome, id) {
             } catch (e) { /* fallback silenzioso */ }
             window.setCampoBaseCorrente({ id: pData.campo_base_id, nome: nomeCampo });
         }
-        showGameScreen(window.isGuestUser && window.isGuestUser() ? 'Ospite' : 'Giocatore');
+        await showGameScreen(window.isGuestUser && window.isGuestUser() ? 'Ospite' : 'Giocatore');
         if (typeof window.ricaricaCampoCorrente === 'function') {
             await window.ricaricaCampoCorrente();
         }
@@ -1390,9 +1391,11 @@ async function passaTempoGlobale() {
                 magazzino.cibo = Math.max(0, magazzino.cibo - ridotto);
                 ciboPersoDefinitivo = ridotto;
                 alert(`Una conserva ha ridotto il degrado: perso solo ${ridotto.toFixed(1)} cibo, consumata 1 conserva.`);
+                registraEventoCampoCorrente(`Una conserva ha limitato il degrado: persi ${ridotto.toFixed(1)} cibo.`, 'avviso');
             } else {
                 magazzino.cibo = Math.max(0, magazzino.cibo - perduto);
                 alert(`Attenzione: il cibo è andato a male o è stato mangiato da animali! Perduti ${perduto.toFixed(1)} unità di cibo.`);
+                registraEventoCampoCorrente(`Cibo andato a male o rubato dagli animali: persi ${perduto.toFixed(1)} cibo.`, 'pericolo');
             }
 
             const generatoAvariato = ciboPersoDefinitivo * 0.5;
@@ -1405,6 +1408,7 @@ async function passaTempoGlobale() {
             magazzino.piattiDeliziosi = Math.max(0, magazzino.piattiDeliziosi - perduti);
             if (perduti > 0) {
                 alert(`Attenzione: ${perduti} piatto/i delizioso/i si sono degradati durante il giorno ${giorno}.`);
+                registraEventoCampoCorrente(`${perduti} piatto/i delizioso/i degradati nel giorno ${giorno}.`, 'avviso');
             }
         }
     }
@@ -1414,6 +1418,7 @@ async function passaTempoGlobale() {
             magazzino.batterie -= 2;
         } else {
             alert('⚠️ Frigorifero senza batterie – si è spento!');
+            registraEventoCampoCorrente('Il frigorifero è rimasto senza batterie e si è spento.', 'pericolo');
         }
     }
 
@@ -1436,6 +1441,7 @@ async function passaTempoGlobale() {
             });
 
             alert(`CONDOGLIANZE: ${p.nome} è morto per ${causaMorte}.`);
+            registraEventoCampoCorrente(`È morto per ${causaMorte} dopo ${giorniSopravvissuto} giorni.`, 'pericolo', p.nome);
             if (p.isRobot) magazzino.cadaveriRobot = (magazzino.cadaveriRobot || 0) + 1;
             else magazzino.cadaveriUmani = (magazzino.cadaveriUmani || 0) + 1;
             window.updateMagazzinoFields({ cadaveriRobot: magazzino.cadaveriRobot, cadaveriUmani: magazzino.cadaveriUmani });
@@ -1852,7 +1858,7 @@ export async function entraInGioco() {
         console.warn('Errore caricamento personaggi:', e);
     }
     
-    showGameScreen(isGuestUser() ? 'Ospite' : 'Giocatore');
+    await showGameScreen(isGuestUser() ? 'Ospite' : 'Giocatore');
     
     // Assicurati che il nome del campo in alto venga aggiornato
     if (typeof window.aggiornaDisplayCampoBase === 'function') {
@@ -3575,7 +3581,7 @@ window.entraSuCampoGiaCaricato = async function(id, ruolo) {
             window.setCampoBaseCorrente({ id: p.campoBaseId, nome: nomeCampo });
         } catch (e) {}
     }
-    showGameScreen(ruolo);
+    await showGameScreen(ruolo);
     if (typeof window.ricaricaCampoCorrente === 'function') await window.ricaricaCampoCorrente();
 };
 
