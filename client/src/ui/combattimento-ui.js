@@ -53,7 +53,11 @@ window.usaCaricaAbilita = function(idx, nomeAbilita) {
 
 function applicaDannoRealeConReattivita(p, colpi) {
     for (let i = 0; i < colpi; i++) {
-        p.puntiFeritaReali = Math.max(0, p.puntiFeritaReali - 1);
+        if (typeof p.subisciDanno === 'function') {
+            p.subisciDanno(1);
+        } else {
+            p.puntiFeritaReali = Math.max(0, p.puntiFeritaReali - 1);
+        }
         if (p.hasPerk && p.hasPerk('Reattività')) {
             const modDex = p.getStatDettagliata('Destrezza').mod;
             const temp = Math.max(0, rollDice(1, 6) + modDex);
@@ -61,6 +65,194 @@ function applicaDannoRealeConReattivita(p, colpi) {
             mostraNotificaInAlto(`${p.nome} (Reattività): +${temp} PF Fortuna temporanei.`, 'successo');
         }
     }
+}
+
+function getWeaponCategoryFromName(nomeArma = '') {
+    const testo = String(nomeArma || '').toLowerCase();
+    if (testo.includes('arco') || testo.includes('frecc')) return 'Archi';
+    if (testo.includes('balestra') || testo.includes('quadrell')) return 'Balestre';
+    if (testo.includes('pistola') || testo.includes('arma da fuoco') || testo.includes('fucile') || testo.includes('revolver')) return 'Armi da fuoco';
+    if (testo.includes('lancia') || testo.includes('asta') || testo.includes('alabarda') || testo.includes('picca')) return "Armi con l'asta";
+    if (testo.includes('frusta') || testo.includes('rampino') || testo.includes('rampin')) return 'Rampini e fruste';
+    if (testo.includes('mazza') || testo.includes('martello') || testo.includes('clava') || testo.includes('bastone') || testo.includes('colpo')) return 'Mazze e armi contundenti';
+    if (testo.includes('spada') || testo.includes('lama') || testo.includes('daga') || testo.includes('pugnale') || testo.includes('coltello') || testo.includes('sciabola')) return 'Lame leggere';
+    return null;
+}
+
+function getWeaponCompetenceEffect(categoria, livello) {
+    const base = {
+        'Archi': ['Svantaggio a tutti i tiri', 'Nessun bonus o malus', 'Aggiungi la caratteristica a colpire e danni', 'Aggiungi il bonus competenza a colpire', '+1 a colpire e danni', 'Attacchi di opportunità entro 9 metri'],
+        'Balestre': ['Svantaggio e ricarica con azione', 'Nessun bonus', 'Aggiungi la caratteristica a colpire e danni', 'Aggiungi bonus competenza a colpire', '+1 a colpire e danni', '+2 a colpire e danni. Ricarica con azione bonus'],
+        'Armi da fuoco': ['Svantaggio a colpire', 'Nessun bonus', 'Aggiungi la caratteristica a colpire e danni', 'Aggiungi bonus competenza a colpire', '+1 a colpire e danni', 'Critico anche con 19'],
+        "Armi con l'asta": ['Nessun bonus o malus. Gittata 1.5 metri', 'Aggiungi caratteristica a colpire e danni', 'Aggiungi bonus competenza a colpire', '+1 a colpire e danni', 'Vantaggio negli attacchi di opportunità'],
+        'Rampini e fruste': ['Svantaggio a colpire', 'Nessun bonus', 'Aggiungi caratteristica a colpire e danni', 'Bonus competenza a colpire. Puoi attirare oggetti', '+1 a colpire e danni', '+2 a colpire e danni. Puoi trascinare nemici (TS Forza CD 14)'],
+        'Lame leggere': ['Nessun bonus o malus', 'Aggiungi caratteristica a colpire e danni', 'Aggiungi bonus competenza a colpire', '+1 a colpire e danni', '+2 a colpire e danni. Infligge Sanguinamento'],
+        'Mazze e armi contundenti': ['Nessun bonus o malus', 'Aggiungi caratteristica a colpire e danni', 'Aggiungi bonus competenza a colpire', '+1 a colpire e danni. Con due mani +1d10 danni. Critico con due mani spinge 2 metri.', '+2 a colpire e danni. Puoi rinunciare ai danni per tentare stordimento (TS Costituzione CD 16)']
+    };
+    const idx = Math.max(0, Math.min(5, Number(livello) || 0));
+    if (categoria === 'Archi' && idx === 0) return base[categoria][0];
+    if (categoria === 'Balestre' && idx === 0) return base[categoria][0];
+    if (categoria === 'Armi da fuoco' && idx === 0) return base[categoria][0];
+    if (categoria === 'Rampini e fruste' && idx === 0) return base[categoria][0];
+    if (categoria === 'Lame leggere' && idx === 0) return base[categoria][0];
+    if (categoria === 'Mazze e armi contundenti' && idx === 0) return base[categoria][0];
+    if (categoria === "Armi con l'asta" && idx === 0) return base[categoria][0];
+    if (livello >= 5) return base[categoria][5];
+    if (livello >= 4) return base[categoria][4];
+    if (livello >= 3) return base[categoria][3];
+    if (livello >= 2) return base[categoria][2];
+    if (livello >= 1) return base[categoria][1];
+    return base[categoria][0];
+}
+
+function getWeaponDamageText(categoria, nomeArma = '') {
+    const testo = String(nomeArma || '').toLowerCase();
+    if (categoria === 'Archi') return '1d6';
+    if (categoria === 'Balestre') return '1d8';
+    if (categoria === 'Armi da fuoco') return '1d8';
+    if (categoria === "Armi con l'asta") return '1d6';
+    if (categoria === 'Rampini e fruste') return testo.includes('frusta') ? '1d4' : '1d6';
+    if (categoria === 'Lame leggere') return testo.includes('pugnale') ? '1d4' : '1d6';
+    if (categoria === 'Mazze e armi contundenti') return '1d6';
+    return '1d6';
+}
+
+function getWeaponCharacterBonus(categoria, nomeArma = '') {
+    const testo = String(nomeArma || '').toLowerCase();
+    if (categoria === 'Archi' || categoria === 'Balestre' || categoria === 'Armi da fuoco' || categoria === 'Rampini e fruste' || testo.includes('pugnale')) return 'Destrezza';
+    return 'Forza';
+}
+
+function getWeaponRangeSummary(categoria, livello) {
+    const level = Math.max(0, Number(livello) || 0);
+    const baseArco = 9 * (level + 1);
+    const maxArco = 18 * (level + 1);
+    const baseBalestra = Math.max(0, baseArco - 3);
+    const maxBalestra = Math.max(0, maxArco - 3);
+    if (categoria === 'Archi') return `${baseArco} m / ${maxArco} m`;
+    if (categoria === 'Balestre') return `${baseBalestra} m / ${maxBalestra} m`;
+    if (categoria === 'Armi da fuoco') return `18 m / 36 m`;
+    return '1.5 m';
+}
+
+function getAmmoRecoveryChance(categoria, livello) {
+    if (categoria !== 'Archi') return '—';
+    const lvl = Math.max(0, Number(livello) || 0);
+    if (lvl <= 1) return '20%';
+    if (lvl <= 3) return '40%';
+    return '60%';
+}
+
+function normalizeWeaponName(value) {
+    if (value === null || value === undefined) return null;
+    if (typeof value === 'string') return value.trim();
+    if (typeof value === 'object') {
+        const nome = value.nome || value.name || value.titolo || value.label;
+        return typeof nome === 'string' ? nome.trim() : null;
+    }
+    const nome = String(value).trim();
+    return nome || null;
+}
+
+function syncEquippedWeapon(p) {
+    if (!p || !p.inventario || !Array.isArray(p.inventario.armi)) return null;
+    const armi = p.inventario.armi
+        .map(normalizeWeaponName)
+        .filter((nome, index, arr) => !!nome && !!getWeaponCategoryFromName(nome) && arr.indexOf(nome) === index);
+    if (!armi.length) {
+        p.armaEquipaggiata = null;
+        return null;
+    }
+    const selected = normalizeWeaponName(p.armaEquipaggiata);
+    if (selected && armi.includes(selected)) {
+        p.armaEquipaggiata = selected;
+        return selected;
+    }
+    p.armaEquipaggiata = armi[0];
+    return armi[0];
+}
+
+function getArmiEquipaggiabili(p) {
+    if (!p || !p.inventario || !Array.isArray(p.inventario.armi)) return [];
+    return p.inventario.armi
+        .map(normalizeWeaponName)
+        .filter((nome, index, arr) => !!nome && !!getWeaponCategoryFromName(nome) && arr.indexOf(nome) === index);
+}
+
+function getArmaEquipaggiata(p) {
+    const armi = getArmiEquipaggiabili(p);
+    if (!armi.length) return null;
+    const selected = normalizeWeaponName(p.armaEquipaggiata);
+    if (selected && armi.includes(selected)) return selected;
+    p.armaEquipaggiata = armi[0];
+    return p.armaEquipaggiata;
+}
+
+window.selezionaArmaEquipaggiata = function(idx, nomeArma) {
+    const p = party[idx];
+    if (!p) return;
+    const armi = getArmiEquipaggiabili(p);
+    const normalized = normalizeWeaponName(nomeArma);
+    if (!armi.length || !armi.includes(normalized)) return;
+    p.armaEquipaggiata = normalized;
+    if (typeof salvaPersonaggioCloud === 'function') salvaPersonaggioCloud(p);
+    if (typeof renderSpedizioneModal === 'function') renderSpedizioneModal();
+    if (typeof window.aggiornaInterfaccia === 'function') window.aggiornaInterfaccia();
+};
+
+function getWeaponSlotSummary(p) {
+    if (!p) return null;
+    syncEquippedWeapon(p);
+    const armi = getArmiEquipaggiabili(p);
+    if (!armi.length) return null;
+    const nomeArma = getArmaEquipaggiata(p) || armi[0];
+    const categoria = getWeaponCategoryFromName(nomeArma) || 'Lame leggere';
+    const livello = Number(p.armiLivello && p.armiLivello[categoria]) || 0;
+    const svantaggio = (livello === 0 && ['Archi', 'Balestre', 'Armi da fuoco', 'Rampini e fruste'].includes(categoria));
+    return {
+        nome: nomeArma,
+        categoria,
+        livello,
+        danno: getWeaponDamageText(categoria, nomeArma),
+        svantaggio,
+        bonus: getWeaponCompetenceEffect(categoria, livello),
+        caratteristica: getWeaponCharacterBonus(categoria, nomeArma),
+        munizioni: getAmmoRecoveryChance(categoria, livello),
+        gittata: getWeaponRangeSummary(categoria, livello)
+    };
+}
+
+function renderWeaponSummaryHtml(p, idx = null) {
+    const arma = getWeaponSlotSummary(p);
+    if (!arma) return '';
+    const armi = getArmiEquipaggiabili(p);
+    const sfondo = arma.svantaggio ? '#3d1d1d' : '#151515';
+    const rowStyle = 'display:flex; justify-content:space-between; gap:8px; padding:4px 0; border-bottom:1px solid #222;';
+    const selector = armi.length > 1 && idx !== null ? `
+        <div style="margin-bottom:8px;">
+            <label style="display:block; font-size:0.75rem; color:#aaa; margin-bottom:4px;">Arma equipaggiata</label>
+            <select onchange="window.selezionaArmaEquipaggiata(${idx}, this.value)" style="width:100%; padding:6px 8px; border-radius:6px; background:#111; color:#fff; border:1px solid #333;">
+                ${armi.map(nome => `<option value="${nome.replace(/"/g, '&quot;')}" ${nome === arma.nome ? 'selected' : ''}>${nome}</option>`).join('')}
+            </select>
+        </div>
+    ` : '';
+    return `
+        <div style="background:${sfondo}; border:1px solid #333; border-radius:8px; padding:10px; margin:10px 0;">
+            <div style="font-weight:bold; color:#f1c40f; margin-bottom:6px;">⚔️ Arma equipaggiata</div>
+            ${selector}
+            <div style="color:#eee; font-weight:bold; margin-bottom:6px;">${arma.nome}</div>
+            <div style="font-size:0.82rem; color:#ddd;">
+                <div style="${rowStyle}"><span>Categoria</span><strong>${arma.categoria}</strong></div>
+                <div style="${rowStyle}"><span>Livello</span><strong>${arma.livello}</strong></div>
+                <div style="${rowStyle}"><span>Danno</span><strong>${arma.danno}</strong></div>
+                <div style="${rowStyle}"><span>Bonus competenza</span><strong>${arma.bonus}</strong></div>
+                <div style="${rowStyle}"><span>Caratteristica</span><strong>${arma.caratteristica}</strong></div>
+                <div style="${rowStyle}"><span>Svantaggio</span><strong>${arma.svantaggio ? 'Sì' : 'No'}</strong></div>
+                ${arma.categoria === 'Archi' ? `<div style="${rowStyle}"><span>Recupero frecce</span><strong>${arma.munizioni}</strong></div>` : ''}
+                <div style="${rowStyle}"><span>Gittata</span><strong>${arma.gittata}</strong></div>
+            </div>
+        </div>
+    `;
 }
 
 window.toggleCorsaAQuattroZampe = function(idx) {
@@ -463,9 +655,9 @@ window.consumaIncantesimo = function(idx, level) {
 };
 
 function getPerkCategory(nomePerk) {
-    if (!window.DATABASE_PERK) return null;
-    for (let [cat, perks] of Object.entries(window.DATABASE_PERK)) {
-        if (perks.some(p => p.nome === nomePerk)) return cat;
+    const perkDb = window.DATABASE_PERK || globalThis.DATABASE_PERK || {};
+    for (let [cat, perks] of Object.entries(perkDb)) {
+        if (Array.isArray(perks) && perks.some(p => p && p.nome === nomePerk)) return cat;
     }
     return null;
 }
@@ -518,6 +710,7 @@ export function renderSchedaSpedizioneRidotta(p, idx) {
                 `}
                 <div style="margin-top:6px;">${statsHtml}</div>
             </div>
+            ${renderWeaponSummaryHtml(p, idx)}
             <div style="display:flex; gap:6px; margin-bottom:10px;">
                 <button class="btn-big" style="flex:1;" onclick="apriScheda(${idx})">📋 Scheda</button>
                 <button class="btn-big" style="flex:1; background:#16a085;" onclick="apriInventario(${idx})">🎒 Inventario</button>
@@ -688,6 +881,7 @@ export function renderSchedaCombattimentoMaster(p, idx) {
                 `}
                 <div style="margin-top:8px; font-size:0.85rem; color:#aaa;">Vittorie comb.: ${p.vittorieCombattimento || 0}</div>
             </div>
+            ${renderWeaponSummaryHtml(p, idx)}
             <div class="combat-buttons" style="display:grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap:8px; margin-bottom:12px;">
                 <button onclick="degradaInCombat(${idx})">Degrada</button>
                 <button onclick="ferisciInCombat(${idx})">Ferisci</button>

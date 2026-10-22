@@ -16,7 +16,7 @@ function toggleFiltroIncantesimo(gruppo, valore) {
 window.toggleFiltroIncantesimo = toggleFiltroIncantesimo;
 
 function getPerkDatabase() {
-    return window.DATABASE_PERK || (typeof DATABASE_PERK !== 'undefined' ? DATABASE_PERK : {});
+    return window.DATABASE_PERK || globalThis.DATABASE_PERK || {};
 }
 
 function getGlobalPerkData(nome) {
@@ -1256,6 +1256,8 @@ function gestisciDigitazionePerk(valore) {
         if (p.puntiCreazione >= costo && dettagliAttuali.valore < 20 && p[chiave] < 20) {
             p.puntiCreazione -= costo;
             p[chiave]++;
+            p.statBase = p.statBase || {};
+            p.statBase[chiave] = p[chiave];
         }
     } else {
         if (p[chiave] > 1) {
@@ -1266,6 +1268,8 @@ function gestisciDigitazionePerk(valore) {
                 const rimborso = (typeof p.calcolaCostoStat === 'function') ? p.calcolaCostoStat(p[chiave]) : 1;
                 p.puntiCreazione += rimborso;
             }
+            p.statBase = p.statBase || {};
+            p.statBase[chiave] = p[chiave];
         }
     }
     renderSetupStats();

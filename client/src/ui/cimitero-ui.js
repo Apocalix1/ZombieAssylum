@@ -107,34 +107,13 @@ async function eliminaDefinitivamenteCaduto(id, nome) {
 function avviaCerimoniaBecchino(becchino) {
     const altri = party.filter(p => p !== becchino);
     const idCerimonia = `cerimonia-${Date.now()}-${becchino.id}`;
+    const azione = { tipo: 'cerimonia_becchino', oreTotali: 0.5, oreRimanenti: 0.5, idCerimonia, partecipanti: [] };
     window._cerimonieBecchino = window._cerimonieBecchino || {};
     window._cerimonieBecchino[idCerimonia] = { becchinoId: becchino.id, partecipanti: new Set() };
-
-    altri.forEach(dest => {
-        window.inviaProposta(becchino.id, dest.id, 'cerimonia-becchino', { idCerimonia });
-    });
-
-    const azione = {
-        tipo: 'cerimonia_becchino',
-        oreTotali: 0.5,
-        oreRimanenti: 0.5,
-        onComplete: () => avviaCerimoniaBecchino(idCerimonia)
-    };
-    if (becchino.azioneCorrente) becchino.codaAzioni.push(azione);
-    else becchino.azioneCorrente = azione;
-    salvaPersonaggioCloud(becchino);
-    mostraNotificaInAlto(`${becchino.nome} indice una cerimonia funebre (30 min). Gli altri possono partecipare per ridurgli la Follia.`, 'info');
-    aggiornaInterfaccia();
-}
-
-function avviaCerimoniaBecchino(becchino) {
-    const altri = party.filter(p => p !== becchino);
-    const idCerimonia = `cerimonia-${Date.now()}-${becchino.id}`;
-    const azione = { tipo: 'cerimonia_becchino', oreTotali: 0.5, oreRimanenti: 0.5, idCerimonia, partecipanti: [] };
     if (becchino.azioneCorrente) becchino.codaAzioni.push(azione); else becchino.azioneCorrente = azione;
-    salvaPersonaggioCloud(becchino);                       // prima l'azione, poi le proposte
+    salvaPersonaggioCloud(becchino);
     altri.forEach(dest => window.inviaProposta(becchino.id, dest.id, 'cerimonia-becchino', { idCerimonia }));
-    mostraNotificaInAlto(`${becchino.nome} indice una cerimonia funebre (30 min).`, 'info');
+    mostraNotificaInAlto(`${becchino.nome} indice una cerimonia funebre (30 min). Gli altri possono partecipare per ridurgli la Follia.`, 'info');
     aggiornaInterfaccia();
 }
 window.avviaCerimoniaBecchino = avviaCerimoniaBecchino;

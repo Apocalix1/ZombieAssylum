@@ -188,6 +188,12 @@ function getOreNecessarieGuarigione() {
         'Funzionalità a rischio': 4, 'Rischio di morte': 8
     };
     let ore = base * (moltiplicatore[this.woundState] || 1);
+    const modCostituzione = this.getStatDettagliata ? this.getStatDettagliata('Costituzione').mod : 0;
+    if (modCostituzione > 0) {
+        ore *= (1 - (modCostituzione * 0.05));
+    } else if (modCostituzione < 0) {
+        ore *= (1 + (Math.abs(modCostituzione) * 0.05));
+    }
     if (this.hasPerk && this.hasPerk('Guaritore lento')) ore *= 1.25;
     if (this.hasPerk && this.hasPerk('Rigenerazione molto veloce')) ore *= 0.75;
     const presenteUccello = !this.inSpedizione && window.party &&

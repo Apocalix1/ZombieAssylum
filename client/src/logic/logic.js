@@ -1,4 +1,3 @@
-
 import { magazzino, setMagazzino, party, setParty } from '../state.js';
 
 // ---------- OUTBOX PER COMANDI OFFLINE ----------
@@ -617,6 +616,14 @@ export class Personaggio {
         this.intelligenza = 6; 
         this.saggezza = 6; 
         this.carisma = 6;
+        this.statBase = {
+            forza: 6,
+            destrezza: 6,
+            costituzione: 6,
+            intelligenza: 6,
+            saggezza: 6,
+            carisma: 6
+        };
         this.pmMedicina = 0;
         this.livelloMedicina = 0;
         this.woundTimer = 0;
@@ -720,7 +727,9 @@ export class Personaggio {
         this.biocarburanteTimer = 0;
         this.biocarburanteDeficit = false;
         this.zainoEquipaggiato = null;
-         this.taserCaricato = false;
+        this.armaEquipaggiata = null;
+        this.armaCaduta = null;
+        this.taserCaricato = false;
         this._corsaAQuattroZampeAttiva = false;
         this.stivaliCariche = 0;// presente solo se possiede il perk/oggetto stivali a molla
         this.inRicaricaFinoA = null;
@@ -789,6 +798,12 @@ export class Personaggio {
         if (!this.inventario.oggettiMagici) this.inventario.oggettiMagici = { comuni: 0, nonComuni: 0, rari: 0, superRari: 0 };
         if (!this.inventario.oggettiMagiciPersonali) this.inventario.oggettiMagiciPersonali = [];
         if (this.zainoEquipaggiato === undefined) this.zainoEquipaggiato = null;
+        if (!this.armaEquipaggiata && Array.isArray(this.inventario.armi) && this.inventario.armi.length) {
+            this.armaEquipaggiata = this.inventario.armi[0];
+        }
+        if (this.armaEquipaggiata && Array.isArray(this.inventario.armi) && !this.inventario.armi.includes(this.armaEquipaggiata)) {
+            this.armaEquipaggiata = this.inventario.armi[0] || null;
+        }
     }
     
 
@@ -823,7 +838,7 @@ export class Personaggio {
     get CA() {
      let CA =10+Math.floor((this.destrezza-10)/2);
      if (this.hasPerk('Cauto')) CA+=1;
-     if (this.hasPerk('Carapace/Esoscheletro')) CA+=2;
+     if (this.hasPerk('Carapace/Esoscheletro duro')) CA+=2;
      if (this.hasPerk('Sfida')) CA+=2;
      if (this.hasPerk('Armatura del tenero')) 
      {
@@ -1710,10 +1725,17 @@ castSpell(level, target = null) {
 
     getStatDettagliata(statNome) {
     const nomeLower = statNome.toLowerCase();
-    let valoreBase = this[nomeLower];
-    if (typeof valoreBase !== 'number' || Number.isNaN(valoreBase)) {
-        valoreBase = 6; // base da manuale (mod -1)
-        this[nomeLower] = 6;
+    const statBaseKey = nomeLower;
+    this.statBase = this.statBase || {};
+    const baseSalvato = Number(this.statBase[statBaseKey]);
+    if (!Number.isFinite(baseSalvato)) {
+        const valoreCorrente = Number(this[nomeLower]);
+        this.statBase[statBaseKey] = Number.isFinite(valoreCorrente) ? valoreCorrente : 6;
+    }
+    let valoreBase = Number(this.statBase[statBaseKey]);
+    if (!Number.isFinite(valoreBase)) {
+        valoreBase = 6;
+        this.statBase[statBaseKey] = 6;
     }
     let motivi = [];
 
@@ -1784,7 +1806,7 @@ castSpell(level, target = null) {
                     motivi.push("Anziana Carismatica (+2)");
                 }
                 if (haPerk("Muto")){
-                    valoriBase -= 2;
+                    valoreBase -= 2;
                     motivi.push("Muto (suka non parli) (-2)");
                 }
 
@@ -2083,14 +2105,22 @@ castSpell(level, target = null) {
     }
 
         getBonusCompetenza() {
-        let giorniAttivi;
-        if (typeof this.oreVissute === 'number' && this.oreVissute > 0) {
-            giorniAttivi = Math.floor(this.oreVissute / 24);
+        const oreVissute = Number.isFinite(this.oreVissute) ? this.oreVissute : 0;
+        const giorniDaCreazione = Number.isFinite(this.giorniSopravvissuto) ? this.giorniSopravvissuto : null;
+        const giornoInizio = Number.isFinite(this.giornoInizio) ? this.giornoInizio : 0;
+        const oreTotali = Number.isFinite(window.oreTotali) ? window.oreTotali : 0;
+
+        let giorniAttivi = 0;
+        if (oreVissute > 0) {
+            giorniAttivi = Math.floor(oreVissute / 24);
+        } else if (giorniDaCreazione !== null) {
+            giorniAttivi = Math.max(0, giorniDaCreazione);
+        } else if (Number.isFinite(this.giornoInizio)) {
+            giorniAttivi = Math.max(0, Math.floor(oreTotali / 24) - giornoInizio);
         } else {
-            // Fallback per personaggi salvati prima dell'introduzione di oreVissute
-            const oreTotali = typeof window.oreTotali !== 'undefined' ? window.oreTotali : 0;
-            giorniAttivi = Math.max(0, Math.floor(oreTotali / 24) - this.giornoInizio);
+            giorniAttivi = Math.max(0, Math.floor(oreTotali / 24));
         }
+
         if (giorniAttivi < 15) return 2;
         if (giorniAttivi < 30) return 3;
         if (giorniAttivi < 45) return 4;
@@ -2429,6 +2459,9 @@ castSpell(level, target = null) {
     }
 
         applyRealDamage(danno) {
+        if (this.hasPerk && this.hasPerk('Mani di burro') && !this.armaCaduta) {
+            this.provaPerkManiDiBurro();
+        }
         const dannoReale = Math.max(1, Math.ceil(danno / 4));
         this.puntiFeritaReali = Math.max(0, this.puntiFeritaReali - dannoReale);
         if (typeof window.checkAutoStabilizzatore === 'function') window.checkAutoStabilizzatore(this);
@@ -2445,8 +2478,53 @@ castSpell(level, target = null) {
         return dannoReale;
     }
 
+    provaPerkManiDiBurro() {
+        if (!this.hasPerk || !this.hasPerk('Mani di burro')) return false;
+        if (this.armaCaduta) return false;
+        if (!Array.isArray(this.inventario?.armi) || this.inventario.armi.length === 0) return false;
+
+        const armaBase = this.armaEquipaggiata || this.inventario.armi[0];
+        if (!armaBase) return false;
+
+        const nomeArma = typeof armaBase === 'string' ? armaBase.trim() : (armaBase && typeof armaBase === 'object' ? (armaBase.nome || armaBase.name || '').trim() : String(armaBase).trim());
+        if (!nomeArma) return false;
+
+        const modCostituzione = this.getStatDettagliata ? this.getStatDettagliata('Costituzione').mod : 0;
+        const tiro = Math.floor(Math.random() * 20) + 1 + modCostituzione;
+        if (tiro >= 10) return false;
+
+        const idx = this.inventario.armi.findIndex(arma => {
+            if (typeof arma === 'string') return arma.trim() === nomeArma;
+            if (arma && typeof arma === 'object') return (arma.nome || arma.name || '').trim() === nomeArma;
+            return String(arma).trim() === nomeArma;
+        });
+
+        if (idx >= 0) this.inventario.armi.splice(idx, 1);
+        this.armaCaduta = nomeArma;
+        this.armaEquipaggiata = this.inventario.armi.length ? this.inventario.armi[0] : null;
+
+        if (typeof window !== 'undefined' && typeof window.mostraNotificaInAlto === 'function') {
+            window.mostraNotificaInAlto(`${this.nome} ha il perk "Mani di burro": fallisce il TS su Costituzione 10 e lascia cadere "${nomeArma}". Serve un'azione per riprenderlo.`, 'avviso');
+        }
+        return true;
+    }
+
+    riprendiArmaCaduta() {
+        if (!this.armaCaduta) return false;
+        if (!this.inventario) this.initInventarioBase();
+        if (!Array.isArray(this.inventario.armi)) this.inventario.armi = [];
+
+        this.inventario.armi.push(this.armaCaduta);
+        this.armaEquipaggiata = this.armaCaduta;
+        this.armaCaduta = null;
+        return true;
+    }
+
     subisciDanno(danno) {
         let residuo = danno;
+        if (this.hasPerk && this.hasPerk('Mani di burro') && !this.armaCaduta) {
+            this.provaPerkManiDiBurro();
+        }
         if (this.puntiFortuna > 0) {
             const assorbito = Math.min(this.puntiFortuna, residuo);
             this.puntiFortuna -= assorbito;
@@ -3045,6 +3123,7 @@ castSpell(level, target = null) {
          if (this._corsaAQuattroZampeAttiva) v += 3;
         if (this.hasPerk('Piccola taglia')) v += 2;
         if (this.hasPerk('Corpo Leggero')) v += 1;
+        if(this.hasPerk('Anziana')) v-=2;
         if (this.hasPerk('Corridore')) v += 1;
         if (this.hasPerk('Obeso')) v -= 3;
         if (this.hasPerk('Sovrappeso')) v -= 1;
@@ -3341,7 +3420,22 @@ castSpell(level, target = null) {
 
 Personaggio.prototype.hasPerk = function (nome) {
     if (!this.perks) return false;
-    return this.perks.some(p => (typeof p === 'string' ? p : p?.nome) === nome);
+    const target = String(nome ?? '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .toLowerCase();
+
+    return this.perks.some(p => {
+        const current = String(typeof p === 'string' ? p : p?.nome ?? '')
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .replace(/\s+/g, ' ')
+            .trim()
+            .toLowerCase();
+        return current === target;
+    });
 };
 
 Personaggio.prototype.puoOttenereMaestria = function (materiaNuova) {

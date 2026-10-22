@@ -177,6 +177,24 @@ export async function openDatabase() {
     INSERT OR IGNORE INTO magazzino (id, data) VALUES (1, '{}');
   `);
 
+  const proposteColumns = await db.all('PRAGMA table_info(proposte)');
+  if (proposteColumns.length === 0 || !proposteColumns.some(col => col.name === 'mittente_id')) {
+    await db.run('DROP TABLE IF EXISTS proposte');
+    await db.run(`
+      CREATE TABLE proposte (
+        id TEXT PRIMARY KEY,
+        mittente_id INTEGER NOT NULL,
+        destinatario_id INTEGER NOT NULL,
+        tipo TEXT NOT NULL,
+        dati TEXT NOT NULL,
+        stato TEXT NOT NULL DEFAULT 'in_attesa',
+        creato_il TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        scade_il TEXT NOT NULL
+      )
+    `);
+    console.log('Migrazione: tabella proposte ricostruita con lo schema attuale.');
+  }
+
   // MIGRAZIONE: Correggi il ruolo dell'utente ospite se esiste con ruolo sbagliato
   const ospiteEsistente = await db.get('SELECT id, role FROM utenti WHERE username = ?', 'ospite');
   if (ospiteEsistente) {
