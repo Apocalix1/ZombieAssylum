@@ -431,6 +431,15 @@ async function showGameScreen(role) {
         }
     }
 
+    const masterHubBtn = document.getElementById('btn-master-hub');
+    if (masterHubBtn) {
+        if (role === 'Master') {
+            masterHubBtn.classList.remove('hidden');
+        } else {
+            masterHubBtn.classList.add('hidden');
+        }
+    }
+
     // Va atteso: finché non risolve, party e magazzino potrebbero essere caricati
     // con un id di campo diverso da quello che sta per diventare corrente.
     if (typeof window.initCampoBaseCorrenteUI === 'function') {

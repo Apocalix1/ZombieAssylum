@@ -39,10 +39,9 @@ document.getElementById('overlay')?.addEventListener('click', function() {
 
 export async function showLobbyScreen(user) {
     if (user && user.role === 'master') {
-        await showGameScreen('Master');
-        await caricaPartyMaster();
-        apriPannelloMaster();
-        avviaPollingPartyMaster();
+        if (typeof window.showMasterHub === 'function') {
+            await window.showMasterHub();
+        }
         return;
     }
 
@@ -78,6 +77,15 @@ export async function showLobbyScreen(user) {
         }, 500);
     }
 }
+
+window.tornaAlMasterHub = async function() {
+    if (typeof fermaPollingPartyMaster === 'function') {
+        fermaPollingPartyMaster();
+    }
+    if (typeof window.showMasterHub === 'function') {
+        await window.showMasterHub();
+    }
+};
 
 window.mandaInGiocoDaLobby = async function(nome) {
     const user = getCurrentUser();
@@ -1824,6 +1832,7 @@ export function aggiornaInterfaccia() {
                             <button class="btn-big" style="flex:1; background:#2980b9;" onclick="apriStatiPersonaggio(${idx})">✨ Stati</button>
                             <button class="btn-big guest-allow" style="flex:1; background:#16a085;" onclick="apriInventario(${idx})">🎒 Inventario</button>
                             ${isMaster ? `<button class="btn-big" style="flex:1; background:#d35400;" onclick="masterCambiaCampoPersonaggio(${idx})">🔀 Campo</button>` : ''}
+                            ${isMaster ? `<button class="btn-big" style="flex:1; background:#7d3c98;" onclick="apriDaiDocumentoModal(${p.id}, '${String(p.nome).replace(/'/g, "\\'")}')">📄 Dai documento</button>` : ''}
                         </div>
                         <button onclick="apriScheda(${idx})" style="width:100%; margin-bottom:10px;">Visualizza Scheda</button>
                         <div class="action-dropdowns" style="margin-top: 12px; display:grid; gap:6px;">
@@ -3154,8 +3163,15 @@ function togglePerk(nomePerk, forceRemove = false) {
     const effectiveCost = Math.max(0, Number(perkDati.costo || 0) - statRefund);
     const canAfford = perkDati.costo <= 0 || p.puntiCreazione >= effectiveCost;
     const isRepeatable = Boolean(perkDati.repeats);
+    const maxRepeats = Number(perkDati.maxRepeats || 0);
+    const isAtMaxRepeats = isRepeatable && maxRepeats > 0 && selectedCount >= maxRepeats && !forceRemove;
     const shouldRemove = forceRemove || (!isRepeatable && isSelected);
     let perkRimosso = null;
+
+    if (isAtMaxRepeats) {
+        alert(`Hai già raggiunto il massimo di ${maxRepeats} volte per ${perkDati.nome}.`);
+        return;
+    }
 
     // ==========================================
     // 1. GESTIONE RIMOZIONE PERK

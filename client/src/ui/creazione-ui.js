@@ -953,11 +953,13 @@ export function renderSetupPerks() {
     const selectedCount = getGlobalPerkCount(window.tempP, perk.nome);
     const giaPreso = selectedCount > 0;
     const canAfford = perk.costo <= 0 || window.tempP.puntiCreazione >= perk.costo;
+    const maxRepeats = Number(perk.maxRepeats || 0);
     
     // --- NUOVA LOGICA: Blocco categoria Magici se Livello Magia è assente o < 1 ---
     const isMagicoLocked = cat === 'magici' && (!window.tempP.livelloMagia || window.tempP.livelloMagia < 1);
+    const isAtMaxRepeats = Boolean(perk.repeats) && maxRepeats > 0 && selectedCount >= maxRepeats;
     
-    const actionAddAllowed = canAfford && !isMagicoLocked;
+    const actionAddAllowed = canAfford && !isMagicoLocked && !isAtMaxRepeats;
     const actionRemoveAllowed = giaPreso && perk.repeats;
     const costoHtml = `<span style="font-size:0.8rem; color:#aaa;">(${perk.costo} PT)</span>`;
     const countBadge = perk.repeats && selectedCount > 0 ?

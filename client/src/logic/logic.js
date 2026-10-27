@@ -837,9 +837,6 @@ export class Personaggio {
 
     get CA() {
      let CA =10+Math.floor((this.destrezza-10)/2);
-     if (this.hasPerk('Cauto')) CA+=1;
-     if (this.hasPerk('Carapace/Esoscheletro duro')) CA+=2;
-     if (this.hasPerk('Sfida')) CA+=2;
      if (this.hasPerk('Armatura del tenero')) 
      {
         CA = 8 + Math.floor((this.destrezza-10)/2) + Math.floor((this.carisma-10)/2);
@@ -848,6 +845,9 @@ export class Personaggio {
      {
         CA= 8 + Math.floor((this.intelligenza-10)/2) + Math.floor((this.saggezza-10)/2);
      }
+      if (this.hasPerk('Cauto')) CA+=1;
+     if (this.hasPerk('Carapace/Esoscheletro duro')) CA+=2;
+     if (this.hasPerk('Sfida')) CA+=2;
      return CA;
     }
 

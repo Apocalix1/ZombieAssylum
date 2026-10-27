@@ -1,17 +1,10 @@
 // campo-ui.js
 import {
-    fetchCampiBase, creaCampoBase, setCampoBaseCorrente, getCampoBaseId,
+    fetchCampiBase, creaCampoBase, impostaPosizioneCampoBase, setCampoBaseCorrente, getCampoBaseId,
     fetchEventiCampo, segnaEventiLetti, initCampoBaseCorrente, registraEvento
 } from '../logic/campo.js';
 import { apiUrl, buildAuthHeaders, getCurrentUser, fetchUserCharacters } from '../logic/logic.js';
-
-// I nomi dei campi base e i messaggi del log arrivano dal server (li scrivono altri
-// utenti): vanno sempre escapati prima di finire dentro innerHTML.
-function escapeHtml(valore) {
-    return String(valore ?? '').replace(/[&<>"']/g, ch => (
-        { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]
-    ));
-}
+import { escapeHtml } from './common-ui.js';
 
 function notifica(messaggio, tipo = 'info') {
     if (typeof window.mostraNotificaInAlto === 'function') window.mostraNotificaInAlto(messaggio, tipo);
@@ -60,8 +53,13 @@ async function apriSelezioneCampoBase(onSelezionato) {
                 <label style="color:#ccc; font-size:0.85rem;">Oppure crea un nuovo campo base:</label>
                 <div style="display:flex; gap:8px; margin-top:6px;">
                     <input type="text" id="nuovo-campo-nome" placeholder="Nome del nuovo campo..." style="flex:1; background:#222; color:white; border:1px solid #444; padding:6px;">
-                    <button class="btn-hero" onclick="window._creaENuovoCampoBase()">Crea</button>
                 </div>
+                <div style="display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:8px; margin-top:8px;">
+                    <input type="number" id="nuovo-campo-x" placeholder="x" style="background:#222; color:white; border:1px solid #444; padding:6px;">
+                    <input type="number" id="nuovo-campo-y" placeholder="y" style="background:#222; color:white; border:1px solid #444; padding:6px;">
+                    <input type="number" id="nuovo-campo-raggio" placeholder="raggio" value="10" style="background:#222; color:white; border:1px solid #444; padding:6px;">
+                </div>
+                <button class="btn-hero" style="margin-top:8px; width:100%;" onclick="window._creaENuovoCampoBase()">Crea</button>
             </div>
             <div class="modal-footer">
                 <button class="btn-big btn-cancel" onclick="chiudiModal('modal-campo-base')">ANNULLA</button>
@@ -97,12 +95,49 @@ window._confermaSelezioneCampoBase = function(id, nome) {
 
 window._creaENuovoCampoBase = async function() {
     const input = document.getElementById('nuovo-campo-nome');
+    const xInput = document.getElementById('nuovo-campo-x');
+    const yInput = document.getElementById('nuovo-campo-y');
+    const raggioInput = document.getElementById('nuovo-campo-raggio');
     const nome = input?.value?.trim();
     if (!nome) return alert('Inserisci un nome per il campo base.');
+    const pos_x = Number.parseInt(xInput?.value, 10);
+    const pos_y = Number.parseInt(yInput?.value, 10);
+    const raggio = Number.parseInt(raggioInput?.value, 10);
+    if (!Number.isInteger(pos_x) || !Number.isInteger(pos_y)) {
+        return alert('Inserisci coordinate x e y valide.');
+    }
+    if (!Number.isInteger(raggio) || raggio < 0) {
+        return alert('Inserisci un raggio valido (>= 0).');
+    }
     try {
-        const campo = await creaCampoBase(nome);
+        const campo = await creaCampoBase({ nome, pos_x, pos_y, raggio });
         await registraEvento(campo.id, `Campo base "${campo.nome}" fondato.`, 'info');
         window._confermaSelezioneCampoBase(campo.id, campo.nome);
+    } catch (e) {
+        alert('Errore: ' + e.message);
+    }
+};
+
+window._impostaPosizioneCampoBase = async function(id, nome) {
+    const posX = prompt(`Posizione X per "${nome}"`, '0');
+    if (posX === null) return;
+    const posY = prompt(`Posizione Y per "${nome}"`, '0');
+    if (posY === null) return;
+    const raggio = prompt(`Raggio per "${nome}"`, '10');
+    if (raggio === null) return;
+    const x = Number.parseInt(posX, 10);
+    const y = Number.parseInt(posY, 10);
+    const r = Number.parseInt(raggio, 10);
+    if (!Number.isInteger(x) || !Number.isInteger(y) || !Number.isInteger(r) || r < 0) {
+        alert('Valori non validi.');
+        return;
+    }
+    try {
+        await impostaPosizioneCampoBase(id, { pos_x: x, pos_y: y, raggio: r });
+        notifica(`Posizione aggiornata per "${nome}".`, 'successo');
+        if (typeof window.refreshMasterHubWarnings === 'function') {
+            await window.refreshMasterHubWarnings();
+        }
     } catch (e) {
         alert('Errore: ' + e.message);
     }
