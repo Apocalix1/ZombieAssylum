@@ -947,7 +947,6 @@ window.lanciaCreaCiboAcqua = function(idx) {
 };
 
 window.AZIONI_RIPRISTINO = window.AZIONI_RIPRISTINO || {};
-window.AZIONI_RIPRISTINO = window.AZIONI_RIPRISTINO || {};
 Object.assign(window.AZIONI_RIPRISTINO, {
     bevi: (p, a) => completaBevi(p, a.qty),
     nutri: (p, a) => { applicaChanceIndigestione(p); eseguiNutrizione(p, a.dati); },

@@ -1,9 +1,16 @@
 import sqlite3 from 'sqlite3';
+import crypto from 'crypto';
 import { dirname } from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const dbPath = `${__dirname}/zombieasylum.db`;
+
+function hashPassword(password) {
+  const salt = crypto.randomBytes(16).toString('hex');
+  const derived = crypto.scryptSync(password, salt, 64).toString('hex');
+  return `scrypt$${salt}$${derived}`;
+}
 
 function wrapDatabase(db) {
   return {
@@ -177,6 +184,24 @@ export async function openDatabase() {
     INSERT OR IGNORE INTO magazzino (id, data) VALUES (1, '{}');
   `);
 
+  const proposteColumns = await db.all('PRAGMA table_info(proposte)');
+  if (proposteColumns.length === 0 || !proposteColumns.some(col => col.name === 'mittente_id')) {
+    await db.run('DROP TABLE IF EXISTS proposte');
+    await db.run(`
+      CREATE TABLE proposte (
+        id TEXT PRIMARY KEY,
+        mittente_id INTEGER NOT NULL,
+        destinatario_id INTEGER NOT NULL,
+        tipo TEXT NOT NULL,
+        dati TEXT NOT NULL,
+        stato TEXT NOT NULL DEFAULT 'in_attesa',
+        creato_il TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        scade_il TEXT NOT NULL
+      )
+    `);
+    console.log('Migrazione: tabella proposte ricostruita con lo schema attuale.');
+  }
+
   // MIGRAZIONE: Correggi il ruolo dell'utente ospite se esiste con ruolo sbagliato
   const ospiteEsistente = await db.get('SELECT id, role FROM utenti WHERE username = ?', 'ospite');
   if (ospiteEsistente) {
@@ -191,9 +216,16 @@ export async function openDatabase() {
     );
   }
 
-  // Crea l'account master (se non esiste)
+  // Crea l'account master (se non esiste) leggendo la password dall'ambiente.
+  const masterPasswordRaw = process.env.MASTER_PASSWORD || 'Camelia75!';
+  if (!process.env.MASTER_PASSWORD) {
+    console.warn('MASTER_PASSWORD non impostata: uso fallback di sviluppo.');
+  }
   await db.run(
-      `INSERT OR IGNORE INTO utenti (username, password, role) VALUES ('Apocalix1', 'Camelia75!', 'master')`
+      'INSERT OR IGNORE INTO utenti (username, password, role) VALUES (?, ?, ?)',
+      'Apocalix1',
+      hashPassword(masterPasswordRaw),
+      'master'
   );
 
   // --- Migrazioni per colonne mancanti ---
@@ -275,7 +307,61 @@ export async function openDatabase() {
       creato_il TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY(campo_base_id) REFERENCES campi_base(id) ON DELETE CASCADE
     );
+
+    CREATE TABLE IF NOT EXISTS mappa_zone (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tipo TEXT NOT NULL,
+      nome TEXT,
+      x1 INTEGER NOT NULL,
+      y1 INTEGER NOT NULL,
+      x2 INTEGER NOT NULL,
+      y2 INTEGER NOT NULL,
+      esplorato INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE INDEX IF NOT EXISTS idx_zone_x ON mappa_zone(x1, x2);
+    CREATE INDEX IF NOT EXISTS idx_zone_y ON mappa_zone(y1, y2);
+
+    CREATE TABLE IF NOT EXISTS mappa_edifici (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      x INTEGER NOT NULL,
+      y INTEGER NOT NULL,
+      nome TEXT,
+      tipo TEXT NOT NULL,
+      UNIQUE(x, y)
+    );
+    CREATE INDEX IF NOT EXISTS idx_edifici_xy ON mappa_edifici(x, y);
+
+    CREATE TABLE IF NOT EXISTS mappa_piani (
+      edificio_id INTEGER NOT NULL,
+      piano INTEGER NOT NULL,
+      tipo TEXT NOT NULL,
+      esplorato INTEGER NOT NULL DEFAULT 0,
+      loot_json TEXT NOT NULL DEFAULT '{}',
+      PRIMARY KEY (edificio_id, piano),
+      FOREIGN KEY (edificio_id) REFERENCES mappa_edifici(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS documenti_archivio (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      titolo TEXT NOT NULL,
+      lingua TEXT NOT NULL,
+      testo_originale TEXT NOT NULL,
+      testo_criptato TEXT NOT NULL,
+      creato_il TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
   `);
+
+  const campiColumns = await db.all('PRAGMA table_info(campi_base)');
+  const campiColumnNames = campiColumns.map(column => column.name);
+  if (!campiColumnNames.includes('pos_x')) {
+    await db.run('ALTER TABLE campi_base ADD COLUMN pos_x INTEGER');
+  }
+  if (!campiColumnNames.includes('pos_y')) {
+    await db.run('ALTER TABLE campi_base ADD COLUMN pos_y INTEGER');
+  }
+  if (!campiColumnNames.includes('raggio')) {
+    await db.run('ALTER TABLE campi_base ADD COLUMN raggio INTEGER NOT NULL DEFAULT 10');
+  }
 
     // Crea i campi base iniziali se non esistono (retrocompatibilità + seed richiesto)
   const campoDefault = await db.get('SELECT id, nome FROM campi_base WHERE id = 1');

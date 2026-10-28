@@ -4,6 +4,19 @@ import crypto from 'crypto';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { openDatabase, magazzinoVuoto } from './db.js';
+import {
+  GRID_W,
+  GRID_H,
+  QUARTIERE,
+  TILE,
+  TIPI_ZONA,
+  TIPI_EDIFICIO,
+  TIPI_PIANO,
+  MIN_PIANI,
+  ESPLORAZIONE,
+  RAGGIO_CAMPO_DEFAULT
+} from './mappa-config.js';
+import { creaContenutoDocumento } from './documento-utils.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -60,6 +73,157 @@ function stringifyCharacterData(value) {
     return JSON.stringify(value);
   }
   return JSON.stringify({});
+}
+
+function parseIntStrict(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed)) return null;
+  return parsed;
+}
+
+function minPianiPerTipo(tipo) {
+  return MIN_PIANI[tipo] || 1;
+}
+
+function validateGridPoint(x, y) {
+  if (!Number.isInteger(x) || !Number.isInteger(y)) {
+    return 'Coordinate non valide: usa interi';
+  }
+  if (x < 0 || x >= GRID_W || y < 0 || y >= GRID_H) {
+    return `Coordinate fuori griglia (x: 0..${GRID_W - 1}, y: 0..${GRID_H - 1})`;
+  }
+  return null;
+}
+
+function intersectsRect(a, b) {
+  return !(a.x2 < b.x1 || b.x2 < a.x1 || a.y2 < b.y1 || b.y2 < a.y1);
+}
+
+async function validateZonaPayload(db, payload, excludeZoneId = null) {
+  const tipo = String(payload?.tipo || '').trim().toLowerCase();
+  if (!TIPI_ZONA.includes(tipo)) {
+    return { status: 400, error: `Tipo zona non valido. Tipi ammessi: ${TIPI_ZONA.join(', ')}` };
+  }
+  const x1 = parseIntStrict(payload?.x1);
+  const y1 = parseIntStrict(payload?.y1);
+  const x2 = parseIntStrict(payload?.x2);
+  const y2 = parseIntStrict(payload?.y2);
+  const esplorato = parseIntStrict(payload?.esplorato ?? 0);
+
+  const p1Err = validateGridPoint(x1, y1);
+  if (p1Err) return { status: 400, error: p1Err };
+  const p2Err = validateGridPoint(x2, y2);
+  if (p2Err) return { status: 400, error: p2Err };
+  if (x1 > x2 || y1 > y2) {
+    return { status: 400, error: 'Coordinate rettangolo non valide: richiede x1<=x2 e y1<=y2' };
+  }
+  if ((x2 - x1 + 1) > QUARTIERE || (y2 - y1 + 1) > QUARTIERE) {
+    return { status: 400, error: `Una zona non puo superare ${QUARTIERE}x${QUARTIERE}` };
+  }
+  if (![0, 1, 2].includes(esplorato)) {
+    return { status: 400, error: 'Esplorazione non valida (0, 1, 2)' };
+  }
+
+  const zone = await db.all('SELECT id, x1, y1, x2, y2 FROM mappa_zone');
+  const rect = { x1, y1, x2, y2 };
+  for (const zone of zone) {
+    if (excludeZoneId && zone.id === excludeZoneId) continue;
+    if (intersectsRect(rect, zone)) {
+      return { status: 409, error: `Sovrapposizione con zona esistente #${zone.id}` };
+    }
+  }
+
+  const edificioDentro = await db.get(
+    'SELECT id FROM mappa_edifici WHERE x BETWEEN ? AND ? AND y BETWEEN ? AND ? LIMIT 1',
+    x1,
+    x2,
+    y1,
+    y2
+  );
+  if (edificioDentro) {
+    return { status: 409, error: `La zona contiene l'edificio #${edificioDentro.id}` };
+  }
+
+  return {
+    ok: true,
+    value: {
+      tipo,
+      nome: payload?.nome ? String(payload.nome).trim() : null,
+      x1,
+      y1,
+      x2,
+      y2,
+      esplorato
+    }
+  };
+}
+
+function validatePianiPayload(piani) {
+  if (!Array.isArray(piani) || piani.length === 0) {
+    return { status: 400, error: 'Un edificio deve avere almeno un piano' };
+  }
+  const clean = [];
+  for (let i = 0; i < piani.length; i += 1) {
+    const pianoPayload = piani[i] || {};
+    const tipoPiano = String(pianoPayload.tipo || '').trim().toLowerCase();
+    if (!TIPI_PIANO.includes(tipoPiano)) {
+      return { status: 400, error: `Tipo piano non valido al piano ${i + 1}` };
+    }
+    const esplorato = parseIntStrict(pianoPayload.esplorato ?? 0);
+    if (![0, 1, 2].includes(esplorato)) {
+      return { status: 400, error: `Esplorazione non valida al piano ${i + 1}` };
+    }
+    let lootJson = '{}';
+    if (pianoPayload.loot_json !== undefined && pianoPayload.loot_json !== null) {
+      lootJson = String(pianoPayload.loot_json);
+    } else if (pianoPayload.loot !== undefined && pianoPayload.loot !== null) {
+      lootJson = String(pianoPayload.loot);
+    }
+    clean.push({
+      piano: i + 1,
+      tipo: tipoPiano,
+      esplorato,
+      loot_json: lootJson
+    });
+  }
+  return { ok: true, value: clean };
+}
+
+async function validateEdificioPayload(db, payload, { edificioId = null } = {}) {
+  const x = parseIntStrict(payload?.x);
+  const y = parseIntStrict(payload?.y);
+  const tipo = payload?.tipo ? String(payload.tipo).trim().toLowerCase() : null;
+
+  if (x !== null || y !== null) {
+    const coordError = validateGridPoint(x, y);
+    if (coordError) return { status: 400, error: coordError };
+  }
+
+  if (tipo !== null && !TIPI_EDIFICIO.includes(tipo)) {
+    if (TIPI_ZONA.includes(tipo)) {
+      return { status: 400, error: 'Tipo edificio non valido: usa una zona' };
+    }
+    return { status: 400, error: `Tipo edificio non valido. Tipi ammessi: ${TIPI_EDIFICIO.join(', ')}` };
+  }
+
+  if (x !== null && y !== null) {
+    const zoneCover = await db.get(
+      'SELECT id FROM mappa_zone WHERE ? BETWEEN x1 AND x2 AND ? BETWEEN y1 AND y2 LIMIT 1',
+      x,
+      y
+    );
+    if (zoneCover) {
+      return { status: 409, error: `Non puoi creare un edificio dentro la zona #${zoneCover.id}` };
+    }
+
+    const existing = await db.get('SELECT id FROM mappa_edifici WHERE x = ? AND y = ? LIMIT 1', x, y);
+    if (existing && existing.id !== edificioId) {
+      return { status: 409, error: `Esiste gia un edificio nella casella (${x}:${y})` };
+    }
+  }
+
+  return { ok: true, value: { x, y, tipo } };
 }
 
 async function createSession(db, userId) {
@@ -181,11 +345,29 @@ app.get('/api/campi', authenticateUser, async (req, res) => {
 
 
 app.post('/api/campi', authenticateUser, requireMaster, async (req, res) => {
-  const { nome } = req.body;
+  const { nome, pos_x, pos_y, raggio } = req.body;
   if (!nome || !nome.trim()) return res.status(400).json({ error: 'Nome campo base richiesto' });
+  const x = parseIntStrict(pos_x);
+  const y = parseIntStrict(pos_y);
+  if (x === null || y === null) {
+    return res.status(400).json({ error: 'Per creare un campo base servono pos_x e pos_y' });
+  }
+  const coordErr = validateGridPoint(x, y);
+  if (coordErr) return res.status(400).json({ error: coordErr });
+  const raggioPulito = parseIntStrict(raggio);
+  const raggioFinale = raggioPulito === null ? RAGGIO_CAMPO_DEFAULT : raggioPulito;
+  if (raggioFinale < 0) {
+    return res.status(400).json({ error: 'Raggio non valido' });
+  }
   try {
     const db = await dbPromise;
-    const result = await db.run('INSERT INTO campi_base (nome) VALUES (?)', nome.trim());
+    const result = await db.run(
+      'INSERT INTO campi_base (nome, pos_x, pos_y, raggio) VALUES (?, ?, ?, ?)',
+      nome.trim(),
+      x,
+      y,
+      raggioFinale
+    );
     await db.run('INSERT INTO magazzini (campo_base_id, data) VALUES (?, ?)', result.lastID, JSON.stringify(magazzinoVuoto()));
     const campo = await db.get('SELECT * FROM campi_base WHERE id = ?', result.lastID);
     res.json({ campo });
@@ -193,6 +375,39 @@ app.post('/api/campi', authenticateUser, requireMaster, async (req, res) => {
     if (error.message.includes('UNIQUE constraint failed')) {
       return res.status(409).json({ error: 'Esiste già un campo base con questo nome' });
     }
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.put('/api/campi/:id/posizione', authenticateUser, requireMaster, async (req, res) => {
+  const id = parseIntStrict(req.params.id);
+  if (id === null || id <= 0) return res.status(400).json({ error: 'ID campo base non valido' });
+  const x = parseIntStrict(req.body?.pos_x);
+  const y = parseIntStrict(req.body?.pos_y);
+  if (x === null || y === null) {
+    return res.status(400).json({ error: 'pos_x e pos_y sono obbligatori' });
+  }
+  const coordErr = validateGridPoint(x, y);
+  if (coordErr) return res.status(400).json({ error: coordErr });
+  const raggioPulito = parseIntStrict(req.body?.raggio);
+  const raggioFinale = raggioPulito === null ? null : raggioPulito;
+  if (raggioFinale !== null && raggioFinale < 0) {
+    return res.status(400).json({ error: 'Raggio non valido' });
+  }
+  try {
+    const db = await dbPromise;
+    const campo = await db.get('SELECT id, raggio FROM campi_base WHERE id = ?', id);
+    if (!campo) return res.status(404).json({ error: 'Campo base non trovato' });
+    await db.run(
+      'UPDATE campi_base SET pos_x = ?, pos_y = ?, raggio = ? WHERE id = ?',
+      x,
+      y,
+      raggioFinale === null ? campo.raggio : raggioFinale,
+      id
+    );
+    const updated = await db.get('SELECT * FROM campi_base WHERE id = ?', id);
+    res.json({ campo: updated });
+  } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
@@ -212,6 +427,424 @@ app.delete('/api/campi/:id', authenticateUser, requireMaster, async (req, res) =
     await db.run('DELETE FROM magazzini WHERE campo_base_id = ?', id);
     res.json({ success: true });
   } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ========================= ROUTE: MAPPA =========================
+
+app.get('/api/mappa/config', authenticateUser, async (_req, res) => {
+  res.json({
+    GRID_W,
+    GRID_H,
+    QUARTIERE,
+    TILE,
+    TIPI_ZONA,
+    TIPI_EDIFICIO,
+    TIPI_PIANO,
+    MIN_PIANI,
+    ESPLORAZIONE,
+    RAGGIO_CAMPO_DEFAULT
+  });
+});
+
+app.get('/api/mappa/tile', authenticateUser, async (req, res) => {
+  const x = parseIntStrict(req.query.x);
+  const y = parseIntStrict(req.query.y);
+  const w = parseIntStrict(req.query.w);
+  const h = parseIntStrict(req.query.h);
+  if ([x, y, w, h].some(v => v === null)) {
+    return res.status(400).json({ error: 'x, y, w, h sono obbligatori e devono essere interi' });
+  }
+  if (w <= 0 || h <= 0 || w > TILE || h > TILE) {
+    return res.status(400).json({ error: `w e h devono essere tra 1 e ${TILE}` });
+  }
+  if (x < 0 || y < 0 || x >= GRID_W || y >= GRID_H) {
+    return res.status(400).json({ error: 'Coordinate tile fuori griglia' });
+  }
+
+  const x2 = Math.min(GRID_W - 1, x + w - 1);
+  const y2 = Math.min(GRID_H - 1, y + h - 1);
+
+  try {
+    const db = await dbPromise;
+    let zone = await db.all(
+      `SELECT id, tipo, nome, x1, y1, x2, y2, esplorato
+       FROM mappa_zone
+       WHERE x1 <= ? AND x2 >= ? AND y1 <= ? AND y2 >= ?`,
+      x2,
+      x,
+      y2,
+      y
+    );
+
+    let edifici = await db.all(
+      `SELECT e.id, e.x, e.y, e.nome, e.tipo,
+              COUNT(p.piano) AS num_piani,
+              COALESCE(MAX(p.esplorato), 0) AS esplorato_max
+       FROM mappa_edifici e
+       LEFT JOIN mappa_piani p ON p.edificio_id = e.id
+       WHERE e.x BETWEEN ? AND ? AND e.y BETWEEN ? AND ?
+       GROUP BY e.id
+       ORDER BY e.id ASC`,
+      x,
+      x2,
+      y,
+      y2
+    );
+
+    if (req.user.role !== 'master') {
+      zone = zone.filter(z => Number(z.esplorato) >= 1);
+      edifici = edifici.filter(e => Number(e.esplorato_max) >= 1);
+    }
+
+    edifici = edifici.map(e => ({
+      ...e,
+      nome: e.nome && e.nome.trim() ? e.nome : `Edificio #${e.id}`
+    }));
+
+    const campi = await db.all('SELECT id, nome, pos_x, pos_y, raggio FROM campi_base ORDER BY id ASC');
+    res.json({ zone, edifici, campi });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/mappa/edificio/:id', authenticateUser, async (req, res) => {
+  const edificioId = parseIntStrict(req.params.id);
+  if (edificioId === null || edificioId <= 0) {
+    return res.status(400).json({ error: 'ID edificio non valido' });
+  }
+  try {
+    const db = await dbPromise;
+    const edificio = await db.get('SELECT id, x, y, nome, tipo FROM mappa_edifici WHERE id = ?', edificioId);
+    if (!edificio) return res.status(404).json({ error: 'Edificio non trovato' });
+    let piani = await db.all(
+      'SELECT piano, tipo, esplorato, loot_json FROM mappa_piani WHERE edificio_id = ? ORDER BY piano ASC',
+      edificioId
+    );
+    if (req.user.role !== 'master') {
+      const hasVisible = piani.some(p => Number(p.esplorato) >= 1);
+      if (!hasVisible) {
+        return res.status(404).json({ error: 'Edificio non visibile' });
+      }
+      piani = piani
+        .filter(p => Number(p.esplorato) >= 1)
+        .map(p => ({
+          piano: p.piano,
+          tipo: p.tipo,
+          esplorato: p.esplorato,
+          loot_json: p.loot_json
+        }));
+    }
+    res.json({
+      edificio: {
+        ...edificio,
+        nome: edificio.nome && edificio.nome.trim() ? edificio.nome : `Edificio #${edificio.id}`
+      },
+      piani
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/mappa/cerca', authenticateUser, async (req, res) => {
+  const q = String(req.query.q || '').trim();
+  if (!q) return res.status(400).json({ error: 'Parametro q obbligatorio' });
+
+  const coordParts = q.split(':').map(part => part.trim());
+  const isCoord = coordParts.length >= 2 && coordParts.length <= 3 && coordParts.every(part => /^-?\d+$/.test(part));
+
+  try {
+    const db = await dbPromise;
+    if (isCoord) {
+      const x = parseIntStrict(coordParts[0]);
+      const y = parseIntStrict(coordParts[1]);
+      const err = validateGridPoint(x, y);
+      if (err) return res.status(400).json({ error: err });
+
+      const zone = await db.get(
+        'SELECT id, tipo, nome, x1, y1, x2, y2, esplorato FROM mappa_zone WHERE ? BETWEEN x1 AND x2 AND ? BETWEEN y1 AND y2 LIMIT 1',
+        x,
+        y
+      );
+      const edificio = await db.get(
+        `SELECT e.id, e.x, e.y, e.nome, e.tipo, COALESCE(MAX(p.esplorato),0) AS esplorato_max
+         FROM mappa_edifici e
+         LEFT JOIN mappa_piani p ON p.edificio_id = e.id
+         WHERE e.x = ? AND e.y = ?
+         GROUP BY e.id
+         LIMIT 1`,
+        x,
+        y
+      );
+
+      const risultati = [];
+      if (zone && (req.user.role === 'master' || Number(zone.esplorato) >= 1)) {
+        risultati.push({ tipo: 'zona', ...zone });
+      }
+      if (edificio && (req.user.role === 'master' || Number(edificio.esplorato_max) >= 1)) {
+        risultati.push({
+          tipo: 'edificio',
+          ...edificio,
+          nome: edificio.nome && edificio.nome.trim() ? edificio.nome : `Edificio #${edificio.id}`
+        });
+      }
+      return res.json({ risultati });
+    }
+
+    const like = `%${q}%`;
+    let zone = await db.all(
+      `SELECT id, tipo, nome, x1, y1, x2, y2, esplorato
+       FROM mappa_zone
+       WHERE nome IS NOT NULL AND nome LIKE ?
+       ORDER BY id DESC
+       LIMIT 50`,
+      like
+    );
+    let edifici = await db.all(
+      `SELECT e.id, e.x, e.y, e.nome, e.tipo, COALESCE(MAX(p.esplorato),0) AS esplorato_max
+       FROM mappa_edifici e
+       LEFT JOIN mappa_piani p ON p.edificio_id = e.id
+       WHERE e.nome IS NOT NULL AND e.nome LIKE ?
+       GROUP BY e.id
+       ORDER BY e.id DESC
+       LIMIT 50`,
+      like
+    );
+
+    if (req.user.role !== 'master') {
+      zone = zone.filter(z => Number(z.esplorato) >= 1);
+      edifici = edifici.filter(e => Number(e.esplorato_max) >= 1);
+    }
+
+    const risultati = [
+      ...zone.map(z => ({ tipo: 'zona', ...z })),
+      ...edifici.map(e => ({
+        tipo: 'edificio',
+        ...e,
+        nome: e.nome && e.nome.trim() ? e.nome : `Edificio #${e.id}`
+      }))
+    ].slice(0, 50);
+
+    res.json({ risultati });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/mappa/zone', authenticateUser, requireMaster, async (req, res) => {
+  try {
+    const db = await dbPromise;
+    const check = await validateZonaPayload(db, req.body);
+    if (!check.ok) return res.status(check.status).json({ error: check.error });
+    const z = check.value;
+    const result = await db.run(
+      `INSERT INTO mappa_zone (tipo, nome, x1, y1, x2, y2, esplorato)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      z.tipo,
+      z.nome,
+      z.x1,
+      z.y1,
+      z.x2,
+      z.y2,
+      z.esplorato
+    );
+    const zona = await db.get('SELECT * FROM mappa_zone WHERE id = ?', result.lastID);
+    res.json({ zona });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.put('/api/mappa/zone/:id', authenticateUser, requireMaster, async (req, res) => {
+  const id = parseIntStrict(req.params.id);
+  if (id === null || id <= 0) return res.status(400).json({ error: 'ID zona non valido' });
+  try {
+    const db = await dbPromise;
+    const zonaEsistente = await db.get('SELECT * FROM mappa_zone WHERE id = ?', id);
+    if (!zonaEsistente) return res.status(404).json({ error: 'Zona non trovata' });
+    const merged = {
+      ...zonaEsistente,
+      ...req.body
+    };
+    const check = await validateZonaPayload(db, merged, id);
+    if (!check.ok) return res.status(check.status).json({ error: check.error });
+    const z = check.value;
+    await db.run(
+      `UPDATE mappa_zone
+       SET tipo = ?, nome = ?, x1 = ?, y1 = ?, x2 = ?, y2 = ?, esplorato = ?
+       WHERE id = ?`,
+      z.tipo,
+      z.nome,
+      z.x1,
+      z.y1,
+      z.x2,
+      z.y2,
+      z.esplorato,
+      id
+    );
+    const zona = await db.get('SELECT * FROM mappa_zone WHERE id = ?', id);
+    res.json({ zona });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.delete('/api/mappa/zone/:id', authenticateUser, requireMaster, async (req, res) => {
+  const id = parseIntStrict(req.params.id);
+  if (id === null || id <= 0) return res.status(400).json({ error: 'ID zona non valido' });
+  try {
+    const db = await dbPromise;
+    const zona = await db.get('SELECT id FROM mappa_zone WHERE id = ?', id);
+    if (!zona) return res.status(404).json({ error: 'Zona non trovata' });
+    await db.run('DELETE FROM mappa_zone WHERE id = ?', id);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/mappa/edifici', authenticateUser, requireMaster, async (req, res) => {
+  try {
+    const db = await dbPromise;
+    const { x, y, nome, tipo, piani } = req.body || {};
+
+    if (x === undefined || y === undefined || !tipo) {
+      return res.status(400).json({ error: 'x, y e tipo sono obbligatori' });
+    }
+
+    const checkEdificio = await validateEdificioPayload(db, { x, y, tipo });
+    if (!checkEdificio.ok) return res.status(checkEdificio.status).json({ error: checkEdificio.error });
+
+    const pianiCheck = validatePianiPayload(piani);
+    if (!pianiCheck.ok) return res.status(pianiCheck.status).json({ error: pianiCheck.error });
+
+    const minPiani = minPianiPerTipo(tipo);
+    if (pianiCheck.value.length < minPiani) {
+      return res.status(400).json({ error: `Il tipo ${tipo} richiede almeno ${minPiani} piani` });
+    }
+
+    await db.run('BEGIN');
+    const result = await db.run(
+      'INSERT INTO mappa_edifici (x, y, nome, tipo) VALUES (?, ?, ?, ?)',
+      x,
+      y,
+      nome ? String(nome).trim() : null,
+      String(tipo).trim().toLowerCase()
+    );
+
+    for (const piano of pianiCheck.value) {
+      await db.run(
+        'INSERT INTO mappa_piani (edificio_id, piano, tipo, esplorato, loot_json) VALUES (?, ?, ?, ?, ?)',
+        result.lastID,
+        piano.piano,
+        piano.tipo,
+        piano.esplorato,
+        piano.loot_json
+      );
+    }
+    await db.run('COMMIT');
+
+    const edificio = await db.get('SELECT * FROM mappa_edifici WHERE id = ?', result.lastID);
+    res.json({ edificio: { ...edificio, nome: edificio.nome || `Edificio #${edificio.id}` } });
+  } catch (error) {
+    try {
+      const db = await dbPromise;
+      await db.run('ROLLBACK');
+    } catch (_) {
+      // no-op
+    }
+    if (error.message && error.message.includes('UNIQUE constraint failed')) {
+      return res.status(409).json({ error: 'Esiste gia un edificio in questa casella' });
+    }
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.put('/api/mappa/edifici/:id', authenticateUser, requireMaster, async (req, res) => {
+  const id = parseIntStrict(req.params.id);
+  if (id === null || id <= 0) return res.status(400).json({ error: 'ID edificio non valido' });
+  try {
+    const db = await dbPromise;
+    const edificio = await db.get('SELECT * FROM mappa_edifici WHERE id = ?', id);
+    if (!edificio) return res.status(404).json({ error: 'Edificio non trovato' });
+
+    const newTipo = req.body?.tipo ? String(req.body.tipo).trim().toLowerCase() : edificio.tipo;
+    const checkTipo = await validateEdificioPayload(db, { tipo: newTipo }, { edificioId: id });
+    if (!checkTipo.ok) return res.status(checkTipo.status).json({ error: checkTipo.error });
+
+    const pianiCountRow = await db.get('SELECT COUNT(*) AS count FROM mappa_piani WHERE edificio_id = ?', id);
+    const minPiani = minPianiPerTipo(newTipo);
+    if ((pianiCountRow?.count || 0) < minPiani) {
+      return res.status(400).json({ error: `Il tipo ${newTipo} richiede almeno ${minPiani} piani` });
+    }
+
+    const hasNome = Object.prototype.hasOwnProperty.call(req.body || {}, 'nome');
+    const nomeFinale = hasNome
+      ? (req.body?.nome ? String(req.body.nome).trim() : null)
+      : edificio.nome;
+    await db.run('UPDATE mappa_edifici SET nome = ?, tipo = ? WHERE id = ?', nomeFinale, newTipo, id);
+    const updated = await db.get('SELECT * FROM mappa_edifici WHERE id = ?', id);
+    res.json({ edificio: { ...updated, nome: updated.nome || `Edificio #${updated.id}` } });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.delete('/api/mappa/edifici/:id', authenticateUser, requireMaster, async (req, res) => {
+  const id = parseIntStrict(req.params.id);
+  if (id === null || id <= 0) return res.status(400).json({ error: 'ID edificio non valido' });
+  try {
+    const db = await dbPromise;
+    const edificio = await db.get('SELECT id FROM mappa_edifici WHERE id = ?', id);
+    if (!edificio) return res.status(404).json({ error: 'Edificio non trovato' });
+    await db.run('DELETE FROM mappa_edifici WHERE id = ?', id);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.put('/api/mappa/edifici/:id/piani', authenticateUser, requireMaster, async (req, res) => {
+  const id = parseIntStrict(req.params.id);
+  if (id === null || id <= 0) return res.status(400).json({ error: 'ID edificio non valido' });
+  try {
+    const db = await dbPromise;
+    const edificio = await db.get('SELECT id, tipo FROM mappa_edifici WHERE id = ?', id);
+    if (!edificio) return res.status(404).json({ error: 'Edificio non trovato' });
+
+    const pianiCheck = validatePianiPayload(req.body?.piani);
+    if (!pianiCheck.ok) return res.status(pianiCheck.status).json({ error: pianiCheck.error });
+
+    const minPiani = minPianiPerTipo(edificio.tipo);
+    if (pianiCheck.value.length < minPiani) {
+      return res.status(400).json({ error: `Non puoi scendere sotto il minimo di ${minPiani} piani` });
+    }
+
+    await db.run('BEGIN');
+    await db.run('DELETE FROM mappa_piani WHERE edificio_id = ?', id);
+    for (const piano of pianiCheck.value) {
+      await db.run(
+        'INSERT INTO mappa_piani (edificio_id, piano, tipo, esplorato, loot_json) VALUES (?, ?, ?, ?, ?)',
+        id,
+        piano.piano,
+        piano.tipo,
+        piano.esplorato,
+        piano.loot_json
+      );
+    }
+    await db.run('COMMIT');
+    const piani = await db.all('SELECT piano, tipo, esplorato, loot_json FROM mappa_piani WHERE edificio_id = ? ORDER BY piano ASC', id);
+    res.json({ piani });
+  } catch (error) {
+    try {
+      const db = await dbPromise;
+      await db.run('ROLLBACK');
+    } catch (_) {
+      // no-op
+    }
     res.status(500).json({ error: error.message });
   }
 });
@@ -675,10 +1308,13 @@ app.put('/api/personaggi/:id', authenticateUser, requireNotGuest, async (req, re
 // ========================= ROUTE: DOCUMENTI =========================
 
 app.post('/api/documenti', authenticateUser, requireMaster, async (req, res) => {
-  const { contenuto, personaggio_id, personaggioId, titolo, campoBaseId } = req.body;
+  const { contenuto, personaggio_id, personaggioId, titolo, campoBaseId, lingua, testo } = req.body;
   try {
     const db = await dbPromise;
-    const payload = contenuto || JSON.stringify({});
+    const payload = contenuto || creaContenutoDocumento({
+      lingua: lingua || 'Verbum',
+      testo: testo || ''
+    });
     const targetId = (personaggio_id !== undefined && personaggio_id !== null && personaggio_id !== '')
         ? personaggio_id
         : (personaggioId !== undefined && personaggioId !== null && personaggioId !== '' ? personaggioId : 0);
@@ -696,7 +1332,119 @@ app.post('/api/documenti', authenticateUser, requireMaster, async (req, res) => 
 
     const result = await db.run(
         'INSERT INTO documenti (master_id, personaggio_id, titolo, contenuto, campo_base_id) VALUES (?, ?, ?, ?, ?)',
-        req.user.id, targetId, titolo, payload, campoFinale,
+      req.user.id, targetId, titolo || 'Documento senza titolo', payload, campoFinale,
+    );
+    const document = await db.get('SELECT * FROM documenti WHERE id = ?', result.lastID);
+    res.json({ document });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/archivio-documenti', authenticateUser, requireMaster, async (_req, res) => {
+  try {
+    const db = await dbPromise;
+    const documenti = await db.all('SELECT * FROM documenti_archivio ORDER BY id DESC');
+    res.json({ documenti });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/archivio-documenti', authenticateUser, requireMaster, async (req, res) => {
+  const titolo = String(req.body?.titolo || '').trim();
+  const lingua = String(req.body?.lingua || '').trim();
+  const testo = String(req.body?.testo || '');
+  if (!titolo || !lingua || !testo) {
+    return res.status(400).json({ error: 'titolo, lingua e testo sono obbligatori' });
+  }
+  try {
+    const db = await dbPromise;
+    const contenuto = JSON.parse(creaContenutoDocumento({ lingua, testo }));
+    const result = await db.run(
+      'INSERT INTO documenti_archivio (titolo, lingua, testo_originale, testo_criptato) VALUES (?, ?, ?, ?)',
+      titolo,
+      lingua,
+      contenuto.testo_originale,
+      contenuto.testo_criptato
+    );
+    const documento = await db.get('SELECT * FROM documenti_archivio WHERE id = ?', result.lastID);
+    res.json({ documento });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.put('/api/archivio-documenti/:id', authenticateUser, requireMaster, async (req, res) => {
+  const id = parseIntStrict(req.params.id);
+  if (id === null || id <= 0) return res.status(400).json({ error: 'ID documento non valido' });
+  const titolo = String(req.body?.titolo || '').trim();
+  const lingua = String(req.body?.lingua || '').trim();
+  const testo = String(req.body?.testo || '');
+  if (!titolo || !lingua || !testo) {
+    return res.status(400).json({ error: 'titolo, lingua e testo sono obbligatori' });
+  }
+  try {
+    const db = await dbPromise;
+    const existing = await db.get('SELECT id FROM documenti_archivio WHERE id = ?', id);
+    if (!existing) return res.status(404).json({ error: 'Documento archivio non trovato' });
+    const contenuto = JSON.parse(creaContenutoDocumento({ lingua, testo }));
+    await db.run(
+      'UPDATE documenti_archivio SET titolo = ?, lingua = ?, testo_originale = ?, testo_criptato = ? WHERE id = ?',
+      titolo,
+      lingua,
+      contenuto.testo_originale,
+      contenuto.testo_criptato,
+      id
+    );
+    const documento = await db.get('SELECT * FROM documenti_archivio WHERE id = ?', id);
+    res.json({ documento });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.delete('/api/archivio-documenti/:id', authenticateUser, requireMaster, async (req, res) => {
+  const id = parseIntStrict(req.params.id);
+  if (id === null || id <= 0) return res.status(400).json({ error: 'ID documento non valido' });
+  try {
+    const db = await dbPromise;
+    const existing = await db.get('SELECT id FROM documenti_archivio WHERE id = ?', id);
+    if (!existing) return res.status(404).json({ error: 'Documento archivio non trovato' });
+    await db.run('DELETE FROM documenti_archivio WHERE id = ?', id);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/archivio-documenti/:id/dai', authenticateUser, requireMaster, async (req, res) => {
+  const id = parseIntStrict(req.params.id);
+  const personaggioId = parseIntStrict(req.body?.personaggioId);
+  if (id === null || id <= 0 || personaggioId === null || personaggioId <= 0) {
+    return res.status(400).json({ error: 'ID documento o personaggio non valido' });
+  }
+  try {
+    const db = await dbPromise;
+    const archivioDoc = await db.get('SELECT * FROM documenti_archivio WHERE id = ?', id);
+    if (!archivioDoc) return res.status(404).json({ error: 'Documento archivio non trovato' });
+
+    const personaggio = await db.get('SELECT id, campo_base_id FROM personaggi WHERE id = ?', personaggioId);
+    if (!personaggio) return res.status(404).json({ error: 'Personaggio non trovato' });
+
+    const contenuto = JSON.stringify({
+      lingua_richiesta: archivioDoc.lingua,
+      testo_originale: archivioDoc.testo_originale,
+      testo_criptato: archivioDoc.testo_criptato
+    });
+
+    const result = await db.run(
+      'INSERT INTO documenti (master_id, personaggio_id, titolo, contenuto, campo_base_id) VALUES (?, ?, ?, ?, ?)',
+      req.user.id,
+      personaggioId,
+      archivioDoc.titolo,
+      contenuto,
+      personaggio.campo_base_id || 1
     );
     const document = await db.get('SELECT * FROM documenti WHERE id = ?', result.lastID);
     res.json({ document });
@@ -900,12 +1648,16 @@ app.post('/api/proposte/:id/esegui', authenticateUser, requireMaster, async (req
 
 app.post('/api/magazzino/transfer', authenticateUser, requireNotGuest, async (req, res) => {
   const payload = req.body?.data || {};
+  const campoBaseId = req.body?.campoBaseId ? parseInt(req.body.campoBaseId, 10) : 1;
   if (!payload || Object.keys(payload).length === 0) {
     return res.status(400).json({ error: 'Dati mancanti' });
   }
+  if (isNaN(campoBaseId) || campoBaseId <= 0) {
+    return res.status(400).json({ error: 'campoBaseId non valido' });
+  }
   try {
     const db = await dbPromise;
-    const current = await db.get('SELECT * FROM magazzino WHERE id = 1');
+    const current = await db.get('SELECT * FROM magazzini WHERE campo_base_id = ?', campoBaseId);
     const currentData = current?.data ? JSON.parse(current.data) : {};
     const allowedFields = ['cibo', 'acqua', 'conserve', 'piattiDeliziosi', 'materialiAlchemici', 'ingranaggi', 'materialiMedici'];
     const mergedData = { ...currentData };
@@ -926,12 +1678,22 @@ app.post('/api/magazzino/transfer', authenticateUser, requireNotGuest, async (re
         return res.status(400).json({ error: `Valore negativo per ${key}` });
       }
     }
-    await db.run(
-        'UPDATE magazzino SET data = ?, updated_at = ? WHERE id = 1',
+    if (current) {
+      await db.run(
+        'UPDATE magazzini SET data = ?, updated_at = ? WHERE campo_base_id = ?',
         JSON.stringify(mergedData),
         new Date().toISOString(),
-    );
-    const updated = await db.get('SELECT * FROM magazzino WHERE id = 1');
+        campoBaseId
+      );
+    } else {
+      await db.run(
+        'INSERT INTO magazzini (campo_base_id, data, updated_at) VALUES (?, ?, ?)',
+        campoBaseId,
+        JSON.stringify(mergedData),
+        new Date().toISOString()
+      );
+    }
+    const updated = await db.get('SELECT * FROM magazzini WHERE campo_base_id = ?', campoBaseId);
     if (updated && updated.data && typeof updated.data === 'string') {
       try {
         updated.data = JSON.parse(updated.data);

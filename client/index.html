@@ -151,6 +151,7 @@
                 <button id="btn-magazzino" class="btn-hero guest-allow" onclick="openMagazzino()">📦 MAGAZZINO</button>
                 <button id="btn-master-panel" class="btn-hero master-only hidden" onclick="apriPannelloMaster()">👑 MASTER</button>
                 <button id="btn-cambia-campo" class="btn-hero master-only hidden" onclick="masterCambiaCampoVisuale()">🔀 CAMBIA CAMPO</button>
+                <button id="btn-master-hub" class="btn-hero master-only hidden" onclick="tornaAlMasterHub()">🏠 HUB MASTER</button>
             </div>
             <div id="party-container"></div>
         </main>
@@ -322,6 +323,9 @@
     // Poi carica il resto (moduli)
     const appScripts = [
         { src: '/src/logic/logic.js', module: true },
+        { src: '/src/ui/common-ui.js', module: true },
+        { src: '/src/ui/mappa-ui.js', module: true },
+        { src: '/src/ui/master-hub.js', module: true },
         { src: '/src/ui/ui.js', module: true },
         { src: '/src/ui/auth-ui.js', module: true },
         {src:'/src/ui/combattimento-ui.js',module:true},

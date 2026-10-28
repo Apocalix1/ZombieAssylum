@@ -39,10 +39,9 @@ document.getElementById('overlay')?.addEventListener('click', function() {
 
 export async function showLobbyScreen(user) {
     if (user && user.role === 'master') {
-        await showGameScreen('Master');
-        await caricaPartyMaster();
-        apriPannelloMaster();
-        avviaPollingPartyMaster();
+        if (typeof window.showMasterHub === 'function') {
+            await window.showMasterHub();
+        }
         return;
     }
 
@@ -78,6 +77,15 @@ export async function showLobbyScreen(user) {
         }, 500);
     }
 }
+
+window.tornaAlMasterHub = async function() {
+    if (typeof fermaPollingPartyMaster === 'function') {
+        fermaPollingPartyMaster();
+    }
+    if (typeof window.showMasterHub === 'function') {
+        await window.showMasterHub();
+    }
+};
 
 window.mandaInGiocoDaLobby = async function(nome) {
     const user = getCurrentUser();
@@ -728,6 +736,22 @@ window.apriPannelloMaster = async function apriPannelloMaster() {
         </div>
 
         <div style="margin-top:20px; border-top:1px solid #333; padding-top:10px;">
+            <h3 style="color:#f1c40f;">🧠 Riduci Follia</h3>
+            <div style="margin-bottom:10px;">
+                <label style="display:block; margin-bottom:4px; color:#ccc;">Personaggio target:</label>
+                <select id="master-follia-target" style="width:100%; background:#222; color:white; border:1px solid #444; padding:6px;">
+                    <option value="">Seleziona...</option>
+                    ${options}
+                </select>
+            </div>
+            <div style="margin-bottom:10px;">
+                <label style="display:block; margin-bottom:4px; color:#ccc;">Quantità da ridurre:</label>
+                <input type="number" id="master-follia-quantita" min="1" value="1" style="width:100%; background:#222; color:white; border:1px solid #444; padding:6px;">
+            </div>
+            <button class="btn-hero" onclick="masterRiduciFollia()" style="width:100%;">Riduci Follia</button>
+        </div>
+
+        <div style="margin-top:20px; border-top:1px solid #333; padding-top:10px;">
             <h3 style="color:#f1c40f;">🏚️ Magazzino</h3>
             <div id="master-magazzino-editor" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(200px,1fr)); gap:10px;"></div>
         </div>
@@ -934,7 +958,7 @@ window.disegnaModificatori = disegnaModificatori;
 function hasPerk(personaggio, perk) {
     if (!personaggio) return false;
     if (Array.isArray(personaggio.perks)) {
-        return personaggio.perks.some(p => (typeof p === 'string' ? p : p?.nome) === perk);
+        return personaggio.perks.some(p => perkNamesMatch(typeof p === 'string' ? p : p?.nome, perk));
     }
     return false;
 }
@@ -971,7 +995,17 @@ function rollDiceNotation(notation) {
 
 function normalizePerkName(nomePerk) {
     if (nomePerk === undefined || nomePerk === null) return "";
-    return String(nomePerk).trim();
+    return String(nomePerk)
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function perkNamesMatch(a, b) {
+    const left = normalizePerkName(a).toLowerCase();
+    const right = normalizePerkName(b).toLowerCase();
+    return left === right;
 }
 
 function getPerkBaseName(nomePerk) {
@@ -1082,7 +1116,76 @@ function perkObjectName(perk) {
 function getPerkCount(personaggio, nomePerk) {
     if (!personaggio || !Array.isArray(personaggio.perks)) return 0;
     const target = getPerkBaseName(nomePerk);
-    return personaggio.perks.filter(perk => getPerkBaseName(perkObjectName(perk)) === target).length;
+    return personaggio.perks.filter(perk => perkNamesMatch(getPerkBaseName(perkObjectName(perk)), target)).length;
+}
+
+function rimuoviEffettiCollateraliPerk(p, perkRimosso) {
+    if (!p || !perkRimosso) return;
+    const nome = perkObjectName(perkRimosso);
+    const baseName = getPerkBaseName(nome);
+    const specificName = typeof perkRimosso === 'object' && perkRimosso && perkRimosso.nome ? perkRimosso.nome : nome;
+
+    if (baseName === 'Obeso' || baseName === 'Sovrappeso') {
+        if (p.pesoCorporeo) p.pesoCorporeo.usiCuscinetto = null;
+    }
+    if (baseName === 'Alchemico') {
+        p.masteries = (p.masteries || []).filter(m => String(m).toLowerCase() !== 'natura');
+    }
+    if (baseName === 'Bimbi') {
+        p.masteries = (p.masteries || []).filter(m => String(m).toLowerCase() !== 'cucina');
+    }
+    if (baseName === 'Soldato' && Array.isArray(p.soldatoArmiScelte)) {
+        p.soldatoArmiScelte.forEach(cat => {
+            if (p.armiLivello && typeof p.armiLivello[cat] === 'number') {
+                p.armiLivello[cat] = Math.max(0, p.armiLivello[cat] - 1);
+            }
+        });
+        p.soldatoArmiScelte = null;
+    }
+    if (baseName === 'Autoctono') {
+        p.lingue = (p.lingue || []).filter(l => l !== 'Eklesti');
+    }
+    if (baseName === 'Artista' && specificName === 'Artista' && p.perks) {
+        const musica = p.perks.filter(pp => getPerkBaseName(perkObjectName(pp)) === 'Orecchio Fino');
+        if (musica.length) {
+            p.perks = p.perks.filter(pp => getPerkBaseName(perkObjectName(pp)) !== 'Orecchio Fino');
+        }
+    }
+    if (baseName === 'Artista' && perkRimosso && perkRimosso.specializzazione === 'Musicista' && p.perks) {
+        p.perks = p.perks.filter(pp => getPerkBaseName(perkObjectName(pp)) !== 'Orecchio Fino');
+    }
+    if (baseName === 'Lingue' && specificName.startsWith('Lingue (')) {
+        const lingua = specificName.replace(/^Lingue \(/, '').replace(/\)$/, '');
+        if (lingua && Array.isArray(p.lingue)) {
+            p.lingue = p.lingue.filter(l => l !== lingua);
+        }
+    }
+    if (baseName === 'Razzista') {
+        const match = /\(([^)]+)\)$/.exec(specificName);
+        const razza = match ? match[1] : null;
+        if (razza && Array.isArray(p.perks)) {
+            p.perks = p.perks.filter(pp => {
+                const thisName = perkObjectName(pp);
+                const thisBase = getPerkBaseName(thisName);
+                if (thisBase !== 'Razzista') return true;
+                const thisMatch = /\(([^)]+)\)$/.exec(thisName);
+                return !(thisMatch && thisMatch[1] === razza);
+            });
+        }
+    }
+    if (baseName === 'Misogino/Androfobico' || baseName === 'Misogino/Misandrico') {
+        if (Array.isArray(p.perks)) {
+            p.perks = p.perks.filter(pp => getPerkBaseName(perkObjectName(pp)) !== 'Misogino/Androfobico' && getPerkBaseName(perkObjectName(pp)) !== 'Misogino/Misandrico');
+        }
+    }
+    if (baseName === 'Anziana') {
+        if (Array.isArray(p.perks)) {
+            p.perks = p.perks.filter(pp => getPerkBaseName(perkObjectName(pp)) !== 'Anziana');
+        }
+    }
+    if (baseName === 'Scienziato Pazzo' && Array.isArray(p.perks)) {
+        p.perks = p.perks.filter(pp => getPerkBaseName(perkObjectName(pp)) !== 'Scienziato Pazzo');
+    }
 }
 
 // ========================= SISTEMA PROPOSTE =========================
@@ -1333,6 +1436,47 @@ const TABELLA_ARMI = [
     { nome: 'Armi da fuoco', descrizione: 'Danno esplosivo, richiede rinculo e mira stabilizzata.', livelloBase: 1 },
     { nome: 'Rampini e fruste', descrizione: 'Controllo del campo e disarmo; utile sui bersagli mobili.', livelloBase: 1 }
 ];
+
+function renderProposte() {
+    const user = typeof getCurrentUser === 'function' ? getCurrentUser() : null;
+    if (!user) return;
+    const masterModal = document.getElementById('modal-master-panel');
+    if (masterModal && masterModal.style.display !== 'none' && masterModal.style.display !== '') {
+        return;
+    }
+    const containers = [
+        document.getElementById('proposte-list'),
+        document.getElementById('proposte-panel')
+    ].filter(Boolean);
+    if (!containers.length) return;
+
+    const proposte = (window._proposte || []).filter(prop => {
+        if (user.role === 'master') return prop.stato === 'in_attesa' || prop.stato === 'accettata';
+        return Number(prop.mittenteId) === Number(user.id) || Number(prop.destinatarioId) === Number(user.id);
+    });
+
+    const html = proposte.length
+        ? proposte.map(prop => {
+            const mitt = party.find(p => p.id === prop.mittenteId);
+            const dest = party.find(p => p.id === prop.destinatarioId);
+            const testo = prop.tipo.replace(/-/g, ' ');
+            return `
+                <div style="border:1px solid #444; background:#171717; padding:8px; margin-bottom:8px; border-radius:6px;">
+                    <strong>${mitt?.nome || '?'} → ${dest?.nome || '?'}</strong><br>
+                    <small>${testo}</small><br>
+                    <small style="color:#aaa;">Stato: ${prop.stato}</small>
+                    ${user.role !== 'master' ? '' : `<div style="margin-top:6px; display:flex; gap:6px;">
+                        <button onclick="accettaProposta('${prop.id}')">Accetta</button>
+                        <button onclick="rifiutaProposta('${prop.id}')">Rifiuta</button>
+                    </div>`}
+                </div>`;
+        }).join('')
+        : '<div style="color:#aaa; padding:8px;">Nessuna proposta in sospeso.</div>';
+
+    containers.forEach(el => {
+        el.innerHTML = html;
+    });
+}
 
 window._proposteInSospeso = new Map(); // key: idProposta, value: {mittente, destinatario, tipo, dati, scadenza}
 
@@ -1688,6 +1832,7 @@ export function aggiornaInterfaccia() {
                             <button class="btn-big" style="flex:1; background:#2980b9;" onclick="apriStatiPersonaggio(${idx})">✨ Stati</button>
                             <button class="btn-big guest-allow" style="flex:1; background:#16a085;" onclick="apriInventario(${idx})">🎒 Inventario</button>
                             ${isMaster ? `<button class="btn-big" style="flex:1; background:#d35400;" onclick="masterCambiaCampoPersonaggio(${idx})">🔀 Campo</button>` : ''}
+                            ${isMaster ? `<button class="btn-big" style="flex:1; background:#7d3c98;" onclick="apriDaiDocumentoModal(${p.id}, '${String(p.nome).replace(/'/g, "\\'")}')">📄 Dai documento</button>` : ''}
                         </div>
                         <button onclick="apriScheda(${idx})" style="width:100%; margin-bottom:10px;">Visualizza Scheda</button>
                         <div class="action-dropdowns" style="margin-top: 12px; display:grid; gap:6px;">
@@ -2040,7 +2185,7 @@ function assorbiMagia(idx) {
 
 window.mostraInvitoEsplorazione = function(invito, personaggio) {
     const secondi = Math.max(0, Math.round((new Date(invito.scade_il).getTime() - Date.now()) / 1000));
-    const accetta = confirm(`📨 Sei stato invitato a esplorare insieme (con ${personaggio.nome})!\nHai circa ${secondi} secondi per rispondere.\n\nAccetti? (OK = Sì, Annulla = No)`);
+    const accetta = confirm(`${personaggio.nome} vuole esplorare con te, accetti?\nHai circa ${secondi} secondi per rispondere.`);
     fetch(apiUrl(`/api/inviti/${invito.id}/rispondi`), {
         method: 'POST',
         headers: buildAuthHeaders({ 'Content-Type': 'application/json' }),
@@ -2178,6 +2323,21 @@ window.usaRecuperoAsmaticoPersonaggio = function(idx) {
     const p = party[idx];
     if (!p) return;
     p.usaRecuperoAsmatico();
+};
+
+window.riprendiArmaCaduta = function(idx) {
+    const p = party[idx];
+    if (!p) return;
+    if (!p.armaCaduta) {
+        alert(`${p.nome} non ha un'arma caduta a terra.`);
+        return;
+    }
+    if (!p.riprendiArmaCaduta()) {
+        alert(`${p.nome} non riesce a riprendere l'arma caduta.`);
+        return;
+    }
+    mostraNotificaInAlto(`${p.nome} riprende "${p.armaEquipaggiata}".`, 'successo');
+    if (typeof aggiornaInterfaccia === 'function') aggiornaInterfaccia();
 };
 
 function scheduleAllenamento(idx, categoria) {
@@ -2641,6 +2801,12 @@ window.apriAumentaFollia = function(idx) {
             <button class="btn-big" style="width:100%; background:#8e44ad;" onclick="applicaFolliaCustom(${idx})">Inserisci un numero a scelta</button>
         </div>
 
+        <div style="margin-top:12px; border-top:1px solid #333; padding-top:10px; display:grid; gap:8px;">
+            <label style="font-size:0.85em; color:#aaa;">Riduci follia:</label>
+            <input type="number" id="riduci-follia-custom-${idx}" min="1" value="1" style="width:100%; background:#222; color:white; border:1px solid #444; padding:6px;">
+            <button class="btn-big" style="width:100%; background:#27ae60;" onclick="window.riduciFolliaDiretta(${idx}, document.getElementById('riduci-follia-custom-${idx}').value)">Riduci follia</button>
+        </div>
+
         <div style="margin-top:16px; font-size:0.8em; color:#888;">
             <p><i>Nota: questa Follia è inflitta direttamente, senza alcuna riduzione da Carisma o altri modificatori.</i></p>
         </div>
@@ -2675,6 +2841,42 @@ window.applicaFolliaCustom = function(idx) {
     document.getElementById('modal-follia').style.display = 'none';
     salvaPersonaggioCloud(p);
     aggiornaInterfaccia();
+};
+
+window.riduciFolliaDiretta = function(idx, quantitaManuale = null) {
+    const p = party[idx];
+    if (!p) return;
+    const input = quantitaManuale !== null ? quantitaManuale : prompt(`Di quanti punti vuoi ridurre la Follia di ${p.nome}?`, '1');
+    const quantita = parseInt(input);
+    if (isNaN(quantita) || quantita <= 0) return;
+    const ridotta = typeof p.riduciFollia === 'function' ? p.riduciFollia(quantita, 'master') : Math.max(0, (p.follia || 0) - quantita);
+    if (typeof p.aggiornaSintomiFollia === 'function') p.aggiornaSintomiFollia();
+    mostraNotificaInAlto(`🧠 ${p.nome}: Follia -${ridotta}. Totale: ${p.follia}.`, 'successo');
+    if (document.getElementById('modal-follia')) document.getElementById('modal-follia').style.display = 'none';
+    salvaPersonaggioCloud(p);
+    aggiornaInterfaccia();
+};
+
+window.masterRiduciFollia = function() {
+    const targetSelect = document.getElementById('master-follia-target');
+    const quantitaInput = document.getElementById('master-follia-quantita');
+    if (!targetSelect || !quantitaInput) return;
+    const targetId = Number(targetSelect.value);
+    if (!targetId) {
+        alert('Seleziona un personaggio da cui ridurre la follia.');
+        return;
+    }
+    const quantita = parseInt(quantitaInput.value, 10);
+    if (isNaN(quantita) || quantita <= 0) {
+        alert('Inserisci un numero valido di punti da ridurre.');
+        return;
+    }
+    const p = party.find(personaggio => Number(personaggio.id) === targetId);
+    if (!p) {
+        alert('Personaggio non trovato.');
+        return;
+    }
+    window.riduciFolliaDiretta(party.indexOf(p), quantita);
 };
 
 function rollDice(count, faces) {
@@ -2739,8 +2941,10 @@ window.chiudiScheda = chiudiScheda;
 
 function findPerkData(nomePerk) {
     const targetName = getPerkBaseName(nomePerk);
-    for (let cat in DATABASE_PERK) {
-        const found = DATABASE_PERK[cat].find(p => getPerkBaseName(p.nome) === targetName);
+    const perkDb = window.DATABASE_PERK || globalThis.DATABASE_PERK || {};
+    for (let cat in perkDb) {
+        const lista = Array.isArray(perkDb[cat]) ? perkDb[cat] : [];
+        const found = lista.find(p => perkNamesMatch(getPerkBaseName(p.nome), targetName));
         if (found) return found;
     }
     return null;
@@ -2874,6 +3078,79 @@ window.apriLogMagazzino = async function() {
     document.getElementById('modal-risorse').style.display = 'block';
 };
 
+function getStatBonusFromPerk(perk) {
+    const nome = getPerkBaseName(perkObjectName(perk));
+    const bonus = {};
+    const addBonus = (stat, valore) => {
+        if (!stat || !Number.isFinite(valore) || valore === 0) return;
+        bonus[stat] = (bonus[stat] || 0) + valore;
+    };
+
+    switch (nome) {
+        case 'Palestrato':
+            addBonus('Forza', 1);
+            addBonus('Costituzione', 1);
+            break;
+        case 'Grande taglia':
+            addBonus('Forza', 2);
+            addBonus('Costituzione', 1);
+            break;
+        case 'Piccola taglia':
+            addBonus('Destrezza', 2);
+            addBonus('Forza', -1);
+            break;
+        case 'Bel viso':
+            addBonus('Carisma', 1);
+            break;
+        case 'Genitore modello':
+            addBonus('Carisma', 1);
+            break;
+        case 'Anziana_Bilanciata':
+            addBonus('Saggezza', 1);
+            addBonus('Carisma', 1);
+            break;
+        case 'Anziana_Carisma':
+            addBonus('Carisma', 2);
+            break;
+        case 'Anziana_Saggezza':
+            addBonus('Saggezza', 2);
+            break;
+        case 'Scienziato Pazzo':
+            addBonus('Intelligenza', 2);
+            break;
+        default:
+            break;
+    }
+
+    return bonus;
+}
+
+function calcolaRimborsoPerkStat(p, perk) {
+    if (!p || !perk) return 0;
+    const bonus = getStatBonusFromPerk(perk);
+    let rimborso = 0;
+    Object.entries(bonus).forEach(([stat, delta]) => {
+        if (delta <= 0) return;
+        const statKey = stat.toLowerCase();
+        const valoreAttuale = Number(p[statKey]);
+        if (Number.isFinite(valoreAttuale) && valoreAttuale > 12) {
+            rimborso += delta;
+        }
+    });
+    return rimborso;
+}
+
+function calcolaCostoNettoPerk(p, perk, { rimozione = false } = {}) {
+    if (!p || !perk) return 0;
+    const costoBase = Number(perk.costo || 0);
+    const refund = calcolaRimborsoPerkStat(p, perk);
+    const eff = costoBase < 0
+        ? Math.max(0, Math.abs(costoBase) - refund)
+        : Math.max(0, costoBase - refund);
+    const delta = costoBase < 0 ? eff : -eff;
+    return rimozione ? -delta : delta;
+}
+
 function togglePerk(nomePerk, forceRemove = false) {
     const p = window.tempP;
     if (!p) return;
@@ -2882,42 +3159,34 @@ function togglePerk(nomePerk, forceRemove = false) {
 
     const selectedCount = getPerkCount(p, perkDati.nome);
     const isSelected = selectedCount > 0;
-    const canAfford = perkDati.costo <= 0 || p.puntiCreazione >= perkDati.costo;
+    const statRefund = calcolaRimborsoPerkStat(p, perkDati);
+    const effectiveCost = Math.max(0, Number(perkDati.costo || 0) - statRefund);
+    const canAfford = perkDati.costo <= 0 || p.puntiCreazione >= effectiveCost;
     const isRepeatable = Boolean(perkDati.repeats);
+    const maxRepeats = Number(perkDati.maxRepeats || 0);
+    const isAtMaxRepeats = isRepeatable && maxRepeats > 0 && selectedCount >= maxRepeats && !forceRemove;
     const shouldRemove = forceRemove || (!isRepeatable && isSelected);
+    let perkRimosso = null;
+
+    if (isAtMaxRepeats) {
+        alert(`Hai già raggiunto il massimo di ${maxRepeats} volte per ${perkDati.nome}.`);
+        return;
+    }
 
     // ==========================================
     // 1. GESTIONE RIMOZIONE PERK
     // ==========================================
     if (shouldRemove && isSelected) {
-        const index = p.perks.findIndex(pp => getPerkBaseName(perkObjectName(pp)) === getPerkBaseName(perkDati.nome));
-        p.perks.splice(index, 1);
-        
-        const baseName = getPerkBaseName(perkDati.nome);
-        if (baseName === 'Obeso' || baseName === 'Sovrappeso') {
-            p.pesoCorporeo = p.pesoCorporeo || {};
-            p.pesoCorporeo.usiCuscinetto = null;
+        const index = p.perks.findIndex(pp => perkNamesMatch(getPerkBaseName(perkObjectName(pp)), getPerkBaseName(perkDati.nome)));
+        if (index >= 0) {
+            perkRimosso = p.perks[index];
+            rimuoviEffettiCollateraliPerk(p, perkRimosso);
+            p.perks.splice(index, 1);
         }
-        if (baseName === 'Alchemico') {
-            p.masteries = p.masteries.filter(m => m.toLowerCase() !== 'natura');
-        }
-        if (baseName === 'Bimbi') {
-            p.masteries = p.masteries.filter(m => m.toLowerCase() !== 'cucina');
-        }
-        if (baseName === 'Soldato' && p.soldatoArmiScelte) {
-            p.soldatoArmiScelte.forEach(cat => {
-                if (p.armiLivello && p.armiLivello[cat] > 0) {
-                    p.armiLivello[cat] = Math.max(0, p.armiLivello[cat] - 1);
-                }
-            });
-            p.soldatoArmiScelte = null;
-        }
-        if (baseName === 'Autoctono') {
-            p.lingue = (p.lingue || []).filter(l => l !== 'Eklesti');
-        }
-        
-        // Rimborso Punti
-        p.puntiCreazione += perkDati.costo;
+
+        // Rimborso Punti: preserva il netto effettivamente pagato in creazione
+        const costoNettoRimozione = calcolaCostoNettoPerk(p, perkRimosso, { rimozione: true });
+        p.puntiCreazione += costoNettoRimozione;
 
         // Rimozione a cascata dei perk dipendenti
         let cambiatoQualcosa = true;
@@ -2927,7 +3196,7 @@ function togglePerk(nomePerk, forceRemove = false) {
             const nomiAttuali = p.perks.map(pp => getPerkBaseName(perkObjectName(pp)));
             p.perks = p.perks.filter(pp => {
                 const nomePulito = getPerkBaseName(perkObjectName(pp));
-                if (pp.requires && !nomiAttuali.includes(getPerkBaseName(pp.requires))) {
+                if (pp.requires && !nomiAttuali.some(nome => perkNamesMatch(nome, getPerkBaseName(pp.requires)))) {
                     p.puntiCreazione += (pp.costo || 0);
                     cambiatoQualcosa = true;
                     rimossiAggiuntivi = true;
@@ -3105,9 +3374,11 @@ function togglePerk(nomePerk, forceRemove = false) {
     }
 
     // Viene eseguito SOLO in caso di aggiunta Perk avvenuta con successo
-    p.puntiCreazione -= perkDati.costo;
+    const costoNettoAggiunta = calcolaCostoNettoPerk(p, perkDati);
+    p.puntiCreazione += costoNettoAggiunta;
     window.sincronizzaLivelliDaPerk(p);
     renderSetupStats();
+    renderSetupPerks();
 }
 
 function renderInventarioHtml(p) {

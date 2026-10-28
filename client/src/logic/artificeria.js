@@ -444,11 +444,15 @@ function calcolaCrafting(leader, collaboratori, ricetta, isSmontaggio = false) {
     if (leader._ripareBonusCrea && !isSmontaggio) {
         cdFinale -= 1;
     }
+    const leaderScienziatoPazzo = leader.hasPerk && leader.hasPerk('Scienziato Pazzo');
     collaboratori.forEach(collab => {
         if (leader.rancoreTargetId === collab.id || collab.rancoreTargetId === leader.id) {
             cdFinale += 4;
         }
     });
+    if (leaderScienziatoPazzo && collaboratori.length > 0) {
+        cdFinale -= 1;
+    }
 
     // 2. CALCOLO DEL TEMPO
     // Estrapoliamo le ore base dalla ricetta (assumiamo 1 ora se non specificato chiaramente, dovrai mappare bene l'oggetto time)
@@ -1340,7 +1344,8 @@ function renderSetupArtificeria() {
 }
 function eseguiPotenziaRobot(target, extraAddMult = 1, extraRemoveMult = 1) {
     const azione = prompt('Scrivi "aggiungi" o "rimuovi"', 'aggiungi');
-    const perkRobotici = (window.DATABASE_PERK.robotici || []);
+    const perkDb = window.DATABASE_PERK || globalThis.DATABASE_PERK || {};
+    const perkRobotici = (perkDb.robotici || []);
 
     if (azione === 'aggiungi') {
         const nomi = perkRobotici.filter(p => !target.perks.some(tp => (tp.nome||tp) === p.nome)).map(p => p.nome);

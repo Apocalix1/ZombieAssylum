@@ -119,7 +119,7 @@ function lootIngranaggi(tiro) {
     if (tiro <= 13) return rollDice(1, 6) + 2;
     if (tiro <= 17) return rollDice(2, 6) + 4;
     if (tiro <= 19) return rollDice(2, 8) + 8;
-    return rollDice(2, 12) + 16;
+    return rollDice(2, 10) + 16;
 }
 window.lootIngranaggi = lootIngranaggi;
 
@@ -193,27 +193,92 @@ function estraiPergameneDaLootMagico(oggMagiciTrovati) {
 }
 window.estraiPergameneDaLootMagico = estraiPergameneDaLootMagico;
 
+function getExplorationDangerLevels() {
+    return [
+        {
+            nome: 'Sicura',
+            oreBase: 3,
+            bonus: 0,
+            mult: 1,
+            time: [{ chance: 5, aumento: 50 }, { chance: 10, aumento: 30 }, { chance: 20, aumento: 10 }],
+            lootLost: [{ chance: 10, perdita: 10 }, { chance: 0, perdita: 15 }, { chance: 0, perdita: 20 }],
+            ferite: 0,
+            fatica: 0
+        },
+        {
+            nome: 'Impegnativa',
+            oreBase: 5,
+            bonus: 1,
+            mult: 2,
+            time: [{ chance: 10, aumento: 70 }, { chance: 15, aumento: 50 }, { chance: 25, aumento: 30 }],
+            lootLost: [{ chance: 16, perdita: 15 }, { chance: 6, perdita: 20 }, { chance: 0, perdita: 30 }],
+            ferite: 3,
+            fatica: 8
+        },
+        {
+            nome: 'Pericolosa',
+            oreBase: 7,
+            bonus: 2,
+            mult: 3,
+            time: [{ chance: 15, aumento: 90 }, { chance: 20, aumento: 70 }, { chance: 30, aumento: 50 }],
+            lootLost: [{ chance: 22, perdita: 20 }, { chance: 12, perdita: 25 }, { chance: 3, perdita: 40 }],
+            ferite: 8,
+            fatica: 16
+        },
+        {
+            nome: 'Estremamente Rischiosa',
+            oreBase: 9,
+            bonus: 3,
+            mult: 4,
+            time: [{ chance: 20, aumento: 110 }, { chance: 25, aumento: 90 }, { chance: 35, aumento: 70 }],
+            lootLost: [{ chance: 44, perdita: 25 }, { chance: 18, perdita: 30 }, { chance: 12, perdita: 50 }],
+            ferite: 8,
+            fatica: 16
+        }
+    ];
+}
+
+function getExplorationGroupBonus(gruppo, pericoloBonus = 0) {
+    const membri = Array.isArray(gruppo) ? gruppo.filter(Boolean) : [];
+    if (!membri.length) return pericoloBonus;
+    const mediaSurv = membri.reduce((somma, p) => {
+        const skill = p && p.getSkillModifierForCheck ? p.getSkillModifierForCheck('Sopravvivenza') : null;
+        return somma + (skill && typeof skill.modifier === 'number' ? skill.modifier : 0);
+    }, 0) / membri.length;
+    return pericoloBonus + mediaSurv;
+}
+
 function rollArmiTrovate(diffLevel = 0) {
     const armi = [];
-    const bonus = diffLevel * 5; // Bonus lineare alle probabilità base
-
-    const check = (baseProb) => (Math.floor(Math.random() * 100) + 1) <= (baseProb + bonus);
+    const bonus = Math.max(-10, Math.min(20, diffLevel * 5));
+    const check = (baseProb) => (Math.floor(Math.random() * 100) + 1) <= Math.max(0, baseProb + bonus);
     const d4 = () => Math.floor(Math.random() * 4) + 1;
 
-    if (check(1))  armi.push({ nome: 'Pistola', qta: 1, tipo: 'arma' });
-    if (check(4))  armi.push({ nome: 'Proiettili', qta: d4(), tipo: 'munizioni' });
-    if (check(10)) armi.push({ nome: 'Arma con Asta', qta: 1, tipo: 'arma' });
-    if (check(8))  armi.push({ nome: 'Lama leggera', qta: 1, tipo: 'arma' });
-    if (check(6))  armi.push({ nome: 'Balestra', qta: 1, tipo: 'arma' });
-    if (check(9))  armi.push({ nome: 'Quadrelli', qta: d4(), tipo: 'munizioni' });
-    if (check(6))  armi.push({ nome: 'Arco', qta: 1, tipo: 'arma' });
-    if (check(10)) armi.push({ nome: 'Frecce', qta: d4(), tipo: 'munizioni' });
-    if (check(10)) armi.push({ nome: 'Mazza', qta: 1, tipo: 'arma' });
+    if (check(5))  armi.push({ nome: 'Arma da fuoco', qta: 1, tipo: 'arma' });
+    if (check(30)) armi.push({ nome: 'Mazze e armi contundenti', qta: 1, tipo: 'arma' });
+    if (check(25)) armi.push({ nome: 'Arma con l\'asta', qta: 1, tipo: 'arma' });
+    if (check(15)) armi.push({ nome: 'Arco', qta: 1, tipo: 'arma' });
+    if (check(20)) armi.push({ nome: 'Lama leggera', qta: 1, tipo: 'arma' });
+    if (check(8))  armi.push({ nome: 'Rampino', qta: 1, tipo: 'arma' });
+    if (check(10)) armi.push({ nome: 'Balestra', qta: 1, tipo: 'arma' });
+    if (check(40)) armi.push({ nome: 'Frecce', qta: d4() * 2 + 2, tipo: 'munizioni' });
+    if (check(35)) armi.push({ nome: 'Quadrelli da balestra', qta: d4() + 2, tipo: 'munizioni' });
+    if (check(15)) armi.push({ nome: 'Munizioni da arma da fuoco', qta: d4(), tipo: 'munizioni' });
 
     return armi;
 }
 
+function rollMunizioniTrovate(diffLevel = 0) {
+    const bonus = Math.max(-10, Math.min(20, diffLevel * 5));
+    const roll = Math.random() * 100;
+    const chance = Math.max(0, 25 + bonus);
+    if (roll > chance) return [];
 
+    const tipo = Math.random() * 100;
+    if (tipo <= 40) return [{ nome: 'Frecce', qta: rollDice(1, 8), tipo: 'munizioni' }];
+    if (tipo <= 75) return [{ nome: 'Quadrelli da balestra', qta: rollDice(1, 6), tipo: 'munizioni' }];
+    return [{ nome: 'Munizioni da arma da fuoco', qta: rollDice(1, 4), tipo: 'munizioni' }];
+}
 
 function rollZainoTrovato(diffLevel = 0) {
     const baseChance = 15;
@@ -233,21 +298,16 @@ function rollZainoTrovato(diffLevel = 0) {
 function lootOggettiMagici(diffLevel = 0) {
     const trovati = { comuni: 0, nonComuni: 0, rari: 0, superRari: 0 };
     const roll = () => Math.random() * 100;
-
-    // Il livello di difficoltà fornisce un bonus base del 5% per livello.
-    // Il bonus viene scalato per non rendere troppo facili i drop Super Rari.
     const bonusBase = diffLevel * 5;
+    const chanceBase = 35 + bonusBase;
 
-    // Esempio a Difficoltà 3 (BonusBase = 15):
-    // Comuni: 32 + 15 = 47%
-    // Non Comuni: 16 + 7.5 = 23.5%
-    // Rari: 8 + 3.75 = 11.75%
-    // Super Rari: 2.5 + 1.5 = 4.0%
+    if (roll() > chanceBase) return trovati;
 
-    if (roll() <= (32 + bonusBase))               trovati.comuni = 1;
-    if (roll() <= (16 + (bonusBase * 0.5)))       trovati.nonComuni = 1;
-    if (roll() <= (8  + (bonusBase * 0.25)))      trovati.rari = 1;
-    if (roll() <= (1.25 + (bonusBase * 0.05)))    trovati.superRari = 1;
+    const raritaRoll = roll();
+    if (raritaRoll <= 50) trovati.comuni = 1;
+    else if (raritaRoll <= 80) trovati.nonComuni = 1;
+    else if (raritaRoll <= 89) trovati.rari = 1;
+    else if (raritaRoll <= 90) trovati.superRari = 1;
 
     return trovati;
 }
@@ -439,6 +499,7 @@ function avviaEsplorazioneGruppo(leader, compagni, pericolo, pericoloIdx) {
 
     const mediaAumentoTempo = totaleAumentoTempo / gruppoSpedizione.length;
     let oreSpedizione = Math.round(pericolo.oreBase * (1 + (mediaAumentoTempo / 100)));
+    const bonusSpedizione = getExplorationGroupBonus(gruppoSpedizione, pericolo.bonus);
 
 // PERK: Abbandono — rifiuta l'esplorazione in solitaria se dura più di 3 ore
     if (numCompagni === 0 && leader.hasPerk && leader.hasPerk('Abbandono') && oreSpedizione > 3) {
@@ -455,6 +516,7 @@ function avviaEsplorazioneGruppo(leader, compagni, pericolo, pericoloIdx) {
             idSpedizione: idSpedizioneGlobale,
             pericoloMultiplo: pericolo.mult,
             pericoloBonus: pericolo.bonus,
+            bonusSpedizione,
             livelloPericolo: pericoloIdx,
             numCompagni,
             oreTotali: oreSpedizione,
@@ -469,51 +531,48 @@ function avviaEsplorazioneGruppo(leader, compagni, pericolo, pericoloIdx) {
 }
 
 function calcolaEventiPericolo(p, mult, numCompagni) {
-    // Riduzione base: 25% per ogni compagno
-    let modRiduzione = numCompagni * 0.25;
-    if (modRiduzione > 0.50) modRiduzione = 0.50; // Max 50%
-
-    // Riduzione Buff (Fame, Sete, Sonno)
-    let buffRed = 0;
-    if (p.timers) {
-        if (p.timers.buffFame > 0) buffRed += 0.02;
-        if (p.timers.buffSete > 0) buffRed += 0.02;
-        if (p.timers.buffSonno > 0) buffRed += 0.02;
-    }
-
-    // --- PERK: Solitario ---
-    if (numCompagni === 0 && p.hasPerk && p.hasPerk('Solitario')) {
-        buffRed += 0.10;
-    }
-
-    // Aumenti Malus
-    let faticaMalus = (p.faticaTotale || 0) * 15;
-    let hpMalus = (p.puntiFeritaReali < 4) ? 10 : 0;
-
+    const livello = getExplorationDangerLevels()[Math.max(0, Math.min(3, mult - 1))] || getExplorationDangerLevels()[0];
+    const reductionFactor = Math.min(0.75, numCompagni * 0.25);
+    const bonusReduction = (p.timers && ((p.timers.buffFame > 0 ? 2 : 0) + (p.timers.buffSete > 0 ? 2 : 0) + (p.timers.buffSonno > 0 ? 2 : 0))) || 0;
+    const fatigueMalus = (p.faticaTotale || 0) * 15;
+    const hpMalus = (p.puntiFeritaReali < 4) ? 10 : 0;
+    const solitarioBonus = (numCompagni === 0 && p.hasPerk && p.hasPerk('Solitario')) ? 25 : 0;
     const calcProb = (baseProb) => {
-        let prob = baseProb * mult;
-        prob = prob * (1 - modRiduzione);
-        prob -= (buffRed * 100);
-        prob += faticaMalus + hpMalus;
+        let prob = baseProb * (1 - reductionFactor);
+        if (solitarioBonus) prob *= 0.75;
+        prob -= bonusReduction;
+        prob += fatigueMalus + hpMalus;
         return Math.max(0, prob);
     };
 
     const d100 = () => Math.floor(Math.random() * 100) + 1;
-
     let risultati = { timePenalty: 0, lootLost: 0, hpDamage: 0, fatigueStagies: 0 };
 
-    if (d100() <= calcProb(10)) risultati.timePenalty = 90;
-    else if (d100() <= calcProb(15)) risultati.timePenalty = 60;
-    else if (d100() <= calcProb(20)) risultati.timePenalty = 30;
+    const timeChances = [...(livello.time || [])].sort((a, b) => b.chance - a.chance);
+    for (const tc of timeChances) {
+        if (d100() <= calcProb(tc.chance)) {
+            risultati.timePenalty = Math.max(risultati.timePenalty, tc.aumento || 0);
+            break;
+        }
+    }
 
-    if (d100() <= calcProb(8)) risultati.lootLost = 60;
-    else if (d100() <= calcProb(13)) risultati.lootLost = 40;
-    else if (d100() <= calcProb(18)) risultati.lootLost = 20;
+    const lootChances = [...(livello.lootLost || [])].sort((a, b) => (b.chance || 0) - (a.chance || 0));
+    for (const lc of lootChances) {
+        if (d100() <= calcProb(lc.chance || 0)) {
+            risultati.lootLost = Math.max(risultati.lootLost, lc.perdita || 0);
+            break;
+        }
+    }
 
-    if (d100() <= calcProb(5)) risultati.hpDamage = 2;
-    else if (d100() <= calcProb(10)) risultati.hpDamage = 1;
+    const hpChance = calcProb(livello.ferite || 0);
+    if (hpChance > 0 && d100() <= hpChance) {
+        risultati.hpDamage = 1;
+    }
 
-    if (d100() <= calcProb(15)) risultati.fatigueStagies = 1;
+    const fatigueChance = calcProb(livello.fatica || 0);
+    if (fatigueChance > 0 && d100() <= fatigueChance) {
+        risultati.fatigueStagies = 1;
+    }
 
     return risultati;
 }
@@ -521,11 +580,11 @@ function calcolaEventiPericolo(p, mult, numCompagni) {
 function lootCiboAcqua(tiro) {
     if (tiro <= 2) return rollDice(1, 4) / 2;
     if (tiro <= 4) return rollDice(1, 4);
-    if (tiro <= 9) return rollDice(1, 6) + 1;
-    if (tiro <= 13) return rollDice(1, 8) + 2;
-    if (tiro <= 17) return rollDice(1, 12) + 4;
-    if (tiro <= 19) return rollDice(2, 10) + 6;
-    return rollDice(3, 12) + 10;
+    if (tiro <= 9) return rollDice(1, 6);
+    if (tiro <= 13) return rollDice(1, 6) + 2;
+    if (tiro <= 17) return rollDice(1, 8) + 4;
+    if (tiro <= 19) return rollDice(1, 8) + 6;
+    return rollDice(1, 10) + 8;
 }
 
 function lootPiattiDeliziosi(tiro) {
@@ -540,7 +599,8 @@ function terminaEsplorazione(p) {
     if (!p) return;
        try {
         const act = p.azioneCorrente || {};
-        let bonus = act.pericoloBonus !== undefined ? act.pericoloBonus : getExplorationBonus(p);
+        const baseBonus = act.bonusSpedizione !== undefined ? act.bonusSpedizione : (act.pericoloBonus !== undefined ? act.pericoloBonus : getExplorationBonus(p));
+        let bonus = baseBonus;
         const mult = act.pericoloMultiplo || 1;
         const diffLevel = act.livelloPericolo || 0;
         const numCompagni = act.numCompagni || 0;
@@ -574,14 +634,15 @@ function terminaEsplorazione(p) {
         let booksFound = lootBooks(booksTiro);
 
         // Generazione oggetti speciali
-        let oggMagiciTrovati = (typeof lootOggettiMagici === 'function') ? lootOggettiMagici(diffLevel) : {
+        const bonusTrovate = Math.round(bonus);
+        let oggMagiciTrovati = (typeof lootOggettiMagici === 'function') ? lootOggettiMagici(bonusTrovate) : {
             comuni: 0,
             nonComuni: 0,
             rari: 0,
             superRari: 0
         };
         const pergameneTrovate = estraiPergameneDaLootMagico(oggMagiciTrovati);
-        let armiTrovate = rollArmiTrovate(diffLevel);
+        let armiTrovate = [...rollArmiTrovate(bonusTrovate), ...rollMunizioniTrovate(bonusTrovate)];
 
         // --- APPLICAZIONE MALUS LOOT PERSO ---
         if (pericoli.lootLost > 0) {
@@ -607,7 +668,13 @@ function terminaEsplorazione(p) {
         }
 
         // --- APPLICAZIONE DANNI FISICI ---
-        if (pericoli.hpDamage > 0) p.puntiFeritaReali -= pericoli.hpDamage;
+        if (pericoli.hpDamage > 0) {
+            if (typeof p.subisciDanno === 'function') {
+                p.subisciDanno(pericoli.hpDamage);
+            } else {
+                p.puntiFeritaReali = Math.max(0, p.puntiFeritaReali - pericoli.hpDamage);
+            }
+        }
         if (pericoli.fatigueStagies > 0 && typeof p.faticaBase !== 'undefined') p.faticaBase += pericoli.fatigueStagies;
 
         // --- ASSEGNAZIONE MAGAZZINO ---

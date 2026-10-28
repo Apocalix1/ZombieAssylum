@@ -3,20 +3,10 @@ import { getCurrentUser } from '../ui/auth-ui.js';
 import {aggiornaInterfaccia, party} from '../ui/ui.js';
 
 export async function masterInviaDocumento(titolo, lingua, testoOriginale, personaggioIdDestinatario) {
-	const caratteriCriptati = ["⌧", "⌊", "⊗", "∇", "▮", "⌕", "⌰", "⌫", "⍑", "⍃", "⍓"];
-	const testoCriptato = testoOriginale.split(' ').map(parola =>
-		parola.split('').map(() => caratteriCriptati[Math.floor(Math.random() * caratteriCriptati.length)]).join('')
-	).join(' ');
-
-	const contenuto = JSON.stringify({
-		lingua_richiesta: lingua,
-		testo_originale: testoOriginale,
-		testo_criptato: testoCriptato
-	});
-
 	const payload = {
 		titolo,
-		contenuto,
+		lingua,
+		testo: testoOriginale,
 		personaggio_id: personaggioIdDestinatario || 0
 	};
 

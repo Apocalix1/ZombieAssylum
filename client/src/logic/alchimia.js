@@ -415,9 +415,9 @@ function lootAlchemici(tiro) {
     if (tiro <= 8) return rollDice(1, 4);
     if (tiro <= 11) return rollDice(2, 4);
     if (tiro <= 14) return rollDice(3, 4);
-    if (tiro <= 17) return rollDice(3, 6);
+    if (tiro <= 17) return rollDice(4, 6);
     if (tiro <= 19) return rollDice(5, 6);
-    return rollDice(8, 6);
+    return rollDice(6, 6);
 }
 
 /**

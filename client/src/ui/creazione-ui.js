@@ -16,7 +16,7 @@ function toggleFiltroIncantesimo(gruppo, valore) {
 window.toggleFiltroIncantesimo = toggleFiltroIncantesimo;
 
 function getPerkDatabase() {
-    return window.DATABASE_PERK || (typeof DATABASE_PERK !== 'undefined' ? DATABASE_PERK : {});
+    return window.DATABASE_PERK || globalThis.DATABASE_PERK || {};
 }
 
 function getGlobalPerkData(nome) {
@@ -953,11 +953,13 @@ export function renderSetupPerks() {
     const selectedCount = getGlobalPerkCount(window.tempP, perk.nome);
     const giaPreso = selectedCount > 0;
     const canAfford = perk.costo <= 0 || window.tempP.puntiCreazione >= perk.costo;
+    const maxRepeats = Number(perk.maxRepeats || 0);
     
     // --- NUOVA LOGICA: Blocco categoria Magici se Livello Magia è assente o < 1 ---
     const isMagicoLocked = cat === 'magici' && (!window.tempP.livelloMagia || window.tempP.livelloMagia < 1);
+    const isAtMaxRepeats = Boolean(perk.repeats) && maxRepeats > 0 && selectedCount >= maxRepeats;
     
-    const actionAddAllowed = canAfford && !isMagicoLocked;
+    const actionAddAllowed = canAfford && !isMagicoLocked && !isAtMaxRepeats;
     const actionRemoveAllowed = giaPreso && perk.repeats;
     const costoHtml = `<span style="font-size:0.8rem; color:#aaa;">(${perk.costo} PT)</span>`;
     const countBadge = perk.repeats && selectedCount > 0 ?
@@ -1256,6 +1258,8 @@ function gestisciDigitazionePerk(valore) {
         if (p.puntiCreazione >= costo && dettagliAttuali.valore < 20 && p[chiave] < 20) {
             p.puntiCreazione -= costo;
             p[chiave]++;
+            p.statBase = p.statBase || {};
+            p.statBase[chiave] = p[chiave];
         }
     } else {
         if (p[chiave] > 1) {
@@ -1266,6 +1270,8 @@ function gestisciDigitazionePerk(valore) {
                 const rimborso = (typeof p.calcolaCostoStat === 'function') ? p.calcolaCostoStat(p[chiave]) : 1;
                 p.puntiCreazione += rimborso;
             }
+            p.statBase = p.statBase || {};
+            p.statBase[chiave] = p[chiave];
         }
     }
     renderSetupStats();

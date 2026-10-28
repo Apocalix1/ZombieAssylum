@@ -58,12 +58,21 @@ export async function fetchCampiBase() {
     return Array.isArray(data.campi) ? data.campi : [];
 }
 
-export async function creaCampoBase(nome) {
+export async function creaCampoBase({ nome, pos_x, pos_y, raggio }) {
     const data = await richiedi('/api/campi', {
         method: 'POST',
         headers: buildAuthHeaders({ 'Content-Type': 'application/json' }),
-        body: JSON.stringify({ nome })
+        body: JSON.stringify({ nome, pos_x, pos_y, raggio })
     }, 'Errore creazione campo base');
+    return data.campo;
+}
+
+export async function impostaPosizioneCampoBase(id, { pos_x, pos_y, raggio }) {
+    const data = await richiedi(`/api/campi/${id}/posizione`, {
+        method: 'PUT',
+        headers: buildAuthHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ pos_x, pos_y, raggio })
+    }, 'Errore aggiornamento posizione campo base');
     return data.campo;
 }
 
@@ -164,6 +173,7 @@ window.getCampoBaseId = getCampoBaseId;
 window.setCampoBaseCorrente = setCampoBaseCorrente;
 window.fetchCampiBase = fetchCampiBase;
 window.creaCampoBase = creaCampoBase;
+window.impostaPosizioneCampoBase = impostaPosizioneCampoBase;
 window.initCampoBaseCorrente = initCampoBaseCorrente;
 window.registraEvento = registraEvento;
 window.registraEventoCampoCorrente = registraEventoCampoCorrente;
