@@ -21,6 +21,18 @@ const MAPPA_STATO = {
   searchResults: []
 };
 
+function getQuarterMaxX() {
+  const q = MAPPA_STATO.config?.QUARTIERE || 1000;
+  const w = MAPPA_STATO.config?.GRID_W || 1000;
+  return Math.max(0, Math.ceil(w / q) - 1);
+}
+
+function getQuarterMaxY() {
+  const q = MAPPA_STATO.config?.QUARTIERE || 1000;
+  const h = MAPPA_STATO.config?.GRID_H || 1000;
+  return Math.max(0, Math.ceil(h / q) - 1);
+}
+
 const TILE_CACHE_MAX = 64;
 const FETCH_DEBOUNCE_MS = 150;
 
@@ -83,7 +95,7 @@ function ensureRoot() {
           <span style="font-size:0.85rem; color:#999;">Zoom: <b id="mappa-zoom-value">16</b> px</span>
           <span style="margin-left:8px; font-size:0.85rem; color:#999;">Quartiere</span>
           <input id="mappa-qx" type="number" min="0" max="999" value="0" style="width:80px; background:#1f1f1f; color:#fff; border:1px solid #333; padding:4px;" />
-          <input id="mappa-qy" type="number" min="0" max="99" value="0" style="width:80px; background:#1f1f1f; color:#fff; border:1px solid #333; padding:4px;" />
+          <input id="mappa-qy" type="number" min="0" max="999" value="0" style="width:80px; background:#1f1f1f; color:#fff; border:1px solid #333; padding:4px;" />
           <button id="mappa-go-quarter" class="btn-hero">Vai</button>
           <button id="mappa-prev-quarter" class="btn-hero">◀</button>
           <button id="mappa-next-quarter" class="btn-hero">▶</button>
@@ -209,8 +221,8 @@ async function onCanvasClick(event) {
 function onGoQuarter() {
   const qxInput = rootEl.querySelector('#mappa-qx');
   const qyInput = rootEl.querySelector('#mappa-qy');
-  const qx = clamp(Number.parseInt(qxInput.value, 10) || 0, 0, 999);
-  const qy = clamp(Number.parseInt(qyInput.value, 10) || 0, 0, 99);
+  const qx = clamp(Number.parseInt(qxInput.value, 10) || 0, 0, getQuarterMaxX());
+  const qy = clamp(Number.parseInt(qyInput.value, 10) || 0, 0, getQuarterMaxY());
   MAPPA_STATO.quarterX = qx;
   MAPPA_STATO.quarterY = qy;
   const q = MAPPA_STATO.config.QUARTIERE;
@@ -225,9 +237,9 @@ function onGoQuarter() {
 
 function shiftQuarter(axis, delta) {
   if (axis === 'x') {
-    MAPPA_STATO.quarterX = clamp(MAPPA_STATO.quarterX + delta, 0, 999);
+    MAPPA_STATO.quarterX = clamp(MAPPA_STATO.quarterX + delta, 0, getQuarterMaxX());
   } else {
-    MAPPA_STATO.quarterY = clamp(MAPPA_STATO.quarterY + delta, 0, 99);
+    MAPPA_STATO.quarterY = clamp(MAPPA_STATO.quarterY + delta, 0, getQuarterMaxY());
   }
   rootEl.querySelector('#mappa-qx').value = String(MAPPA_STATO.quarterX);
   rootEl.querySelector('#mappa-qy').value = String(MAPPA_STATO.quarterY);
@@ -818,8 +830,8 @@ async function onSearch() {
 
 function centerTo(x, y) {
   const q = MAPPA_STATO.config.QUARTIERE;
-  MAPPA_STATO.quarterX = clamp(Math.floor(x / q), 0, 999);
-  MAPPA_STATO.quarterY = clamp(Math.floor(y / q), 0, 99);
+  MAPPA_STATO.quarterX = clamp(Math.floor(x / q), 0, getQuarterMaxX());
+  MAPPA_STATO.quarterY = clamp(Math.floor(y / q), 0, getQuarterMaxY());
   rootEl.querySelector('#mappa-qx').value = String(MAPPA_STATO.quarterX);
   rootEl.querySelector('#mappa-qy').value = String(MAPPA_STATO.quarterY);
   MAPPA_STATO.centerX = x;
@@ -838,6 +850,10 @@ export async function apriEditorMappa() {
   }
 
   rootEl.style.display = 'block';
+  const qxInput = rootEl.querySelector('#mappa-qx');
+  const qyInput = rootEl.querySelector('#mappa-qy');
+  if (qxInput) qxInput.max = String(getQuarterMaxX());
+  if (qyInput) qyInput.max = String(getQuarterMaxY());
   rootEl.querySelector('#mappa-qx').value = String(MAPPA_STATO.quarterX);
   rootEl.querySelector('#mappa-qy').value = String(MAPPA_STATO.quarterY);
   rootEl.querySelector('#mappa-zoom-value').textContent = String(MAPPA_STATO.cellSize);

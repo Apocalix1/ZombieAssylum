@@ -285,6 +285,10 @@ function openMagazzino() {
             sel.appendChild(opt);
         });
     }
+    if (!sel._magazzinoBound) {
+        sel.addEventListener('change', () => renderMagazzinoModal());
+        sel._magazzinoBound = true;
+    }
     renderMagazzinoModal();
     modal.style.display = 'flex';
 }

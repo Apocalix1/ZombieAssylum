@@ -504,11 +504,11 @@ window.usaCaricaLinguaDiFuoco = function(idx, nomeArma) {
 window.ricaricaLinguaDiFuoco = function(idx, nomeArma) {
     const p = party[idx];
     if (!p || !p.linguaDiFuoco || !p.linguaDiFuoco[nomeArma]) return;
-    if ((window.magazzino.ingranaggi || 0) < 8) return alert('Servono 8 ingranaggi per ricaricare 1 carica.');
-    window.magazzino.ingranaggi -= 8;
+    if ((window.magazzino.materialiAlchemici || 0) < 4) return alert('Servono 4 composti alchemici per ricaricare 1 carica.');
+    window.magazzino.materialiAlchemici -= 4;
     p.linguaDiFuoco[nomeArma].cariche = Math.min(p.linguaDiFuoco[nomeArma].caricheMax, p.linguaDiFuoco[nomeArma].cariche + 1);
-    if (typeof window.updateMagazzinoFields === 'function') window.updateMagazzinoFields({ ingranaggi: window.magazzino.ingranaggi });
-    mostraNotificaInAlto(`Ricaricata 1 carica su "${nomeArma}" (${p.linguaDiFuoco[nomeArma].cariche}/${p.linguaDiFuoco[nomeArma].caricheMax}). -8 ingranaggi, 10 minuti.`, 'successo');
+    if (typeof window.updateMagazzinoFields === 'function') window.updateMagazzinoFields({ materialiAlchemici: window.magazzino.materialiAlchemici });
+    mostraNotificaInAlto(`Ricaricata 1 carica su "${nomeArma}" (${p.linguaDiFuoco[nomeArma].cariche}/${p.linguaDiFuoco[nomeArma].caricheMax}). -4 composti alchemici, 10 minuti.`, 'successo');
     salvaPersonaggioCloud(p);
     renderSpedizioneModal();
     aggiornaInterfaccia();

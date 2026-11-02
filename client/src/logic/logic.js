@@ -721,8 +721,8 @@ export class Personaggio {
         this.robotPFTemp = 0;
         this.robotRepairTotalDone = 0;
         this.robotMicroRepairsUsed = 0;
-        this.batteryHours = 4 * 24;
-        this.batteryHoursMax = 7 * 24;
+        this.batteryHours = 3 * 24;
+        this.batteryHoursMax = 3 * 24;
         this.statiAlterati = [];
         this.biocarburanteTimer = 0;
         this.biocarburanteDeficit = false;
@@ -1304,7 +1304,13 @@ castSpell(level, target = null) {
     consumaStamina(quantita) {
         if (!quantita || quantita <= 0) return;
         this._ensurePesoCorporeoInit();
-        this.staminaAttuale = Math.max(0, (this.staminaAttuale || 0) - quantita);
+        const attuale = this.staminaAttuale || 0;
+        if (attuale < quantita) {
+            this.staminaAttuale = 0;
+            this.faticaBase = Math.min(6, (this.faticaBase || 0) + 1);
+        } else {
+            this.staminaAttuale = attuale - quantita;
+        }
 
         if (this.diabeteTipoI || this.diabeteTipoII) {
             const oraAttuale = window.oreTotali || 0;
@@ -2821,7 +2827,7 @@ castSpell(level, target = null) {
 
 // ==================== 5. RECUPERO STAMINA ====================
         this.staminaRegenTimer++;
-        let sogliaStamina = 4; 
+    let sogliaStamina = 2;
 
 // Perk Trance: dimezza il tempo di recupero
         if (this.hasPerk && this.hasPerk('Trance')) {
@@ -2839,6 +2845,18 @@ castSpell(level, target = null) {
                 this.staminaAttuale++;
             }
             this.staminaRegenTimer = 0;
+        }
+
+        // Consumo stamina giornaliero: 1 tacca ogni 4h per attività AFK impegnative.
+        const tipiConsumoStamina = new Set([
+            'studio', 'cucina', 'alchimia', 'alchimia-assistenza', 'artificeria', 'artificeria-smontaggio', 'artificeria-assistenza', 'esplora'
+        ]);
+        if (this.azioneCorrente && tipiConsumoStamina.has(this.azioneCorrente.tipo)) {
+            this.azioneCorrente._staminaOreAccumulate = (this.azioneCorrente._staminaOreAccumulate || 0) + 1;
+            while (this.azioneCorrente._staminaOreAccumulate >= 4) {
+                this.azioneCorrente._staminaOreAccumulate -= 4;
+                this.consumaStamina(1);
+            }
         }
         if (this.hasPerk && (this.hasPerk('Asmatico'))) {
             if (this.staminaAttuale <= 0 && !this._asmaCrisi) {

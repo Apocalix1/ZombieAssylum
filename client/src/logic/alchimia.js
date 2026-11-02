@@ -476,6 +476,14 @@ function applicaEffettoComposto(target, c) {
             if (isInstabile) guadagno = Math.floor(guadagno / 2);
             const prima = target.manaAttuale;
             target.manaAttuale = Math.min(target.manaMax, target.manaAttuale + guadagno);
+            // Se si abusano i tonici in una finestra di 6 ore, scatta affaticamento.
+            target._tonicoRigeneranteLog = (target._tonicoRigeneranteLog || []).filter(t => ((window.oreTotali || 0) - t) < 6);
+            target._tonicoRigeneranteLog.push(window.oreTotali || 0);
+            if (target._tonicoRigeneranteLog.length > 3) {
+                target.faticaBase = Math.min(6, (target.faticaBase || 0) + 1);
+                target._tonicoRigeneranteLog = [];
+                return `+${target.manaAttuale - prima} Mana (${target.manaAttuale}/${target.manaMax}). ⚠️ Abuso di tonici: +1 Fatica.`;
+            }
             return `+${target.manaAttuale - prima} Mana (${target.manaAttuale}/${target.manaMax}).`;
         }
         case 'bonus_iniziativa_ca_pf': {

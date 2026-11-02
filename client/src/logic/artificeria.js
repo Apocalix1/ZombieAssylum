@@ -56,7 +56,7 @@ export const ARTIFICER_RECIPES = [
     difficulty: 'Media',
     outputType: 'fisso_base',
     description: 'Stazione che converte l\'allenamento fisico in energia. Durante l\'Allenamento si può scegliere di generare batterie invece di guadagnare PCA.',
-    cost: { ingranaggi: 40 },
+    cost: { ingranaggi: 60 },
     time: { hours: 5 },
     specialization: { Elettronica: 3, Meccanica: 1 }
     },
@@ -165,8 +165,8 @@ export const ARTIFICER_RECIPES = [
         difficulty: 'Difficile',
         outputType: 'fisso_base',
         description: 'Danni 3d10. Area 2x2. Disinnesco CD14 Artificeria.',
-        cost: { ingranaggi: 60 },
-        time: { hours: 8 },
+        cost: { ingranaggi: 35 },
+        time: { hours: 5 },
         specialization: { Meccanica: 3 }
     },
     {
@@ -198,11 +198,11 @@ export const ARTIFICER_RECIPES = [
         id: 'taser',
         name: 'Taser',
         category: 'Balistica, Armi & Munizioni',
-        difficulty: 'Media',
+        difficulty: 'Difficile',
         outputType: 'equipaggiamento',
         description: 'Corpo a corpo elettrico. TS COS CD14 o paralizzato 1 turno. Consumo: 1 batt/colpo.',
-        cost: { ingranaggi: 15 },
-        time: { hours: 2 },
+        cost: { ingranaggi: 30 },
+        time: { hours: 4 },
         specialization: { Balistica: 2 }
     },
     {
@@ -233,8 +233,8 @@ export const ARTIFICER_RECIPES = [
         category: 'Balistica, Armi & Munizioni',
         difficulty: 'Media',
         outputType: 'potenziamento_arma',
-        description: 'Bonus permanente +1 (Max +3). Costa 30 ingranaggi e 4h per ogni +1.',
-        cost: { ingranaggi: 30 },
+        description: 'Bonus permanente +1 (Max +2). Costa 35 ingranaggi e 4h per ogni +1.',
+        cost: { ingranaggi: 35 },
         time: { hours: 4 },
         specialization: { Balistica: 3 }
     },
@@ -245,9 +245,9 @@ export const ARTIFICER_RECIPES = [
         difficulty: 'Difficile',
         outputType: 'lingua_di_fuoco',
         description: 'Puoi implementare in un arma da mischia la capacità di andare a fuoco con una reazione. L arma ha 3 cariche, le quali ognuna fa durare la fiamma per 1 minuto. Quando l arma è in fiamme infligge 1d4 danni da fuoco in più.',
-        cost: { ingranaggi: 60 },
-        time: { hours: 6 },
-        specialization: { Balistica: 4 }
+        cost: { ingranaggi: 30 },
+        time: { hours: 4 },
+        specialization: { Balistica: 3 }
     },
 
     // === ROBOT & MECCANICA AVANZATA ===
@@ -306,8 +306,8 @@ export const ARTIFICER_RECIPES = [
         difficulty: 'Molto difficile',
         outputType: 'fisso_base',
         description: 'Capacità 50 razioni. Aumenta tempo degrado cibo del +500%. Consuma 2 batt/giorno.',
-        cost: { ingranaggi: 80 },
-        time: { hours: 18 },
+        cost: { ingranaggi: 70 },
+        time: { hours: 16 },
         specialization: { Elettronica: 4 }
     },
     {
@@ -941,7 +941,10 @@ function risolviEsitoArtificeria(leader, collaboratori, ricetta, costoIngranaggi
                     if (indiceArma !== -1) {
                         let nomeAttuale = leader.inventario.armi[indiceArma];
                         if (nomeAttuale.includes("+1")) leader.inventario.armi[indiceArma] = nomeAttuale.replace("+1", "+2");
-                        else if (nomeAttuale.includes("+2")) leader.inventario.armi[indiceArma] = nomeAttuale.replace("+2", "+3");
+                        else if (nomeAttuale.includes("+2")) {
+                            alert('Questa arma ha già raggiunto il massimo potenziamento (+2).');
+                            break;
+                        }
                         else leader.inventario.armi[indiceArma] = `${nomeAttuale} (+1)`;
                         alert(`Arma potenziata! Ora hai: ${leader.inventario.armi[indiceArma]}`);
                     } else {

@@ -29,6 +29,7 @@ const BOOK_SUBJECT_TITLES = {
     'Incantesimi':[
         'Come imporre la propria essenza: corso allungato con basi',
         'Incantesimi e tecniche magiche meta',
+        'Come castare la famosa: "Torsione Testicolare"',
         'Come ho svestito tua nonna con una bacchetta',
         'Come aura farmarmare come Flagello (corso non indirizzato ad essere effetivamente bravi)',
         'Come svillupare la propria tecnica speciale',
@@ -55,8 +56,9 @@ const BOOK_SUBJECT_TITLES = {
         'Come convincere chiunque a farti venderti l\'anima di qualcuno a metà prezzo-Nudar Chylligun'
     ],
     'Storia': [
-        'Top 10 guerre (esclusa quelle delle città) (WacthmojoTeverat)',
+        'Top 10 genocidi nella storia (WacthmojoTeverat)',
         'Cuore dacciaio, tutti i riferimenti storici',
+        'Fumetsu, non ha senso',
         'La storia di come mi sono fatto tuo padre',
         'Storia della casata famigliare Papoulus, una retrospezione di 400 anni',
         '100 razze e perchè odiarle'
@@ -272,7 +274,7 @@ function awardStudyPM(p, ore) {
 }
 
 // ---------- LOOT LIBRI ----------
-function lootBooks(tiro) {
+function lootBooks(tiro, opts = {}) {
     let count = 0;
     if (tiro <= 3) count = 0;
     else if (tiro <= 8) count = 1;
@@ -282,14 +284,16 @@ function lootBooks(tiro) {
     else count = 5;
 
     const topics = [
-        ['Addestrare animali',0.07], ['Arcano',0.08], ['Cucina',0.08], ['Indagare',0.04], ['Giochi di carte',0.03],
-        ['Inganno',0.03], ['Storia',0.09], ['Manodopera',0.04], ['Strumenti da scasso',0.04], ['Sopravvivenza',0.06],
-        ['Religione',0.08], ['Persuasione',0.05], ['Natura',0.08], ['Intrattenere',0.05],
-        ['Intimidire',0.02], ['Medicina',0.06],['Incantesimi',0.08],
+        ['Addestrare animali',0.06], ['Arcano',0.07], ['Cucina',0.08], ['Indagare',0.04], ['Giochi di carte',0.03],
+        ['Inganno',0.03], ['Storia',0.08], ['Manodopera',0.05], ['Strumenti da scasso',0.05], ['Sopravvivenza',0.04],
+        ['Religione',0.07], ['Persuasione',0.05], ['Natura',0.07], ['Intrattenere',0.05],
+        ['Intimidire',0.04], ['Medicina',0.06],['Incantesimi',0.06],['Lingue',0.07]
     ];
-    const total = topics.reduce((s,t)=>s+t[1],0);
-    const normalized = topics.map(t=>[t[0], t[1]/total]);
-
+        if (typeof opts.count === 'number') count = opts.count;
+    const pesati = topics.map(t => [t[0], t[1] * ((opts.pesi && opts.pesi[t[0]]) || 1)]);
+    const total = pesati.reduce((s,t)=>s+t[1],0);
+    const normalized = pesati.map(t=>[t[0], t[1]/total]);
+    
     for (let i = 0; i < count; i++) {
         let r = Math.random();
         let cum = 0;
