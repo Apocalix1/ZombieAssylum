@@ -19,7 +19,7 @@ const RICETTE = {
         { nome: "Crema Pietrosa", cd: 16, costo: 12, tempo: 6, desc: "+3 CA contro il prossimo attacco, ma -3m movimento per il turno successivo.", effetto: { tipo: 'crema_pietrosa', ca: 3, slow: 3 } },
         { nome: "Liquido Irritante", cd: 16, costo: 12, tempo: 6, desc: "Lanciabile: TS Costituzione CD15 o lascia cadere l'arma e velocità a 0 per 1 turno.", effetto: { tipo: 'liquido_irritante', ts: { abilita: 'Costituzione', cd: 15 }, durata: 1 } },
         { nome: "Pillole della Calma", cd: 16, costo: 12, tempo: 6, desc: "Riduce la Follia di 1d4. Monodose.", effetto: { tipo: 'riduci_follia', dado: '1d4' } },
-         { nome: "Esplosivo", cd: 16, costo: 12, tempo: 6, desc: "Panetto di esplosivo: se innescato esplode infliggendo 2d10 danni nel raggio di 1 m e la metà fino a 3 m (TS Destrezza per dimezzare).", effetto: { tipo: 'esplosivo', danno: '2d10', raggio_m: 1, raggio_meta_m: 3, ts: { abilita: 'Destrezza' } } },
+         { nome: "Esplosivo", cd: 16, costo: 12, tempo: 6, desc: "Panetto di esplosivo: se innescato esplode infliggendo 3d8 danni nel raggio di 1 m e la metà fino a 3 m (TS Destrezza per dimezzare).", effetto: { tipo: 'esplosivo', danno: '2d10', raggio_m: 1, raggio_meta_m: 3, ts: { abilita: 'Destrezza' } } },
     ],
     difficile: [
         { nome: "Adrenalina", cd: 22, costo: 24, tempo: 12, desc: "Ignora debuff/ferite/malus per 2 minuti; al termine incapacitato per 1 ora.", effetto: { tipo: 'adrenalina', durata_min: 2, post_incapacita_h: 1 } },

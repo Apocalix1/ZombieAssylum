@@ -2043,7 +2043,7 @@ window.DATABASE_INCANTESIMI = {
             raggio: "18 metri",
             durata: "Istantanea",
             concentrazione: false,
-            desc: "Scegli un oggetto entro il raggio d'azione (una porta, forziere, lucchetto, manette, ecc.) tenuto chiuso da un mezzo mondano o magico. Un bersaglio bloccato da una serratura mondana, incastrato o sbarrato viene sbloccato. Se ha più serrature, se ne sblocca solo una. Se il bersaglio è chiuso con Serratura Arcana, quell'incantesimo è soppresso per 10 minuti. Quando lanci l'incantesimo, un forte colpo udibile fino a 90 metri di distanza emana dall'oggetto.",
+            desc: "Scegli un oggetto entro il raggio d'azione (una porta, forziere, lucchetto, manette, ecc.) tenuto chiuso da un mezzo mondano o magico. Un bersaglio bloccato da una serratura mondana, incastrato o sbarrato viene sbloccato. Se ha più serrature, se ne sblocca solo una. Se il bersaglio è chiuso con Serratura Arcana, quell'incantesimo è soppresso per 10 minuti. Quando lanci l'incantesimo, un forte colpo udibile fino a 90 metri di distanza emana dall'oggetto. Conoscere questo incantesimo durante una esplorazione porta all'aumento dello stato di Esplorazione del edificio del 10%. (esempio:se l'edificio è a 80, sarà considerato 88).",
             effetto: { tipo: 'sbloccare' },
             cd: false,
             tiro_abilita: false

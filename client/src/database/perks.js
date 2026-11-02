@@ -88,7 +88,7 @@ window.DATABASE_PERK = {
         { nome: "Introversione", desc: "Ottieni svantaggio nelle prove di Inganno e Intrattenere", costo: -4, skills: [], disadvantage: ["Intrattenere", "Inganno"] },
         { nome: "Misogino/Misandrico", desc: "Ottieni svantaggio nelle prove di Carisma sul sesso opposto.", costo: -3, skills: [] },
         { nome: "Ansia Sociale", desc: "Se sei in presenza di più di quattro persone ottieni svantaggio nelle prove di Carisma.", costo: -3, skills: [] },
-        { nome: "Paranoico", desc: "Hai una paranoia che richiede comportamenti di evitamento quotidiani; se ignorati vai in panico fino a compiere l'azione.", costo: -4, skills: [] },
+        { nome: "Paranoico", desc: "Hai una paranoia che richiede comportamenti di evitamento quotidiani; se ignorati vai in panico fino a compiere l'azione.", costo: -4, skills: [],repetas:true },
         { nome: "Rancoroso", desc: "Quando qualcuno ti fa un torto subisci vari malus: +2 CD alle prove di Medicina se lo curi, -40% velocità studio/creazione lavorando con lui, +4 CD su azioni coordinate.", costo: -6, skills: [] },
         { nome: "Scontroso", desc: "Hai svantaggio su Intuizione, Intrattenere, Persuasione verso persone che non ti piacciono (ogni 5 persone te ne può piacere una).", costo: -4, skills: [] },
         { nome: "Bel viso", desc: "Ottieni +1 a Carisma e +2 a Intrattenere.", costo: 2, skills: [] },

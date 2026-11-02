@@ -1037,3 +1037,16 @@ button[style*="c0392b"], button[onclick*="elimina" i], button[onclick*="Elimina"
 @media (max-width: 1000px) {
     .scheda-grid { grid-template-columns: 1fr; }
 }
+/* ---------- Tasto Indietro ---------- */
+.back-bar { display: flex; margin-bottom: 0.9rem; }
+.back-bar .btn-hero.btn-indietro {
+    padding: 0.4rem 1rem;
+    font-size: 0.78rem;
+    min-height: 0;
+    border-color: var(--ash);
+    color: var(--bone-dim);
+}
+.back-bar .btn-hero.btn-indietro:hover { border-color: var(--bone-dim); color: var(--bone); }
+#btn-game-back, #btn-lobby-back, #btn-auth-back { border-color: var(--ash); color: var(--bone-dim); }
+#btn-game-back:hover, #btn-lobby-back:hover, #btn-auth-back:hover { border-color: var(--bone-dim); color: var(--bone); }
+#btn-lobby-back { margin-bottom: 0.6rem; }

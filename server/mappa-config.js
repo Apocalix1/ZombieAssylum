@@ -1,5 +1,5 @@
-export const GRID_W = 1000000;
-export const GRID_H = 100000;
+export const GRID_W = 1560;
+export const GRID_H = 1000;
 export const QUARTIERE = 1000;
 export const TILE = 100;
 

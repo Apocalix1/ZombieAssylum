@@ -155,6 +155,7 @@ async function renderSpedizioneModal() {
 
     container.innerHTML = toggleHtml + cardsHtml;
 }
+window.renderSpedizioneModal = renderSpedizioneModal;
 
 function generaPergamenaDaRarita(rarita) {
     const livelloMap = { non_comune: 1, raro: 2, super_raro: 3 };
@@ -197,45 +198,113 @@ function getExplorationDangerLevels() {
     return [
         {
             nome: 'Sicura',
-            oreBase: 3,
-            bonus: 0,
-            mult: 1,
-            time: [{ chance: 5, aumento: 50 }, { chance: 10, aumento: 30 }, { chance: 20, aumento: 10 }],
+            oreMin: 0,
+            oreMax: 4,
+            time: [{ chance: 20, aumento: 10 }, { chance: 10, aumento: 30 }, { chance: 5, aumento: 50 }],
             lootLost: [{ chance: 10, perdita: 10 }, { chance: 0, perdita: 15 }, { chance: 0, perdita: 20 }],
             ferite: 0,
             fatica: 0
         },
         {
             nome: 'Impegnativa',
-            oreBase: 5,
-            bonus: 1,
-            mult: 2,
-            time: [{ chance: 10, aumento: 70 }, { chance: 15, aumento: 50 }, { chance: 25, aumento: 30 }],
+            oreMin: 4,
+            oreMax: 8,
+            time: [{ chance: 25, aumento: 30 }, { chance: 15, aumento: 50 }, { chance: 10, aumento: 70 }],
             lootLost: [{ chance: 16, perdita: 15 }, { chance: 6, perdita: 20 }, { chance: 0, perdita: 30 }],
+            ferite: 0,
+            fatica: 4
+        },
+        {
+            nome: 'Pericolosa',
+            oreMin: 8,
+            oreMax: 10,
+            time: [{ chance: 30, aumento: 50 }, { chance: 20, aumento: 70 }, { chance: 15, aumento: 90 }],
+            lootLost: [{ chance: 22, perdita: 20 }, { chance: 12, perdita: 25 }, { chance: 3, perdita: 40 }],
             ferite: 3,
             fatica: 8
         },
         {
-            nome: 'Pericolosa',
-            oreBase: 7,
-            bonus: 2,
-            mult: 3,
-            time: [{ chance: 15, aumento: 90 }, { chance: 20, aumento: 70 }, { chance: 30, aumento: 50 }],
-            lootLost: [{ chance: 22, perdita: 20 }, { chance: 12, perdita: 25 }, { chance: 3, perdita: 40 }],
-            ferite: 8,
-            fatica: 16
-        },
-        {
-            nome: 'Estremamente Rischiosa',
-            oreBase: 9,
-            bonus: 3,
-            mult: 4,
-            time: [{ chance: 20, aumento: 110 }, { chance: 25, aumento: 90 }, { chance: 35, aumento: 70 }],
+            nome: 'Estrema',
+            oreMin: 10,
+            oreMax: Infinity,
+            time: [{ chance: 35, aumento: 70 }, { chance: 25, aumento: 90 }, { chance: 20, aumento: 110 }],
             lootLost: [{ chance: 44, perdita: 25 }, { chance: 18, perdita: 30 }, { chance: 12, perdita: 50 }],
             ferite: 8,
             fatica: 16
         }
     ];
+}
+
+function getDangerLevelByHours(oreTotali) {
+    const livelli = getExplorationDangerLevels();
+    return livelli.find(l => oreTotali > l.oreMin && oreTotali <= l.oreMax) || livelli[livelli.length - 1];
+}
+
+function calcolaProbabilitaEdifici(giornoGioco) {
+    const t = Math.max(0, (giornoGioco - 7) / 23);
+    const w100 = Math.max(0, 40 * (1 - 0.5 * t));
+    const w70 = Math.max(0, 35 * (1 - 0.75 * t));
+    const w50 = 20 * (1 + 0.5 * t);
+    const w20 = 5 * (1 + 0.25 * t);
+    const totale = w100 + w70 + w50 + w20;
+    return {
+        100: (w100 / totale) * 100,
+        70: (w70 / totale) * 100,
+        50: (w50 / totale) * 100,
+        20: (w20 / totale) * 100
+    };
+}
+
+function rollStatoEsplorazioneEdificio(giornoGioco) {
+    const p = calcolaProbabilitaEdifici(giornoGioco);
+    const r = Math.random() * 100;
+    if (r <= p[100]) return 100;
+    if (r <= p[100] + p[70]) return 70;
+    if (r <= p[100] + p[70] + p[50]) return 50;
+    return 20;
+}
+
+function getStatoEsplorazioneEdificio(chiaveEdificio) {
+    window._statoEsplorazioneEdifici = window._statoEsplorazioneEdifici || {};
+    if (window._statoEsplorazioneEdifici[chiaveEdificio] == null) {
+        const giornoGioco = Math.floor((window.oreTotali || 0) / 24);
+        window._statoEsplorazioneEdifici[chiaveEdificio] = rollStatoEsplorazioneEdificio(giornoGioco);
+    }
+    return window._statoEsplorazioneEdifici[chiaveEdificio];
+}
+
+function capTiroByStato(stato) {
+    if (stato >= 80) return 20;
+    if (stato >= 50) return 17;
+    if (stato >= 20) return 14;
+    if (stato > 0) return 11;
+    return 0;
+}
+
+function riduzioneStatoByTiro(tiro) {
+    if (tiro < 10) return 5;
+    if (tiro <= 15) return 10;
+    if (tiro <= 18) return 15;
+    return 20;
+}
+
+function haStrumentiDaScasso(p) {
+    p.initInventarioBase();
+    const oggetti = p.inventario?.oggetti || [];
+    const armi = p.inventario?.armi || [];
+    return oggetti.some(o => String(o).toLowerCase().includes('strumenti da scasso'))
+        || armi.some(a => String(a).toLowerCase().includes('strumenti da scasso'));
+}
+
+function getBonusScassoEsplorazione(p, usaScassinare) {
+    let bonus = 0;
+    if (usaScassinare) bonus += 15;
+    if (haStrumentiDaScasso(p)) {
+        const rating = p.getSkillRating ? p.getSkillRating('Strumenti da scasso') : 0;
+        if (rating >= 2) bonus += 20;
+        else if (rating >= 1) bonus += 10;
+    }
+    return bonus;
 }
 
 function getExplorationGroupBonus(gruppo, pericoloBonus = 0) {
@@ -264,6 +333,7 @@ function rollArmiTrovate(diffLevel = 0) {
     if (check(40)) armi.push({ nome: 'Frecce', qta: d4() * 2 + 2, tipo: 'munizioni' });
     if (check(35)) armi.push({ nome: 'Quadrelli da balestra', qta: d4() + 2, tipo: 'munizioni' });
     if (check(15)) armi.push({ nome: 'Munizioni da arma da fuoco', qta: d4(), tipo: 'munizioni' });
+    if (check(10)) armi.push({ nome: 'Strumenti da scasso', qta: 1, tipo: 'oggetto' });
 
     return armi;
 }
@@ -330,22 +400,21 @@ function esplora(idx) {
         if (!confirm(`⚠️ Attenzione! ${leader.nome} ha lo zaino già pieno. Non potrà riportare alcun oggetto. Partire lo stesso?`)) return;
     }
 
-    const livelliPericolo = [
-        { nome: 'Sicura', bonus: 0, oreBase: 3, mult: 1 },
-        { nome: 'Impegnativa', bonus: 1, oreBase: 5, mult: 2 },
-        { nome: 'Pericolosa', bonus: 2, oreBase: 7, mult: 3 },
-        { nome: 'Estremamente Rischiosa', bonus: 3, oreBase: 9, mult: 4 }
-    ];
-    // If current user is Master, open a modal for choosing parameters (avoids prompt defaults)
-    const currentUser = (window.getCurrentUser && window.getCurrentUser()) || null;
-    if (currentUser && currentUser.role === 'master') {
-        return window.apriMasterEsploraModal(idx, livelliPericolo);
+    const edificiInput = prompt('Quanti edifici vuoi esplorare? (1-3)', '1');
+    const numEdifici = Math.max(1, Math.min(3, parseInt(edificiInput, 10) || 1));
+    const edifici = [];
+    for (let i = 0; i < numEdifici; i++) {
+        const nome = (prompt(`Nome edificio #${i + 1} (es. E12-Piano1)`, `Edificio-${i + 1}`) || `Edificio-${i + 1}`).trim();
+        const sconosciuto = confirm(`L'edificio "${nome}" è sconosciuto al gruppo?\nOK = Sì, ANNULLA = No`);
+        let conosciutoDa = 0;
+        if (sconosciuto) {
+            conosciutoDa = Math.max(0, Math.min(3, parseInt(prompt(`Quanti membri del gruppo conoscono già "${nome}"? (0-3)`, '0') || '0', 10)));
+        }
+        const zonaOscura = confirm(`"${nome}" è in Zona Oscura (non rivelata)?\nOK = Sì (tempo x2), ANNULLA = No`);
+        edifici.push({ nome, sconosciuto, conosciutoDa, zonaOscura });
     }
-
-    let sceltaPericoloStr = prompt(`Scegli il livello di pericolosità:\n0: Sicura (3H, +0% Drop)\n1: Impegnativa (5H, +5% Drop)\n2: Pericolosa (7H, +10% Drop)\n3: Estremamente Rischiosa (9H, +15% Drop)`, "0");
-    let pericoloIdx = parseInt(sceltaPericoloStr);
-    if (isNaN(pericoloIdx) || pericoloIdx < 0 || pericoloIdx > 3) pericoloIdx = 0;
-    const pericolo = livelliPericolo[pericoloIdx];
+    const usaScassinare = confirm('Usare l\'incantesimo Scassinare durante l\'esplorazione?\n(+15% stato edificio, ma +8% rischio eventi negativi)');
+    const metaEsplorazione = { edifici, usaScassinare };
 
     const modRisposta = prompt(`Vuoi che ${leader.nome} esplori da solo o insieme ad altri?\nScrivi "SOLO" o "INSIEME"`, "SOLO");
 
@@ -353,7 +422,7 @@ function esplora(idx) {
         const disponibili = window.party.filter(p => p !== leader && p.id && !p.inSpedizione && !p.azioneCorrente);
         if (disponibili.length === 0) {
             alert("Non ci sono altri personaggi disponibili in questo momento. Parte da solo.");
-            avviaEsplorazioneGruppo(leader, [], pericolo, pericoloIdx);
+            avviaEsplorazioneGruppo(leader, [], metaEsplorazione);
             return;
         }
         let candidatiNomi = disponibili.map((p, i) => `${i}: ${p.nome}`).join('\n');
@@ -365,14 +434,14 @@ function esplora(idx) {
         }
         const destinatari = indiciScelti.map(i => disponibili[i]).filter(p => p && p.id);
         if (destinatari.length === 0) {
-            avviaEsplorazioneGruppo(leader, [], pericolo, pericoloIdx);
+            avviaEsplorazioneGruppo(leader, [], metaEsplorazione);
             return;
         }
 
         // Usa il sistema di inviti server invece delle proposte locali
-        inviaInvitiEsplorazione(leader, destinatari, pericolo, pericoloIdx);
+        inviaInvitiEsplorazione(leader, destinatari, metaEsplorazione);
     } else {
-        avviaEsplorazioneGruppo(leader, [], pericolo, pericoloIdx);
+        avviaEsplorazioneGruppo(leader, [], metaEsplorazione);
     }
 }
 
@@ -432,15 +501,19 @@ window.confermaMasterEsplora = function(idx) {
     const destinatari = chosen.map(i => disponibili[i]).filter(Boolean);
 
     chiudiModal('modal-master-esplora');
-    const pericolo = (window.livelliPericolo || [])[pericoloIdx] || { nome: 'Sicura' };
+    const orePericolo = [3, 5, 7, 11][Math.max(0, Math.min(3, pericoloIdx))] || 3;
+    const metaEsplorazione = {
+        edifici: [{ nome: `Esplorazione Master ${Date.now()}`, sconosciuto: false, conosciutoDa: 0, zonaOscura: orePericolo >= 11 }],
+        usaScassinare: false
+    };
     if (destinatari.length > 0) {
-        inviaInvitiEsplorazione(leader, destinatari, pericolo, pericoloIdx);
+        inviaInvitiEsplorazione(leader, destinatari, metaEsplorazione);
     } else {
-        avviaEsplorazioneGruppo(leader, [], pericolo, pericoloIdx);
+        avviaEsplorazioneGruppo(leader, [], metaEsplorazione);
     }
 };
 
-async function inviaInvitiEsplorazione(leader, destinatari, pericolo, pericoloIdx) {
+async function inviaInvitiEsplorazione(leader, destinatari, metaEsplorazione) {
     const idSpedizione = `sped-${Date.now()}-${leader.id}`;
     try {
         const res = await fetch(apiUrl('/api/inviti'), {
@@ -450,14 +523,14 @@ async function inviaInvitiEsplorazione(leader, destinatari, pericolo, pericoloId
         });
         if (!res.ok) throw new Error('Errore invio inviti');
         mostraNotificaInAlto(`${leader.nome} attende risposte per l'esplorazione di gruppo (max 2 minuti)...`, 'info');
-        attendiRisposteInviti(idSpedizione, leader, destinatari, pericolo, pericoloIdx);
+        attendiRisposteInviti(idSpedizione, leader, destinatari, metaEsplorazione);
     } catch (e) {
         alert("Errore durante l'invio degli inviti: " + e.message);
-        avviaEsplorazioneGruppo(leader, [], pericolo, pericoloIdx);
+        avviaEsplorazioneGruppo(leader, [], metaEsplorazione);
     }
 }
 
-function attendiRisposteInviti(idSpedizione, leader, destinatari, pericolo, pericoloIdx) {
+function attendiRisposteInviti(idSpedizione, leader, destinatari, metaEsplorazione) {
     const scadenza = Date.now() + 2 * 60 * 1000;
     const interval = setInterval(async () => {
         try {
@@ -472,7 +545,7 @@ function attendiRisposteInviti(idSpedizione, leader, destinatari, pericolo, peri
                 if (accettatiIds.length > 2) {
                     mostraNotificaInAlto(`Solo i primi 2 che hanno accettato partiranno con ${leader.nome}.`, 'avviso');
                 }
-                avviaEsplorazioneGruppo(leader, compagni, pericolo, pericoloIdx);
+                avviaEsplorazioneGruppo(leader, compagni, metaEsplorazione);
             }
         } catch (e) {
             console.warn('Errore polling inviti:', e);
@@ -480,14 +553,27 @@ function attendiRisposteInviti(idSpedizione, leader, destinatari, pericolo, peri
     }, 4000);
 }
 
-function avviaEsplorazioneGruppo(leader, compagni, pericolo, pericoloIdx) {
+function avviaEsplorazioneGruppo(leader, compagni, metaEsplorazione = {}) {
     const gruppoSpedizione = [leader, ...compagni];
     gruppoSpedizione.forEach(p => { if (typeof p.initInventarioBase === 'function') p.initInventarioBase(); });
     const numCompagni = gruppoSpedizione.length - 1;
+    const edifici = Array.isArray(metaEsplorazione.edifici) ? metaEsplorazione.edifici.slice(0, 3) : [{ nome: 'Edificio', sconosciuto: false, conosciutoDa: 0, zonaOscura: false }];
+
+    const oreBaseSpedizione = edifici.reduce((tot, e) => {
+        let oreEdificio = 2;
+        if (e.sconosciuto) {
+            const riduzione = Math.max(0, Math.min(3, parseInt(e.conosciutoDa, 10) || 0));
+            oreEdificio += Math.max(0, 3 - riduzione);
+        }
+        if (e.zonaOscura) oreEdificio *= 2;
+        return tot + oreEdificio;
+    }, 0);
+
+    const dangerBase = getDangerLevelByHours(oreBaseSpedizione);
 
     let totaleAumentoTempo = 0;
     gruppoSpedizione.forEach(p => {
-        let { timePenalty } = calcolaEventiPericolo(p, pericolo.mult, numCompagni);
+        let { timePenalty } = calcolaEventiPericolo(p, dangerBase.nome, numCompagni, metaEsplorazione, gruppoSpedizione);
         if (numCompagni === 0 && p.hasPerk && p.hasPerk('Pessimo orientamento')) {
             if (Math.floor(Math.random() * 100) + 1 <= 70) {
                 timePenalty += 85;
@@ -498,8 +584,10 @@ function avviaEsplorazioneGruppo(leader, compagni, pericolo, pericoloIdx) {
     });
 
     const mediaAumentoTempo = totaleAumentoTempo / gruppoSpedizione.length;
-    let oreSpedizione = Math.round(pericolo.oreBase * (1 + (mediaAumentoTempo / 100)));
-    const bonusSpedizione = getExplorationGroupBonus(gruppoSpedizione, pericolo.bonus);
+    let oreSpedizione = Math.max(1, Math.round(oreBaseSpedizione * (1 + (mediaAumentoTempo / 100))));
+    const pericoloFinale = getDangerLevelByHours(oreSpedizione);
+    const bonusSpedizione = getExplorationGroupBonus(gruppoSpedizione, 0);
+    const staminaDaConsumare = Math.ceil(oreSpedizione / 4);
 
 // PERK: Abbandono — rifiuta l'esplorazione in solitaria se dura più di 3 ore
     if (numCompagni === 0 && leader.hasPerk && leader.hasPerk('Abbandono') && oreSpedizione > 3) {
@@ -507,22 +595,23 @@ function avviaEsplorazioneGruppo(leader, compagni, pericolo, pericoloIdx) {
         return;
     }
 
-    alert(`Il gruppo parte per un'esplorazione ${pericolo.nome}${compagni.length ? ' insieme a ' + compagni.map(c => c.nome).join(', ') : ' da solo'}.\nDurata prevista: ${oreSpedizione} ore (Modifica media tempo: +${mediaAumentoTempo.toFixed(1)}%)`);
+    alert(`Il gruppo parte per un'esplorazione ${pericoloFinale.nome}${compagni.length ? ' insieme a ' + compagni.map(c => c.nome).join(', ') : ' da solo'}.\nEdifici: ${edifici.map(e => e.nome).join(', ')}\nDurata base: ${oreBaseSpedizione}h | Durata prevista: ${oreSpedizione}h | Stamina richiesta: ${staminaDaConsumare} tacca/e`);
 
     const idSpedizioneGlobale = Date.now();
     gruppoSpedizione.forEach(p => {
         p.azioneCorrente = {
             tipo: 'esplora',
             idSpedizione: idSpedizioneGlobale,
-            pericoloMultiplo: pericolo.mult,
-            pericoloBonus: pericolo.bonus,
+            pericoloNome: pericoloFinale.nome,
             bonusSpedizione,
-            livelloPericolo: pericoloIdx,
+            livelloPericolo: getExplorationDangerLevels().findIndex(l => l.nome === pericoloFinale.nome),
             numCompagni,
             oreTotali: oreSpedizione,
             oreRimanenti: oreSpedizione,
+            staminaDaConsumare,
             isLeader: p === leader,
             membri: gruppoSpedizione.map(m => m.nome),
+            metaEsplorazione
         };
         salvaPersonaggioCloud(p); // Salva lo stato aggiornato
     });
@@ -530,19 +619,25 @@ function avviaEsplorazioneGruppo(leader, compagni, pericolo, pericoloIdx) {
     if (typeof aggiornaInterfaccia === 'function') aggiornaInterfaccia();
 }
 
-function calcolaEventiPericolo(p, mult, numCompagni) {
-    const livello = getExplorationDangerLevels()[Math.max(0, Math.min(3, mult - 1))] || getExplorationDangerLevels()[0];
-    const reductionFactor = Math.min(0.75, numCompagni * 0.25);
-    const bonusReduction = (p.timers && ((p.timers.buffFame > 0 ? 2 : 0) + (p.timers.buffSete > 0 ? 2 : 0) + (p.timers.buffSonno > 0 ? 2 : 0))) || 0;
-    const fatigueMalus = (p.faticaTotale || 0) * 15;
-    const hpMalus = (p.puntiFeritaReali < 4) ? 10 : 0;
-    const solitarioBonus = (numCompagni === 0 && p.hasPerk && p.hasPerk('Solitario')) ? 25 : 0;
+function getModificatoreRischioPercentuale(p, numCompagni, metaEsplorazione = {}) {
+    let mod = 0;
+    mod += -Math.min(50, numCompagni * 25);
+    const preparazione = (p.timers && ((p.timers.buffFame > 0 ? 1 : 0) + (p.timers.buffSete > 0 ? 1 : 0) + (p.timers.buffSonno > 0 ? 1 : 0))) || 0;
+    mod += -Math.min(12, preparazione * 4);
+    const haProvviste = (p.inventario?.consumabili || []).some(c => String(c?.nome || c).toLowerCase().includes('provviste'));
+    if (haProvviste) mod -= 2;
+    mod += (p.faticaTotale || 0) * 15;
+    if ((p.puntiFeritaReali || 0) < 4) mod += 10;
+    if (metaEsplorazione.usaScassinare && (p.incantesimi || []).includes('Scassinare')) mod += 8;
+    return mod;
+}
+
+function calcolaEventiPericolo(p, pericoloNome, numCompagni, metaEsplorazione = {}, gruppo = []) {
+    const livello = getExplorationDangerLevels().find(l => l.nome === pericoloNome) || getExplorationDangerLevels()[0];
+    const modRischio = getModificatoreRischioPercentuale(p, numCompagni, metaEsplorazione);
     const calcProb = (baseProb) => {
-        let prob = baseProb * (1 - reductionFactor);
-        if (solitarioBonus) prob *= 0.75;
-        prob -= bonusReduction;
-        prob += fatigueMalus + hpMalus;
-        return Math.max(0, prob);
+        const prob = baseProb + ((baseProb * modRischio) / 100);
+        return Math.max(0, Math.min(100, prob));
     };
 
     const d100 = () => Math.floor(Math.random() * 100) + 1;
@@ -599,17 +694,18 @@ function terminaEsplorazione(p) {
     if (!p) return;
        try {
         const act = p.azioneCorrente || {};
-        const baseBonus = act.bonusSpedizione !== undefined ? act.bonusSpedizione : (act.pericoloBonus !== undefined ? act.pericoloBonus : getExplorationBonus(p));
+    const baseBonus = act.bonusSpedizione !== undefined ? act.bonusSpedizione : getExplorationBonus(p);
         let bonus = baseBonus;
-        const mult = act.pericoloMultiplo || 1;
         const diffLevel = act.livelloPericolo || 0;
         const numCompagni = act.numCompagni || 0;
+    const pericoloNome = act.pericoloNome || (getExplorationDangerLevels()[diffLevel] || getExplorationDangerLevels()[0]).nome;
+    const metaEsplorazione = act.metaEsplorazione || {};
 
         if (numCompagni === 0 && p.hasPerk && p.hasPerk('Solitario')) {
             bonus += 1;
         }
 
-        const pericoli = calcolaEventiPericolo(p, mult, numCompagni);
+        const pericoli = calcolaEventiPericolo(p, pericoloNome, numCompagni, metaEsplorazione);
         const skill = p.getSkillModifierForCheck ? p.getSkillModifierForCheck('Sopravvivenza') : {
             modifier: 0,
             advantage: false,
@@ -617,12 +713,28 @@ function terminaEsplorazione(p) {
         };
 
         // Tiri standard base
-        const mediciTiro = Math.min(20, rollD20WithAdv(skill.advantage, skill.disadvantage) + bonus);
-        const ingranaggiTiro = Math.min(20, rollD20WithAdv(skill.advantage, skill.disadvantage) + bonus);
-        const alchemiciTiro = Math.min(20, rollD20WithAdv(skill.advantage, skill.disadvantage) + bonus);
-        const ciboTiro = Math.min(20, rollD20WithAdv(skill.advantage, skill.disadvantage) + bonus);
-        const acquaTiro = Math.min(20, rollD20WithAdv(skill.advantage, skill.disadvantage) + bonus) * 1.25;
-        const booksTiro = Math.min(20, (typeof rollD20 === 'function' ? rollD20() : Math.floor(Math.random() * 20) + 1) + bonus);
+        const edifici = Array.isArray(metaEsplorazione.edifici) && metaEsplorazione.edifici.length
+            ? metaEsplorazione.edifici
+            : [{ nome: 'Edificio generico' }];
+        const statoMedioBase = edifici.reduce((somma, e) => somma + getStatoEsplorazioneEdificio(e.nome), 0) / edifici.length;
+        const bonusScasso = getBonusScassoEsplorazione(p, !!metaEsplorazione.usaScassinare);
+        const statoEffettivo = Math.min(100, Math.round(statoMedioBase * (1 + bonusScasso / 100)));
+        const capTiro = capTiroByStato(statoEffettivo);
+
+        if (capTiro <= 0) {
+            mostraNotificaInAlto(`${p.nome}: l'area è totalmente ripulita (grado 0%), nessun bottino trovato.`, 'avviso');
+            p.azioneCorrente = null;
+            if (typeof window.salvaPersonaggioCloud === 'function') window.salvaPersonaggioCloud(p);
+            aggiornaInterfaccia();
+            return;
+        }
+
+        const mediciTiro = Math.min(capTiro, rollD20WithAdv(skill.advantage, skill.disadvantage) + bonus);
+        const ingranaggiTiro = Math.min(capTiro, rollD20WithAdv(skill.advantage, skill.disadvantage) + bonus);
+        const alchemiciTiro = Math.min(capTiro, rollD20WithAdv(skill.advantage, skill.disadvantage) + bonus);
+        const ciboTiro = Math.min(capTiro, rollD20WithAdv(skill.advantage, skill.disadvantage) + bonus);
+        const acquaTiro = Math.min(capTiro, rollD20WithAdv(skill.advantage, skill.disadvantage) + bonus) * 1.25;
+        const booksTiro = Math.min(capTiro, (typeof rollD20 === 'function' ? rollD20() : Math.floor(Math.random() * 20) + 1) + bonus);
 
         // Generazione base
         let medici = lootMedici(mediciTiro);
@@ -672,7 +784,8 @@ function terminaEsplorazione(p) {
             if (typeof p.subisciDanno === 'function') {
                 p.subisciDanno(pericoli.hpDamage);
             } else {
-                p.puntiFeritaReali = Math.max(0, p.puntiFeritaReali - pericoli.hpDamage);
+                // In esplorazione AFK non si muore mai.
+                p.puntiFeritaReali = Math.max(1, p.puntiFeritaReali - pericoli.hpDamage);
             }
         }
         if (pericoli.fatigueStagies > 0 && typeof p.faticaBase !== 'undefined') p.faticaBase += pericoli.fatigueStagies;
@@ -731,13 +844,36 @@ function terminaEsplorazione(p) {
         }
 
         if (!magazzino.armiTrovate) magazzino.armiTrovate = [];
+        if (!magazzino.armi) magazzino.armi = [];
+        if (!magazzino.oggetti) magazzino.oggetti = [];
         let infoArmiStr = "";
         if (armiTrovate.length > 0) {
             armiTrovate.forEach(arma => {
-                magazzino.armiTrovate.push(arma);
-                infoArmiStr += `  - ${arma.nome} (x${arma.qta})\n`;
+                if (arma.tipo === 'arma') {
+                    for (let i = 0; i < (arma.qta || 1); i++) {
+                        const nomeArma = arma.nome;
+                        magazzino.armi.push(nomeArma);
+                        magazzino.armiTrovate.push({ nome: nomeArma, qta: 1, tipo: 'arma' });
+                        infoArmiStr += `  - ${nomeArma} (x1)\n`;
+                    }
+                } else if (arma.tipo === 'oggetto') {
+                    for (let i = 0; i < (arma.qta || 1); i++) {
+                        magazzino.oggetti.push(arma.nome);
+                    }
+                    infoArmiStr += `  - ${arma.nome} (x${arma.qta || 1})\n`;
+                } else {
+                    magazzino.armiTrovate.push(arma);
+                    infoArmiStr += `  - ${arma.nome} (x${arma.qta})\n`;
+                }
             });
         }
+
+        // Riduce il grado esplorazione edificio in base ai tiri effettuati.
+        const riduzione = riduzioneStatoByTiro(Math.max(mediciTiro, ingranaggiTiro, alchemiciTiro, ciboTiro, booksTiro));
+        edifici.forEach(e => {
+            const corrente = getStatoEsplorazioneEdificio(e.nome);
+            window._statoEsplorazioneEdifici[e.nome] = Math.max(0, corrente - riduzione);
+        });
 
         let infoMagica = "";
         if (oggMagiciTrovati.comuni > 0) infoMagica += `• Oggetti Magici Comuni: +${oggMagiciTrovati.comuni}\n`;
@@ -948,4 +1084,5 @@ window.segnaVittoria = segnaVittoria;
 window.getExplorationBonus = getExplorationBonus;
 window.terminaEsplorazione = terminaEsplorazione;
 window.AZIONI_RIPRISTINO = window.AZIONI_RIPRISTINO || {};
-window.AZIONI_RIPRISTINO.esplora = (p) => terminaEsplorazione(p);
+window.AZIONI_RIPRISTINO.esplora = (p, a) =>
+    (a && a.mappa) ? window.terminaEsplorazioneMappa(p, a) : terminaEsplorazione(p);
