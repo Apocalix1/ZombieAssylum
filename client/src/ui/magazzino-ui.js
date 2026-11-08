@@ -191,6 +191,45 @@ window.apriDaiOggettoModal = function(idx) {
     window.apriInventario(idx);
 };
 
+function applicaPerkArmato(p) {
+    if (!p || p._armatoApplicato) return;
+    const perk = (p.perks || []).find(pk => (typeof pk === 'string' ? pk : pk.nome) === 'Armato');
+    if (!perk) return;
+
+    const categorie = ['Archi','Balestre',"Armi con l'asta",'Lame leggere','Armi da fuoco','Rampini e fruste','Mazze e armi contundenti'];
+    let categoria = typeof perk === 'object' ? perk.armaScelta : null;
+    if (!categorie.includes(categoria)) { // vecchi personaggi senza scelta salvata
+        const elenco = categorie.map((c, i) => `${i + 1}) ${c}`).join('\n');
+        let idx = parseInt(prompt(`Perk "Armato": scegli un'arma iniziale:\n${elenco}`, '1'), 10) - 1;
+        if (isNaN(idx) || idx < 0 || idx >= categorie.length) idx = 0;
+        categoria = categorie[idx];
+    }
+
+    p.initInventarioBase();
+    p.inventario.armi.push(categoria);
+    p.armiLivello = p.armiLivello || {};
+    const livelloBase = p.isRobot ? 4 : 1;
+    const livelloAttuale = p.armiLivello[categoria] || 0;
+    if (!p.isRobot && livelloAttuale >= 1) {
+        const costi = window.ARMI_COSTI && window.ARMI_COSTI[categoria];
+        const rimborso = costi ? (costi[1] || 1) : 1;
+        p.puntiCreazione = (p.puntiCreazione || 0) + rimborso;
+    }
+    p.armiLivello[categoria] = Math.max(livelloBase, livelloAttuale);
+
+    if (typeof p.inventario.munizioni !== 'object' || !p.inventario.munizioni) {
+        p.inventario.munizioni = { frecce: 0, quadrelli: 0, proiettili: 0 };
+    }
+    const m = p.inventario.munizioni;
+    let munText = '';
+    if (categoria === 'Archi')              { const n = p.isRobot ? 8 : 10; m.frecce += n;    munText = ` e ${n} munizioni`; }
+    else if (categoria === 'Balestre')      { const n = p.isRobot ? 5 : 10; m.quadrelli += n; munText = ` e ${n} munizioni`; }
+    else if (categoria === 'Armi da fuoco') { m.proiettili += 3;                              munText = ' e 3 munizioni'; }
+
+    p._armatoApplicato = true;
+    alert(`${p.nome} inizia con: ${categoria} (competenza livello ${livelloBase})${munText}.`);
+}
+
 window.apriLasciaIndietroModal = function(idx) {
     const p = party[idx];
     if (!p || !p.inSpedizione) return;
@@ -375,7 +414,7 @@ function renderMagazzinoModal() {
                     `;
         } else if (destinatari.length === 1) {
             selectHtml = `<button class="btn-hero" ${autoGive}>Dai a ${destinatari[0].nome}</button>`;
-        } else {onclick="daiCompostoAPersonaggio(${party.indexOf(destinatari[0])}, ${ci})"
+        } else {
             selectHtml = '<span style="color:#888;">Nessun personaggio disponibile</span>';
         }
         return `

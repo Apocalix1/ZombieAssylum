@@ -106,23 +106,31 @@ function avviaCreazione(directAdd = false) {
     window._editingCharOriginalName = null;
     const titleEl = document.querySelector('#modal-creazione h2');
     if (titleEl) titleEl.textContent = 'NUOVO SOPRAVVISSUTO';
-    
-    // Creazione unica
+
     window.tempP = new Personaggio("Nuovo", Math.floor((window.oreTotali || 0) / 24));
     window.tempP.puntiCreazione = 70;
     window.tempP.livelloMagia = 0;
     window.tempP.spellsKnown = {0:0,1:0,2:0,3:0};
-
-    // Inizializzazione forzata delle statistiche
-    ["forza", "destrezza", "costituzione", "intelligenza", "saggezza", "carisma"].forEach(stat => {
+    ["forza","destrezza","costituzione","intelligenza","saggezza","carisma"].forEach(stat => {
         if (typeof window.tempP[stat] !== 'number') window.tempP[stat] = 5;
     });
     window.tempP.updateManaFromMagiaLevel && window.tempP.updateManaFromMagiaLevel();
+    categoriaCorrente = "competenze base";
 
+    // Ripristino bozza
+    const bozza = leggiBozzaCreazione();
+    let ripresa = false;
+    if (bozza && bozza.tempP) {
+        window.tempP = Object.assign(new Personaggio(bozza.tempP.nome || 'Nuovo', bozza.tempP.giornoInizio || 0), bozza.tempP);
+        window.tempP.initInventarioBase();
+        if (typeof window.tempP.updateManaFromMagiaLevel === 'function') window.tempP.updateManaFromMagiaLevel();
+        categoriaCorrente = bozza.categoria || categoriaCorrente;
+        ripresa = true;
+    }
 
-        const nomeInput = document.getElementById('crea-nome');
+    const nomeInput = document.getElementById('crea-nome');
     if (nomeInput) {
-        nomeInput.value = "";
+        nomeInput.value = (ripresa && window.tempP.nome && window.tempP.nome !== 'Nuovo') ? window.tempP.nome : "";
         nomeInput.oninput = function () {
             if (window.tempP) window.tempP.nome = this.value;
             renderSetupPerks();
@@ -130,19 +138,19 @@ function avviaCreazione(directAdd = false) {
     }
     const modal = document.getElementById('modal-creazione');
     if (modal) modal.style.display = 'block';
-    categoriaCorrente = "competenze base";
-    renderSetupStats();
-    renderSetupPerks();
+    window._directAdd = directAdd;
 
-    if (nomeInput) setTimeout(() => nomeInput.focus(), 100);
     const robotCheckbox = document.getElementById('crea-robot');
     if (robotCheckbox) {
-        robotCheckbox.checked = false;
+        robotCheckbox.checked = !!window.tempP.isRobot;
         bindRobotCheckboxHandler(robotCheckbox);
     }
-
-    // Salva il flag directAdd per usarlo in confermaCreazione
-    window._directAdd = directAdd;
+    renderSetupStats();
+    renderSetupPerks();
+    if (nomeInput) setTimeout(() => nomeInput.focus(), 100);
+    if (ripresa && typeof window.mostraNotificaInAlto === 'function') {
+        window.mostraNotificaInAlto('📝 Bozza ripristinata. Premi ANNULLA per scartarla.', 'info');
+    }
 }
 
 async function avviaModificaPersonaggio(nome, id, isLocale) {
@@ -530,6 +538,13 @@ async function confermaCreazione(directAdd = window._directAdd || false) {
             window.tempP.inventario.consumabili.push({ nome: 'Sacco a pelo', peso: 0.6 });
         }
     }
+    try {
+    if (typeof window.applicaPerkArmato === 'function') window.applicaPerkArmato(window.tempP);
+        } catch (e) {
+            console.error('Errore perk Armato:', e);
+            alert('Errore nel perk Armato: ' + e.message);
+            return;
+        }
 
     // --- 5. Determinazione del tipo di utente ---
     const currentUser = window.getCurrentUser ? window.getCurrentUser() : null;
@@ -786,6 +801,46 @@ function renderIncantesimiTab(p) {
     html += `</div></div>`;
     return html;
 }
+
+function chiaveBozza() {
+    const u = window.getCurrentUser ? window.getCurrentUser() : null;
+    if (!u || u.role === 'ospite') return null;
+    return `bozza_creazione_${u.id}`;
+}
+function creatoreAperto() {
+    const m = document.getElementById('modal-creazione');
+    return !!m && !!m.style.display && m.style.display !== 'none';
+}
+let _bozzaTimer = null;
+function salvaBozzaCreazione(subito = false) {
+    if (window._editMode) return;
+    const run = () => {
+        const key = chiaveBozza();
+        if (!key || window._editMode || !window.tempP || !creatoreAperto()) return;
+        try {
+            localStorage.setItem(key, JSON.stringify({ tempP: window.tempP, categoria: categoriaCorrente, t: Date.now() }));
+        } catch (e) { console.warn('Bozza non salvata:', e); }
+    };
+    clearTimeout(_bozzaTimer);
+    if (subito) run(); else _bozzaTimer = setTimeout(run, 300);
+}
+function cancellaBozzaCreazione() {
+    clearTimeout(_bozzaTimer);
+    const key = chiaveBozza();
+    if (key) localStorage.removeItem(key);
+}
+function leggiBozzaCreazione() {
+    const key = chiaveBozza();
+    if (!key) return null;
+    try { return JSON.parse(localStorage.getItem(key)); } catch { return null; }
+}
+window.controllaBozzaCreazione = function() {
+    if (leggiBozzaCreazione() && typeof window.mostraNotificaInAlto === 'function') {
+        window.mostraNotificaInAlto('📝 Hai una bozza di personaggio non finita: apri la creazione per riprenderla.', 'info');
+    }
+};
+window.addEventListener('pagehide', () => salvaBozzaCreazione(true));
+document.addEventListener('visibilitychange', () => { if (document.hidden) salvaBozzaCreazione(true); });
 
 export function renderSetupPerks() {
     const container = document.getElementById('perks-setup-container');

@@ -858,7 +858,7 @@ export class Personaggio {
         if (this.zainoEquipaggiato) {
             let bonusZaino = this.zainoEquipaggiato.bonus;
             if (this.hasPerk && this.hasPerk('Organizzato')) bonusZaino *= 1.15;
-            if (this.hasPerk && this.hasPerk('Disorganizzato')) bonusZaino *= 0.85;
+            if (this.hasPerk && this.hasPerk('Disorganizzato')) bonusZaino *= 0.75;
             cap += bonusZaino;
         }
         if (this.hasPerk && this.hasPerk('Facchino esperto')) {
