@@ -25,6 +25,25 @@ const STATI_PREDEFINITI = {
     'Ispirato':    [{stat:'Carisma', valore:2}],
 }
 
+window.onclick = function(event) {
+    if (event.target.className === 'modal') {
+        if (event.target.id === 'modal-creazione') return; // si chiude solo con ANNULLA
+        event.target.style.display = "none";
+    }
+}
+
+function findPerkData(nomePerk, preferisciRobot = false) {
+    const targetName = getPerkBaseName(nomePerk);
+    const perkDb = window.DATABASE_PERK || globalThis.DATABASE_PERK || {};
+    const cats = Object.keys(perkDb);
+    if (preferisciRobot && perkDb.robotici) cats.unshift('robotici');
+    for (const cat of cats) {
+        const lista = Array.isArray(perkDb[cat]) ? perkDb[cat] : [];
+        const found = lista.find(p => perkNamesMatch(getPerkBaseName(p.nome), targetName));
+        if (found) return found;
+    }
+    return null;
+}
 
 
 function chiudiModal(id) {
@@ -1014,7 +1033,7 @@ function getPerkBaseName(nomePerk) {
     if (clean.startsWith("Lingue (")) return "Lingue";
     if (clean.startsWith("Ignorante (")) return "Ignorante";
     if (clean.startsWith("Razzista (")) return "Razzista";
-    if (clean.startsWith("Sensibilità alle temperature (")) return "Sensibilità alle temperature";
+    if (clean.startsWith("Sensibilita alle temperature (")) return "Sensibilità alle temperature";
     if (clean.startsWith("Termoregolazione (")) return "Termoregolazione";
     return clean;
 }
@@ -3369,6 +3388,12 @@ function togglePerk(nomePerk, forceRemove = false) {
         const sceltaTemp = prompt(`Perk "${nomePerk}": scegli la tua ${nomePerk === 'Termoregolazione' ? 'resistenza' : 'debolezza'}:\n1) Fuoco\n2) Gelo`, '1');
         const tipoTemp = sceltaTemp === '2' ? 'Gelo' : 'Fuoco';
         p.perks.push({ ...perkDati, nome: `${nomePerk} (${tipoTemp})`, tipoTemperatura: tipoTemp });
+    } else if (nomePerk === 'Armato') {
+    const categorie = ['Archi','Balestre',"Armi con l'asta",'Lame leggere','Armi da fuoco','Rampini e fruste','Mazze e armi contundenti'];
+    const elenco = categorie.map((c, i) => `${i + 1}) ${c}`).join('\n');
+    const idx = parseInt(prompt(`Perk "Armato": scegli l'arma iniziale:\n${elenco}`, '1'), 10) - 1;
+    if (isNaN(idx) || idx < 0 || idx >= categorie.length) { alert('Scelta non valida o annullata.'); return; }
+    p.perks.push({ ...perkDati, armaScelta: categorie[idx] });
     } else {
         p.perks.push({...perkDati});
     }

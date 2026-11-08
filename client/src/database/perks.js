@@ -244,7 +244,7 @@ window.DATABASE_PERK = {
         { nome: "Corridore", desc: "Ottieni +1 metri di velocità,  la stamina nel muoverti viene consumata a metà.", costo: 4, skills: [] },
         { nome: "Cuoco miserabile", desc: "Puoi spendere 2 ore per trasformare 15 unità di cibo avariato in 1 unità di cibo sano", costo: 4, skills: [] },
         { nome: "Digiuno", desc: "Richiedi 20% meno cibo", costo: 4, skills: [] },
-        { nome: "Disorganizzato", desc: "Zaini e Borse hanno il 15% in meno di capacità", costo: -2, skills: [] },
+        { nome: "Disorganizzato", desc: "Zaini e Borse hanno il 25% in meno di capacità", costo: -2, skills: [] },
         { nome: "Dromedario", desc: "Richiedi 20% meno acqua", costo: 5, skills: [] },
         {nome:"Mangiare lentamente",desc:"Il tempo che impieghi per mangiare è raddoppiato",costo:-2,skills:[]},
         {nome:"Mangiare velocemente",desc:"Il tempo che impieghi per mangiare è ridotto della metà ma hai il 10% probabilità di avere indigestione (-1 a Costituzione e Destrezza)",costo:2,skills:[]},
