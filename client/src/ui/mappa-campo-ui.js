@@ -45,7 +45,7 @@ const S = {
   opts: {}, drag: null, timer: null, poll: null
 };
 let root, canvas, ctx, pannello;
-
+const qs = () => S.personaggioId ? `personaggioId=${S.personaggioId}` : `campoBaseId=${S.campoId}`;
 function nota(msg, tipo = 'info') {
   if (typeof window.mostraNotificaInAlto === 'function') window.mostraNotificaInAlto(msg, tipo);
 }
@@ -193,7 +193,7 @@ async function scaricaTile(tx, ty, k) {
   const T = S.config.TILE;
   const x = tx * T, y = ty * T;
   const w = Math.min(T, S.config.GRID_W - x), h = Math.min(T, S.config.GRID_H - y);
-  const p = fetch(apiUrl(`/api/mappa/campo/tile?x=${x}&y=${y}&w=${w}&h=${h}&campoBaseId=${S.campoId}`), { headers: buildAuthHeaders() })
+  const p = fetch(apiUrl(`/api/mappa/campo/tile?x=${x}&y=${y}&w=${w}&h=${h}&${qs()}`), { headers: buildAuthHeaders() })
     .then(async r => {
       const dati = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(dati.error || `HTTP ${r.status}`);
@@ -312,7 +312,10 @@ function mostraPannelloBase(cella = null) {
   const legenda = Object.values(CAT).map(([nome, col]) =>
     `<div style="display:flex; align-items:center; gap:6px;"><span style="display:inline-block; width:10px; height:10px; background:${col};"></span>${escapeHtml(nome)}</div>`).join('');
   pannello.innerHTML = `
-    <h3 style="margin-bottom:6px;">Mappa del campo${S.campo ? `: ${escapeHtml(S.campo.nome || '')}` : ''}</h3>
+<h3 style="margin-bottom:6px;">${S.personaggioId
+  ? `Mappa di ${escapeHtml(S.titolo)}`
+  : `Mappa del campo${S.campo ? `: ${escapeHtml(S.campo.nome || '')}` : ''}`}</h3>
+<p style="color:#a39c8f;">${S.personaggioId ? 'Vedi solo ciò che questo personaggio conosce.' : 'Vedi solo ciò che il tuo campo conosce.'} Trascina per muoverti.</p>
     <p style="color:#a39c8f;">Vedi solo ciò che il tuo campo conosce. Trascina per muoverti.</p>
     ${cella ? `<p style="margin-top:6px;">Casella ${cella.x}:${cella.y} — nessun edificio noto.</p>` : ''}
     <div style="margin-top:8px; display:grid; gap:2px; font-size:0.78rem;">
@@ -328,7 +331,7 @@ function mostraPannelloBase(cella = null) {
 async function mostraDettaglio(e) {
   pannello.innerHTML = '<p>Caricamento...</p>';
   try {
-    const r = await fetch(apiUrl(`/api/mappa/campo/edificio/${e.id}?campoBaseId=${S.campoId}`), { headers: buildAuthHeaders() });
+    const r = await fetch(apiUrl('/api/mappa/campo/edificio/${e.id}?${qs()}'),{ headers: buildAuthHeaders() });
     const d = await r.json();
     if (!r.ok) throw new Error(d.error || 'Errore');
     const righe = d.piani.map(p => {
@@ -356,6 +359,8 @@ async function mostraDettaglio(e) {
 export async function apriMappaCampo(opts = {}) {
   ensureRoot();
   S.opts = opts;
+  S.personaggioId = opts.personaggioId || null;
+  S.titolo = opts.titolo || '';
   S.selezione.clear();
   S.selezionato = null;
   S.campoId = opts.campoBaseId || getCampoBaseId();
@@ -365,7 +370,7 @@ export async function apriMappaCampo(opts = {}) {
   if (!S.config) {
     const r = await fetch(apiUrl('/api/mappa/config'), { headers: buildAuthHeaders() });
     const d = await r.json();
-    if (!r.ok) { nota(d.error || 'Impossibile caricare la mappa.', 'pericolo'); return; }
+    if (!r.ok) { nota(d.error || 'Impossibile caricare la mappa.', 'pericolo'); if (typeof opts.onChiudi === 'function') opts.onChiudi(); return; }
     S.config = d;
   }
 
@@ -388,7 +393,14 @@ export function chiudiMappaCampo() {
   if (root) root.style.display = 'none';
   clearInterval(S.poll);
   S.poll = null;
+  if (typeof S.opts.onChiudi === 'function') S.opts.onChiudi();
 }
+
+window.apriMappaPersonaggio = function(idx) {
+  const p = window.party[idx];
+  if (!p || !p.id) return nota('Personaggio non valido.', 'avviso');
+  return apriMappaCampo({ personaggioId: p.id, titolo: p.nome });
+};
 
 window.apriMappaCampo = apriMappaCampo;
 window.chiudiMappaCampo = chiudiMappaCampo;

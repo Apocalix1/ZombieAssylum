@@ -17,6 +17,8 @@ import {
   RAGGIO_CAMPO_DEFAULT
 } from './mappa-config.js';
 import { creaContenutoDocumento } from './documento-utils.js';
+import { registraRotteMappaCampo, assicuraAreaCampo, invalidaConoscenza } from './mappa-campo.js';
+
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -370,6 +372,7 @@ app.post('/api/campi', authenticateUser, requireMaster, async (req, res) => {
     );
     await db.run('INSERT INTO magazzini (campo_base_id, data) VALUES (?, ?)', result.lastID, JSON.stringify(magazzinoVuoto()));
     const campo = await db.get('SELECT * FROM campi_base WHERE id = ?', result.lastID);
+    await assicuraAreaCampo(db, campo);
     res.json({ campo });
   } catch (error) {
     if (error.message.includes('UNIQUE constraint failed')) {
@@ -406,6 +409,7 @@ app.put('/api/campi/:id/posizione', authenticateUser, requireMaster, async (req,
       id
     );
     const updated = await db.get('SELECT * FROM campi_base WHERE id = ?', id);
+    await assicuraAreaCampo(db, updated);
     res.json({ campo: updated });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -1228,7 +1232,7 @@ app.delete('/api/personaggi/:id', authenticateUser, async (req, res) => {
   await db.run('DELETE FROM documenti WHERE personaggio_id = ?', id);
   // Elimina il personaggio (gli stati alterati saranno eliminati per CASCADE)
   await db.run('DELETE FROM personaggi WHERE id = ?', id);
-
+  invalidaConoscenza();
   res.json({ success: true });
 });
 
@@ -1295,6 +1299,7 @@ app.put('/api/personaggi/:id', authenticateUser, requireNotGuest, async (req, re
         'UPDATE personaggi SET data = ?, status = ?, updated_at = ?, campo_base_id = ? WHERE id = ?',
         dataJson, finalStatus, new Date().toISOString(), campoFinale, personaggioId,
     );
+    invalidaConoscenza();
 
     const updated = await db.get('SELECT * FROM personaggi WHERE id = ?', personaggioId);
     if (updated.data && typeof updated.data === 'string') {
@@ -1777,7 +1782,7 @@ app.post('/api/master/apply-state', authenticateUser, requireMaster, async (req,
   );
   res.json({ success: true });
 });
-
+registraRotteMappaCampo(app, { dbPromise, authenticateUser, requireMaster });
 // ========================= FALLBACK SPA =========================
 
 app.get('*', (req, res) => {

@@ -382,7 +382,7 @@ function lootOggettiMagici(diffLevel = 0) {
     return trovati;
 }
 
-function esplora(idx) {
+async function esplora(idx) {
     const leader = window.party[idx];
     if (!leader) return;
     if (leader.inSpedizione) {
@@ -399,19 +399,32 @@ function esplora(idx) {
     if (leader.pesoAttuale > leader.capacitaMax) {
         if (!confirm(`⚠️ Attenzione! ${leader.nome} ha lo zaino già pieno. Non potrà riportare alcun oggetto. Partire lo stesso?`)) return;
     }
-
-    const edificiInput = prompt('Quanti edifici vuoi esplorare? (1-3)', '1');
-    const numEdifici = Math.max(1, Math.min(3, parseInt(edificiInput, 10) || 1));
-    const edifici = [];
-    for (let i = 0; i < numEdifici; i++) {
-        const nome = (prompt(`Nome edificio #${i + 1} (es. E12-Piano1)`, `Edificio-${i + 1}`) || `Edificio-${i + 1}`).trim();
-        const sconosciuto = confirm(`L'edificio "${nome}" è sconosciuto al gruppo?\nOK = Sì, ANNULLA = No`);
-        let conosciutoDa = 0;
-        if (sconosciuto) {
-            conosciutoDa = Math.max(0, Math.min(3, parseInt(prompt(`Quanti membri del gruppo conoscono già "${nome}"? (0-3)`, '0') || '0', 10)));
+        let edifici = [];
+    if (confirm('Vuoi scegliere gli edifici dalla mappa del campo?\nOK = Mappa, ANNULLA = inserimento manuale')) {
+        const scelti = await new Promise(resolve => {
+            window.apriMappaCampo({
+                selezione: true,
+                onConferma: lista => { resolve(lista); window.chiudiMappaCampo(); },
+                onChiudi: () => resolve(null)
+            });
+        });
+        if (scelti && scelti.length) {
+            edifici = scelti.map(e => ({ nome: e.nome, x: e.x, y: e.y, sconosciuto: false, conosciutoDa: 0, zonaOscura: false }));
         }
-        const zonaOscura = confirm(`"${nome}" è in Zona Oscura (non rivelata)?\nOK = Sì (tempo x2), ANNULLA = No`);
-        edifici.push({ nome, sconosciuto, conosciutoDa, zonaOscura });
+    }
+    if (!edifici.length) {
+        const edificiInput = prompt('Quanti edifici vuoi esplorare? (1-3)', '1');
+        const numEdifici = Math.max(1, Math.min(3, parseInt(edificiInput, 10) || 1));
+        for (let i = 0; i < numEdifici; i++) {
+            const nome = (prompt(`Nome edificio #${i + 1} (es. E12-Piano1)`, `Edificio-${i + 1}`) || `Edificio-${i + 1}`).trim();
+            const sconosciuto = confirm(`L'edificio "${nome}" è sconosciuto al gruppo?\nOK = Sì, ANNULLA = No`);
+            let conosciutoDa = 0;
+            if (sconosciuto) {
+                conosciutoDa = Math.max(0, Math.min(3, parseInt(prompt(`Quanti membri del gruppo conoscono già "${nome}"? (0-3)`, '0') || '0', 10)));
+            }
+            const zonaOscura = confirm(`"${nome}" è in Zona Oscura (non rivelata)?\nOK = Sì (tempo x2), ANNULLA = No`);
+            edifici.push({ nome, sconosciuto, conosciutoDa, zonaOscura });
+        }
     }
     const usaScassinare = confirm('Usare l\'incantesimo Scassinare durante l\'esplorazione?\n(+15% stato edificio, ma +8% rischio eventi negativi)');
     const metaEsplorazione = { edifici, usaScassinare };
@@ -716,6 +729,14 @@ function terminaEsplorazione(p) {
         const edifici = Array.isArray(metaEsplorazione.edifici) && metaEsplorazione.edifici.length
             ? metaEsplorazione.edifici
             : [{ nome: 'Edificio generico' }];
+         const conCoordinate = edifici.filter(e => Number.isInteger(e.x) && Number.isInteger(e.y));
+        if (conCoordinate.length && p.id) {
+            fetch(apiUrl('/api/mappa/esplora-rivela'), {
+                method: 'POST',
+                headers: buildAuthHeaders({ 'Content-Type': 'application/json' }),
+                body: JSON.stringify({ personaggioId: p.id, edifici: conCoordinate.map(e => ({ x: e.x, y: e.y })) })
+            }).catch(err => console.warn('Rivelazione mappa fallita:', err));
+        }
         const statoMedioBase = edifici.reduce((somma, e) => somma + getStatoEsplorazioneEdificio(e.nome), 0) / edifici.length;
         const bonusScasso = getBonusScassoEsplorazione(p, !!metaEsplorazione.usaScassinare);
         const statoEffettivo = Math.min(100, Math.round(statoMedioBase * (1 + bonusScasso / 100)));

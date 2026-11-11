@@ -4,8 +4,8 @@ export const QUARTIERE = 1000;
 export const TILE = 100;
 
 export const TIPI_ZONA = ['parco', 'strada'];
-export const TIPI_EDIFICIO = ['appartamenti'];
-export const TIPI_PIANO = ['abitazione'];
+export const TIPI_EDIFICIO = ['appartamenti', 'commerciale', 'misto'];
+export const TIPI_PIANO = ['abitazione', 'commerciale', 'misto'];
 
 export const MIN_PIANI = { appartamenti: 3 };
 

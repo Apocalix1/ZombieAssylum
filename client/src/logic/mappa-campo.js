@@ -77,6 +77,60 @@ async function accessoCampo(db, user, campoId) {
   return !!r;
 }
 
+async function accessoPersonaggio(db, user, pgId) {
+  if (user.role === 'master') return true;
+  if (user.role === 'ospite') return false;
+  const r = await db.get('SELECT 1 AS ok FROM personaggi WHERE id = ? AND user_id = ?', pgId, user.id);
+  return !!r;
+}
+
+// Mappa di UN personaggio: area del suo campo + ciò che ha esplorato lui.
+async function getConoscenzaPersonaggio(db, pgId) {
+  const chiave = `p${pgId}`;
+  const c = cache.get(chiave);
+  if (c && Date.now() - c.t < CACHE_MS) return c.dati;
+
+  const pg = await db.get("SELECT id, campo_base_id, data FROM personaggi WHERE id = ? AND status = 'vivo'", pgId);
+  if (!pg) return null;
+
+  const visti = new Set();
+  const quadrati = [];
+  const aggiungi = q => {
+    const k = `${q.x1},${q.y1},${q.x2},${q.y2}`;
+    if (!visti.has(k)) { visti.add(k); quadrati.push(q); }
+  };
+
+  const campo = await db.get('SELECT id, nome, pos_x, pos_y, raggio FROM campi_base WHERE id = ?', pg.campo_base_id);
+  if (campo && Number.isInteger(campo.pos_x) && Number.isInteger(campo.pos_y)) {
+    aggiungi(quadrato(campo.pos_x, campo.pos_y, campo.raggio ?? RAGGIO_CAMPO_DEFAULT));
+  }
+
+  let autoctoni = false;
+  try {
+    autoctoni = (JSON.parse(pg.data || '{}').perks || [])
+      .some(p => (typeof p === 'string' ? p : p?.nome) === 'Autoctono');
+  } catch { /* dati corrotti */ }
+
+  const riv = await db.all('SELECT cx, cy, raggio FROM mappa_rivelazioni WHERE personaggio_id = ?', pgId);
+  riv.forEach(r => aggiungi(quadrato(r.cx, r.cy, r.raggio)));
+
+  const dati = { campo, quadrati, autoctoni };
+  cache.set(chiave, { t: Date.now(), dati });
+  return dati;
+}
+
+// Sceglie la conoscenza (personaggio o campo) e risponde da sé in caso di errore.
+async function risolviConoscenza(db, user, pgId, campoId, res) {
+  if (pgId) {
+    if (!(await accessoPersonaggio(db, user, pgId))) { res.status(403).json({ error: 'Non hai accesso a questo personaggio' }); return null; }
+    const n = await getConoscenzaPersonaggio(db, pgId);
+    if (!n) { res.status(404).json({ error: 'Personaggio non in gioco' }); return null; }
+    return n;
+  }
+  if (!(await accessoCampo(db, user, campoId))) { res.status(403).json({ error: 'Non hai accesso a questo campo' }); return null; }
+  return getConoscenza(db, campoId);
+}
+
 // ---------- Funzioni riusabili dalla logica di esplorazione (parte 2) ----------
 
 // Genera l'area (se serve), assegna i gradi agli edifici scoperti e registra la rivelazione
@@ -110,13 +164,17 @@ export function registraRotteMappaCampo(app, { dbPromise, authenticateUser, requ
       const x = parseInt(req.query.x, 10), y = parseInt(req.query.y, 10);
       const w = parseInt(req.query.w, 10), h = parseInt(req.query.h, 10);
       const campoId = parseInt(req.query.campoBaseId, 10);
-      if ([x, y, w, h, campoId].some(Number.isNaN)) return res.status(400).json({ error: 'x, y, w, h, campoBaseId obbligatori' });
+      const pgId = req.query.personaggioId ? parseInt(req.query.personaggioId, 10) : null;
+      if ([x, y, w, h].some(Number.isNaN) || Number.isNaN(pgId) || (pgId === null && Number.isNaN(campoId))) {
+        return res.status(400).json({ error: 'x, y, w, h e campoBaseId (o personaggioId) obbligatori' });
+      }
       if (w <= 0 || h <= 0 || w > TILE || h > TILE) return res.status(400).json({ error: `w e h tra 1 e ${TILE}` });
       if (x < 0 || y < 0 || x >= GRID_W || y >= GRID_H) return res.status(400).json({ error: 'Tile fuori griglia' });
       if (!(await accessoCampo(db, req.user, campoId))) return res.status(403).json({ error: 'Non hai accesso a questo campo' });
 
-      const x2 = Math.min(GRID_W - 1, x + w - 1), y2 = Math.min(GRID_H - 1, y + h - 1);
-      const noti = await getConoscenza(db, campoId);
+       const x2 = Math.min(GRID_W - 1, x + w - 1), y2 = Math.min(GRID_H - 1, y + h - 1);
+      const noti = await risolviConoscenza(db, req.user, pgId, campoId, res);
+      if (!noti) return;
 
       const locali = noti.quadrati
         .filter(q => q.x1 <= x2 && q.x2 >= x && q.y1 <= y2 && q.y2 >= y)
@@ -181,18 +239,42 @@ export function registraRotteMappaCampo(app, { dbPromise, authenticateUser, requ
     }
   });
 
+    app.post('/api/mappa/esplora-rivela', authenticateUser, async (req, res) => {
+    try {
+      const db = await dbPromise;
+      const id = parseInt(req.body?.personaggioId, 10);
+      const lista = Array.isArray(req.body?.edifici) ? req.body.edifici.slice(0, 3) : [];
+      if (!Number.isInteger(id) || !lista.length) return res.status(400).json({ error: 'personaggioId ed edifici richiesti' });
+      if (!(await accessoPersonaggio(db, req.user, id))) return res.status(403).json({ error: 'Non autorizzato' });
+
+      let rivelati = 0;
+      for (const e of lista) {
+        const x = parseInt(e?.x, 10), y = parseInt(e?.y, 10);
+        if ([x, y].some(Number.isNaN) || x < 0 || y < 0 || x >= GRID_W || y >= GRID_H) continue;
+        // solo edifici che esistono davvero: niente rivelazioni di coordinate inventate
+        if (!(await db.get('SELECT 1 AS ok FROM mappa_edifici WHERE x = ? AND y = ?', x, y))) continue;
+        await rivelaPerPersonaggi(db, [id], x, y, RAGGIO_RIVELAZIONE);
+        rivelati++;
+      }
+      res.json({ success: true, rivelati });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // Dettaglio edificio visto da un campo (grado e attività interne solo se esplorato)
   app.get('/api/mappa/campo/edificio/:id', authenticateUser, async (req, res) => {
     try {
       const db = await dbPromise;
       const id = parseInt(req.params.id, 10);
       const campoId = parseInt(req.query.campoBaseId, 10);
-      if (Number.isNaN(id) || Number.isNaN(campoId)) return res.status(400).json({ error: 'Parametri non validi' });
-      if (!(await accessoCampo(db, req.user, campoId))) return res.status(403).json({ error: 'Non hai accesso a questo campo' });
+      const pgId = req.query.personaggioId ? parseInt(req.query.personaggioId, 10) : null;
+      if (Number.isNaN(id) || Number.isNaN(pgId) || (pgId === null && Number.isNaN(campoId))) return res.status(400).json({ error: 'Parametri non validi' });
 
       const ed = await db.get('SELECT id, x, y, nome, tipo, autoctoni FROM mappa_edifici WHERE id = ?', id);
       if (!ed) return res.status(404).json({ error: 'Edificio non trovato' });
-      const noti = await getConoscenza(db, campoId);
+      const noti = await risolviConoscenza(db, req.user, pgId, campoId, res);
+      if (!noti) return;
       const noto = noti.quadrati.some(q => dentro(q, ed.x, ed.y)) || (noti.autoctoni && ed.autoctoni);
       if (!noto) return res.status(404).json({ error: 'Edificio non visibile' });
 
