@@ -308,8 +308,10 @@ async function campoDelPersonaggioDellUtente() {
     if (!user || user.role === 'master' || user.role === 'ospite') return null;
     try {
         const personaggi = await fetchUserCharacters();
-        const vivo = personaggi.find(c => c.status === 'vivo' && Number.isInteger(c.campo_base_id));
-        return vivo ? vivo.campo_base_id : null;
+        const vivi = personaggi.filter(c => c.status === 'vivo' && Number.isInteger(c.campo_base_id));
+        // Se il campo scelto è uno dei suoi, resta lì; altrimenti il primo in cui ha un personaggio
+        const attuale = window.campoBaseCorrente && vivi.find(c => c.campo_base_id === window.campoBaseCorrente.id);
+        return (attuale || vivi[0])?.campo_base_id ?? null;
     } catch {
         return null;
     }
@@ -324,4 +326,84 @@ window.initCampoBaseCorrenteUI = async function(preferredId = null) {
         notifica(`Il campo base precedente non è più disponibile: sei su "${campo.nome}".`, 'avviso');
     }
     return campo;
+};
+
+async function campiDelGiocatore() {
+    const personaggi = await fetchUserCharacters();
+    const conteggio = new Map();
+    personaggi
+        .filter(c => c.status === 'vivo' && Number.isInteger(c.campo_base_id))
+        .forEach(c => conteggio.set(c.campo_base_id, (conteggio.get(c.campo_base_id) || 0) + 1));
+    const campi = await fetchCampiBase();
+    return campi.filter(c => conteggio.has(c.id)).map(c => ({ ...c, miei: conteggio.get(c.id) }));
+}
+
+function apriSelezioneCampoGiocatore(campi, risolvi) {
+    let modal = document.getElementById('modal-campo-giocatore');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'modal-campo-giocatore';
+        modal.className = 'modal';
+        document.body.appendChild(modal);
+    }
+    modal.innerHTML = `
+        <div class="modal-content" style="max-width:480px;">
+            <h2 style="color:#f1c40f;">🏕️ I tuoi campi base</h2>
+            <div style="display:grid; gap:8px; margin:14px 0;">
+                ${campi.map(c => `
+                    <button class="btn-big js-campo-giocatore" data-campo-id="${c.id}"
+                            style="text-align:left; display:flex; justify-content:space-between;">
+                        <span>${escapeHtml(c.nome)}</span>
+                        <span style="color:#888; font-size:0.8rem;">${escapeHtml(c.miei)} tuoi pg</span>
+                    </button>`).join('')}
+            </div>
+            <div class="modal-footer">
+                <button class="btn-big btn-cancel" id="campo-giocatore-annulla">ANNULLA</button>
+            </div>
+        </div>`;
+    const perId = new Map(campi.map(c => [c.id, c]));
+    modal.querySelectorAll('.js-campo-giocatore').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const c = perId.get(parseInt(btn.dataset.campoId, 10));
+            modal.style.display = 'none';
+            risolvi(c ? { id: c.id, nome: c.nome } : null);
+        });
+    });
+    modal.querySelector('#campo-giocatore-annulla').addEventListener('click', () => {
+        modal.style.display = 'none';
+        risolvi(null);
+    });
+    modal.style.display = 'block';
+}
+
+// Ritorna {id, nome} oppure null. Con saltaSeUnico non mostra il menù se il campo è uno solo.
+window.chiediCampoGiocatore = async function({ saltaSeUnico = false } = {}) {
+    let campi = [];
+    try {
+        campi = await campiDelGiocatore();
+    } catch (e) {
+        alert('Errore caricamento campi base: ' + e.message);
+        return null;
+    }
+    if (!campi.length) {
+        alert('Non hai personaggi in nessun campo base.');
+        return null;
+    }
+    if (saltaSeUnico && campi.length === 1) return { id: campi[0].id, nome: campi[0].nome };
+    return new Promise(risolvi => apriSelezioneCampoGiocatore(campi, risolvi));
+};
+
+window.cambiaCampoGiocatore = async function() {
+    const campo = await window.chiediCampoGiocatore();
+    if (!campo) return;
+    if (window.campoBaseCorrente && window.campoBaseCorrente.id === campo.id) return;
+    setCampoBaseCorrente(campo);
+    notifica(`Ora sei in "${campo.nome}".`, 'info');
+    await window.ricaricaCampoCorrente();
+};
+
+// Il tasto del menù: il master vede tutti i campi, il giocatore solo i suoi
+window.cambiaCampo = function() {
+    const user = getCurrentUser();
+    return user && user.role === 'master' ? window.masterCambiaCampoVisuale() : window.cambiaCampoGiocatore();
 };

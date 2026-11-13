@@ -10,7 +10,7 @@
 // - Quello che il Master ha già disegnato a mano non viene mai sovrascritto.
 
 import { GRID_W, GRID_H } from './mappa-config.js';
-import { TIPOLOGIE } from './mappa-tipologie.js';
+import { TIPOLOGIE } from './mappa_tipologia.js';
 
 export const SEED = 20260101;
 export const CHUNK = 48;

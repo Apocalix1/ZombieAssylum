@@ -423,13 +423,7 @@ async function showGameScreen(role) {
     }
 
     const cambiaCampoBtn = document.getElementById('btn-cambia-campo');
-    if (cambiaCampoBtn) {
-        if (role === 'Master') {
-            cambiaCampoBtn.classList.remove('hidden');
-        } else {
-            cambiaCampoBtn.classList.add('hidden');
-        }
-    }
+    if (cambiaCampoBtn) cambiaCampoBtn.classList.toggle('hidden', role === 'Ospite');
 
     const masterHubBtn = document.getElementById('btn-master-hub');
     if (masterHubBtn) {

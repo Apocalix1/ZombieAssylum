@@ -11,8 +11,8 @@
 //   - morte         -> le sue rivelazioni escono dall'unione (restano le altre)
 //   - resurrezione  -> tornano
 
-import { GRID_W, GRID_H, TILE, RAGGIO_CAMPO_DEFAULT } from './mappa-config.js';
-import { assicuraArea, assegnaGradi } from './mappa-gen.js';
+import { GRID_W, GRID_H, TILE, RAGGIO_CAMPO_DEFAULT } from '../client/src/logic/mappa-config.js';
+import { assicuraArea, assegnaGradi } from '../client/src/logic/mappa-gen.js';
 
 export const RAGGIO_RIVELAZIONE = 10;
 const CACHE_MS = 5000;
@@ -72,7 +72,8 @@ async function getConoscenza(db, campoId) {
 const dentro = (q, x, y) => x >= q.x1 && x <= q.x2 && y >= q.y1 && y <= q.y2;
 
 async function accessoCampo(db, user, campoId) {
-  if (user.role === 'master' || user.role === 'ospite') return true;
+  if (user.role === 'master') return true;
+  if (user.role === 'ospite') return campoId === 1; // solo il campo predefinito
   const r = await db.get("SELECT 1 AS ok FROM personaggi WHERE user_id = ? AND campo_base_id = ? AND status = 'vivo' LIMIT 1", user.id, campoId);
   return !!r;
 }

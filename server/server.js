@@ -15,7 +15,7 @@ import {
   MIN_PIANI,
   ESPLORAZIONE,
   RAGGIO_CAMPO_DEFAULT
-} from './mappa-config.js';
+} from '../client/src/logic/mappa-config.js';
 import { creaContenutoDocumento } from './documento-utils.js';
 import { registraRotteMappaCampo, assicuraAreaCampo, invalidaConoscenza } from './mappa-campo.js';
 
@@ -249,7 +249,7 @@ function redactCharacterData(data, mostraInventario = false) {
   };
 }
 
-app.get('/api/party', authenticateUser, async (req, res) => {
+app.get('/api/party',authenticateUser, requireCampoAccess, async (req, res) => { 
   try {
     const db = await dbPromise;
     const campoBaseId = req.query.campoBaseId ? parseInt(req.query.campoBaseId, 10) : null;
@@ -322,6 +322,32 @@ function requireNotGuest(req, res, next) {
     return res.status(403).json({ error: 'Operazione non consentita per utenti ospite' });
   }
   next();
+}
+
+const CAMPO_OSPITE_ID = 1;
+
+async function puoAccedereCampo(db, user, campoId) {
+  if (user.role === 'master') return true;
+  if (user.role === 'ospite') return campoId === CAMPO_OSPITE_ID;
+  const r = await db.get(
+    "SELECT 1 AS ok FROM personaggi WHERE user_id = ? AND campo_base_id = ? AND status = 'vivo' LIMIT 1",
+    user.id, campoId
+  );
+  return !!r;
+}
+
+// Legge campoBaseId da query o body (se manca vale 1, come nelle rotte)
+async function requireCampoAccess(req, res, next) {
+  const raw = req.query.campoBaseId ?? req.body?.campoBaseId;
+  const campoId = (raw === undefined || raw === '') ? 1 : parseInt(raw, 10);
+  if (!Number.isInteger(campoId)) return res.status(400).json({ error: 'campoBaseId non valido' });
+  try {
+    const db = await dbPromise;
+    if (await puoAccedereCampo(db, req.user, campoId)) return next();
+    res.status(403).json({ error: 'Non hai personaggi in questo campo base' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 }
 
 // ========================= ROUTE: PING =========================
@@ -881,7 +907,7 @@ app.put('/api/mondo', authenticateUser, requireMaster, async (req, res) => {
 
 // ========================= ROUTE: LOG EVENTI (per campo) =========================
 
-app.get('/api/eventi', authenticateUser, async (req, res) => {
+app.get('/api/eventi',authenticateUser, requireCampoAccess, async (req, res) => {
   const campoBaseId = parseInt(req.query.campoBaseId, 10);
   if (isNaN(campoBaseId)) return res.status(400).json({ error: 'campoBaseId richiesto' });
   try {
@@ -896,7 +922,7 @@ app.get('/api/eventi', authenticateUser, async (req, res) => {
   }
 });
 
-app.post('/api/eventi', authenticateUser, async (req, res) => {
+app.post('/api/eventi',authenticateUser, requireCampoAccess, async (req, res) => {
   const { campoBaseId, oraGioco, tipo, messaggio, personaggioNome } = req.body;
   if (!campoBaseId || !messaggio) return res.status(400).json({ error: 'Dati mancanti' });
   try {
@@ -913,7 +939,10 @@ app.post('/api/eventi', authenticateUser, async (req, res) => {
 
 app.post('/api/eventi/segna-letti', authenticateUser, async (req, res) => {
   const { campoBaseId } = req.body;
-  if (!campoBaseId) return res.status(400).json({ error: 'campoBaseId richiesto' });
+   if (!campoBaseId) return res.status(400).json({ error: 'campoBaseId richiesto per la biblioteca' });
+        if (!(await puoAccedereCampo(db, req.user, campoBaseId))) {
+          return res.status(403).json({ error: 'Non hai personaggi in questo campo base' });
+        }
   try {
     const db = await dbPromise;
     await db.run('UPDATE eventi_log SET letto = 1 WHERE campo_base_id = ?', campoBaseId);
