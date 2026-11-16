@@ -1,33 +1,29 @@
 // mappa-gen.js
-// Generazione procedurale della mappa (1560x1000), lazy e deterministica.
+// Generazione procedurale a BLOCCHI (lazy e deterministica).
 //
-// - La mappa è divisa in CHUNK da 48x48 caselle (= 4x4 isolati da 12).
-// - Ogni isolato: 2 caselle di strada + 10x10 caselle interne (parco o edifici).
-// - Un chunk viene generato (e salvato nel DB) solo quando serve: alla rivelazione
-//   di un'area (campo, esplorazione) o su richiesta del Master.
-// - Il risultato dipende solo da SEED + coordinate: stessa mappa, sempre.
-//   NON cambiare SEED, PITCH, CHUNK dopo la prima generazione.
-// - Quello che il Master ha già disegnato a mano non viene mai sovrascritto.
+// - La mappa è una griglia di strade da 1 casella che racchiudono blocchi da 2x2 a 5x5.
+// - Un blocco viene generato (strade intorno + edifici dentro) solo quando un'area che lo tocca viene rivelata.
+// - Tutto dipende solo da SEED + indici del blocco: stesso risultato, in qualunque ordine.
+//   NON cambiare SEED o la logica di costruisciAsse dopo la prima generazione.
+// - I parchi non si generano mai: li disegna il master. Le caselle già occupate non vengono toccate.
 
 import { GRID_W, GRID_H } from './mappa-config.js';
-import { TIPOLOGIE } from './mappa_tipologia.js';
+import { TIPOLOGIE } from './mappa-tipologie.js';
 
 export const SEED = 20260101;
-export const CHUNK = 48;
-const PITCH = 12;
-const STRADA = 2;
-const LATO = PITCH - STRADA; // 10
-const BLOCCHI_PER_CHUNK = CHUNK / PITCH;
+// Le suddivisioni si calcolano ben oltre i limiti: allargare la mappa non le cambia.
+const MAX_ASSE = 4096;
 
-const FUORI = 255, VUOTO = 0, C_STRADA = 1, C_PARCO = 2, C_EDIFICIO = 3;
-
-// Parametri di generazione (modificabili: valgono solo per i chunk NON ancora generati)
-const P_PARCO = 0.12;
-const DENSITA = [{ d: 0.4, peso: 25 }, { d: 0.6, peso: 45 }, { d: 0.8, peso: 30 }];
-const PIANI_PESI = [{ n: 1, peso: 30 }, { n: 2, peso: 30 }, { n: 3, peso: 20 }, { n: 4, peso: 10 }, { n: 5, peso: 6 }, { n: 6, peso: 4 }];
-const P_COMMERCIALE_TERRA = 0.75;
-const P_COMMERCIALE_SOPRA = 0.12;
-const P_ABITAZIONE_IN_COMMERCIALE = 0.2; // piano "misto"
+// Edifici
+const P_PALAZZO = 60;        // % palazzo a 2 piani
+const P_APPARTAMENTI = 30;   // % sistema di appartamenti (il resto, 10%, sono gli speciali)
+const SPECIALI = [{ chiave: 'hotel', peso: 40 }, { chiave: 'conservazione', peso: 5 }]; // % sugli speciali; il resto = palazzo
+const PALAZZO_ABITAZIONI = [{ n: 1, peso: 60 }, { n: 2, peso: 30 }, { n: 3, peso: 10 }];
+const APP_PIANI = [{ n: 3, peso: 40 }, { n: 4, peso: 30 }, { n: 5, peso: 20 }, { n: 6, peso: 10 }];
+const APP_PER_PIANO = [{ n: 2, peso: 50 }, { n: 3, peso: 30 }, { n: 4, peso: 20 }];
+const P_ATTIVITA_APPARTAMENTI = 0.4;
+const ABITAZIONI_PER_CELLA = 6;
+const FORME = { 1: [[1, 1]], 2: [[2, 1], [1, 2]], 3: [[3, 1], [1, 3]], 4: [[2, 2], [4, 1], [1, 4]] };
 
 // ---------- RNG deterministico ----------
 function hash(...valori) {
@@ -60,124 +56,155 @@ function pesato(r, voci, peso = v => v.peso) {
   return voci[voci.length - 1];
 }
 
+// ---------- Griglia dei blocchi ----------
+// Per ogni asse: strade[k] = coordinata della k-esima strada; blocchi[k] = intervallo subito dopo.
+function costruisciAsse(seme) {
+  const r = creaRng(seme);
+  const strade = [], blocchi = [];
+  let pos = 0;
+  while (pos < MAX_ASSE) {
+    strade.push(pos);
+    pos += 1;
+    const dim = 2 + Math.floor(r() * 4); // 2..5
+    blocchi.push({ a: pos, b: pos + dim - 1 });
+    pos += dim;
+  }
+  return { strade, blocchi };
+}
+const ASSE_X = costruisciAsse(hash(SEED, 1));
+const ASSE_Y = costruisciAsse(hash(SEED, 2));
+
+// Indici dei blocchi che intersecano [v1, v2]
+function blocchiTra(asse, v1, v2) {
+  let lo = 0, hi = asse.blocchi.length - 1, primo = asse.blocchi.length;
+  while (lo <= hi) {
+    const m = (lo + hi) >> 1;
+    if (asse.blocchi[m].b >= v1) { primo = m; hi = m - 1; } else lo = m + 1;
+  }
+  const out = [];
+  for (let i = primo; i < asse.blocchi.length && asse.blocchi[i].a <= v2; i++) out.push(i);
+  return out;
+}
+
 // ---------- Edifici ----------
-function nuovaAttivita(r, usate) {
-  let t, tentativi = 0;
-  do {
-    t = pesato(r, TIPOLOGIE);
-    tentativi++;
-  } while (usate.has(t.chiave) && tentativi < 6);
-  usate.add(t.chiave);
+function nuovaAttivita(r) {
+  const t = pesato(r, TIPOLOGIE);
   let qualita = null;
   if (t.qualita) qualita = pesato(r, t.qualita.map(([k, p]) => ({ k, peso: p }))).k;
   return { categoria: t.chiave, qualita };
 }
 
-function costruisciPiano(r, terra) {
-  const commerciale = r() < (terra ? P_COMMERCIALE_TERRA : P_COMMERCIALE_SOPRA);
-  const attivita = [];
-  if (commerciale) {
-    const k = terra ? (r() < 0.3 ? 2 : 1) + (r() < 0.08 ? 1 : 0) : 1;
-    const usate = new Set();
-    for (let i = 0; i < k; i++) attivita.push(nuovaAttivita(r, usate));
-    if (r() < P_ABITAZIONE_IN_COMMERCIALE) attivita.push({ categoria: 'abitazione', qualita: null });
-  } else {
-    const k = 1 + Math.floor(r() * 3);
-    for (let i = 0; i < k; i++) attivita.push({ categoria: 'abitazione', qualita: null });
-  }
-  return { attivita };
+const abitazioni = n => Array.from({ length: n }, () => ({ categoria: 'abitazione', qualita: null }));
+
+function generaPalazzo(r) {
+  return {
+    tipo: 'misto',
+    celle: 1,
+    piani: [
+      { tipo: 'commerciale', attivita: [nuovaAttivita(r)] },
+      { tipo: 'abitazione', attivita: abitazioni(pesato(r, PALAZZO_ABITAZIONI).n) }
+    ]
+  };
 }
 
-function tipoPiano(piano) {
-  const ab = piano.attivita.some(a => a.categoria === 'abitazione');
-  const co = piano.attivita.some(a => a.categoria !== 'abitazione');
-  return ab && co ? 'misto' : (ab ? 'abitazione' : 'commerciale');
+function generaAppartamenti(r) {
+  const n = pesato(r, APP_PIANI).n;
+  const perPiano = pesato(r, APP_PER_PIANO).n;
+  const conAttivita = r() < P_ATTIVITA_APPARTAMENTI;
+  const piani = [];
+  for (let p = 1; p <= n; p++) {
+    if (p === 1 && conAttivita) piani.push({ tipo: 'commerciale', attivita: [nuovaAttivita(r)] });
+    else piani.push({ tipo: 'abitazione', attivita: abitazioni(perPiano) });
+  }
+  const totale = perPiano * (conAttivita ? n - 1 : n);
+  return {
+    tipo: conAttivita ? 'misto' : 'appartamenti',
+    celle: Math.max(1, Math.ceil(totale / ABITAZIONI_PER_CELLA)),
+    piani
+  };
+}
+
+function generaSpeciale(chiave) {
+  return {
+    tipo: 'commerciale',
+    celle: 1,
+    piani: [{ tipo: 'commerciale', attivita: [{ categoria: chiave, qualita: null }] }]
+  };
 }
 
 function generaEdificio(r) {
-  const n = pesato(r, PIANI_PESI).n;
-  const piani = [];
-  for (let p = 1; p <= n; p++) piani.push(costruisciPiano(r, p === 1));
-  let tutteAbitazioni = piani.every(p => p.attivita.every(a => a.categoria === 'abitazione'));
-  // Un "sistema di appartamenti" ha minimo 3 piani
-  if (tutteAbitazioni) {
-    while (piani.length < 3) piani.push({ attivita: [{ categoria: 'abitazione', qualita: null }] });
+  const x = r() * 100;
+  if (x < P_PALAZZO) return generaPalazzo(r);
+  if (x < P_PALAZZO + P_APPARTAMENTI) return generaAppartamenti(r);
+  const s = r() * 100;
+  let acc = 0;
+  for (const sp of SPECIALI) {
+    acc += sp.peso;
+    if (s < acc) return generaSpeciale(sp.chiave);
   }
-  piani.forEach(p => { p.tipo = tipoPiano(p); });
-  const tuttiCommerciali = piani.every(p => p.tipo === 'commerciale');
-  const tipo = tutteAbitazioni ? 'appartamenti' : (tuttiCommerciali ? 'commerciale' : 'misto');
-  return { tipo, piani };
+  return generaPalazzo(r); // quota degli speciali non ancora definita
 }
 
-function generaBlocco(gx, gy) {
-  const r = creaRng(hash(SEED, gx, gy));
-  if (r() < P_PARCO) return { parco: true };
-  const dens = pesato(r, DENSITA).d;
-  const celle = [];
-  for (let i = 0; i < LATO * LATO; i++) celle.push(r() < dens ? generaEdificio(r) : null);
-  return { parco: false, celle };
+// Prova le forme possibili con l'angolo in (lx, ly); null se non ci sta
+function trovaForma(celle, lx, ly, w, h, occ, r) {
+  const forme = FORME[celle] || [[1, 1]];
+  const start = Math.floor(r() * forme.length);
+  for (let k = 0; k < forme.length; k++) {
+    const [fw, fh] = forme[(start + k) % forme.length];
+    if (lx + fw > w || ly + fh > h) continue;
+    let libero = true;
+    for (let dy = 0; dy < fh && libero; dy++)
+      for (let dx = 0; dx < fw; dx++)
+        if (occ[(ly + dy) * w + lx + dx]) { libero = false; break; }
+    if (libero) return [fw, fh];
+  }
+  return null;
 }
 
-// ---------- Chunk ----------
-export function generaChunk(cx, cy) {
-  const x0 = cx * CHUNK, y0 = cy * CHUNK;
-  const codici = new Uint8Array(CHUNK * CHUNK).fill(FUORI);
-  const edifici = [];
-
-  for (let ly = 0; ly < CHUNK; ly++) {
-    for (let lx = 0; lx < CHUNK; lx++) {
-      const x = x0 + lx, y = y0 + ly;
-      if (x >= GRID_W || y >= GRID_H) continue;
-      codici[ly * CHUNK + lx] = (x % PITCH < STRADA || y % PITCH < STRADA) ? C_STRADA : VUOTO;
-    }
-  }
-
-  for (let by = 0; by < BLOCCHI_PER_CHUNK; by++) {
-    for (let bx = 0; bx < BLOCCHI_PER_CHUNK; bx++) {
-      const gx = cx * BLOCCHI_PER_CHUNK + bx;
-      const gy = cy * BLOCCHI_PER_CHUNK + by;
-      const blocco = generaBlocco(gx, gy);
-      for (let ly = 0; ly < LATO; ly++) {
-        for (let lx = 0; lx < LATO; lx++) {
-          const x = gx * PITCH + STRADA + lx;
-          const y = gy * PITCH + STRADA + ly;
-          if (x >= GRID_W || y >= GRID_H) continue;
-          const i = (y - y0) * CHUNK + (x - x0);
-          if (blocco.parco) { codici[i] = C_PARCO; continue; }
-          const def = blocco.celle[ly * LATO + lx];
-          if (def) { codici[i] = C_EDIFICIO; edifici.push({ x, y, def }); }
-        }
-      }
-    }
-  }
-  return { codici, edifici };
-}
-
-// Unisce le caselle adiacenti dello stesso tipo in rettangoli (coordinate locali al chunk)
-function rettangoli(codici, codice) {
-  const usato = new Uint8Array(CHUNK * CHUNK);
+// Riempie il blocco (occ = celle già occupate, viene aggiornato). Coordinate assolute nel risultato.
+function edificiDelBlocco(bi, bj, occ) {
+  const X = ASSE_X.blocchi[bi], Y = ASSE_Y.blocchi[bj];
+  const w = X.b - X.a + 1, h = Y.b - Y.a + 1;
+  const r = creaRng(hash(SEED, bi, bj));
   const out = [];
-  for (let y = 0; y < CHUNK; y++) {
-    for (let x = 0; x < CHUNK; x++) {
-      const i = y * CHUNK + x;
-      if (codici[i] !== codice || usato[i]) continue;
-      let x2 = x;
-      while (x2 + 1 < CHUNK && codici[y * CHUNK + x2 + 1] === codice && !usato[y * CHUNK + x2 + 1]) x2++;
-      let y2 = y;
-      while (y2 + 1 < CHUNK) {
-        let ok = true;
-        for (let xx = x; xx <= x2; xx++) {
-          const j = (y2 + 1) * CHUNK + xx;
-          if (codici[j] !== codice || usato[j]) { ok = false; break; }
-        }
-        if (!ok) break;
-        y2++;
-      }
-      for (let yy = y; yy <= y2; yy++) for (let xx = x; xx <= x2; xx++) usato[yy * CHUNK + xx] = 1;
-      out.push({ codice, x1: x, y1: y, x2, y2 });
+  for (let ly = 0; ly < h; ly++) {
+    for (let lx = 0; lx < w; lx++) {
+      if (occ[ly * w + lx]) continue;
+      let def = generaEdificio(r);
+      let forma = def.celle > 1 ? trovaForma(def.celle, lx, ly, w, h, occ, r) : [1, 1];
+      if (!forma) { def = generaPalazzo(r); forma = [1, 1]; } // non ci sta: ripiega su un palazzo da 1 casella
+      for (let dy = 0; dy < forma[1]; dy++)
+        for (let dx = 0; dx < forma[0]; dx++) occ[(ly + dy) * w + lx + dx] = 1;
+      out.push({ x: X.a + lx, y: Y.a + ly, w: forma[0], h: forma[1], def });
     }
   }
   return out;
+}
+
+// ---------- Strade ----------
+// Unità di strada (ognuna registrata una sola volta, così blocchi vicini non duplicano):
+//  'H' (riga m, colonna di blocchi i): y = strada m, da x = strada i fino alla fine del blocco i
+//  'V' (colonna k, riga di blocchi j): x = strada k, lungo l'altezza del blocco j
+function rettangoloStrada(tipo, a, b) {
+  if (tipo === 'H') {
+    const bl = ASSE_X.blocchi[b], y = ASSE_Y.strade[a];
+    if (!bl || y === undefined) return null;
+    return { x1: ASSE_X.strade[b], y1: y, x2: bl.b, y2: y };
+  }
+  const bl = ASSE_Y.blocchi[b], x = ASSE_X.strade[a];
+  if (!bl || x === undefined) return null;
+  return { x1: x, y1: bl.a, x2: x, y2: bl.b };
+}
+
+async function _assicuraStrada(db, tipo, a, b) {
+  const rc = rettangoloStrada(tipo, a, b);
+  if (!rc) return;
+  const x1 = Math.max(0, rc.x1), y1 = Math.max(0, rc.y1);
+  const x2 = Math.min(GRID_W - 1, rc.x2), y2 = Math.min(GRID_H - 1, rc.y2);
+  if (x1 > x2 || y1 > y2) return;
+  const r = await db.run('INSERT OR IGNORE INTO mappa_strade_gen (tipo, a, b) VALUES (?, ?, ?)', tipo, a, b);
+  if (!r.changes) return;
+  await db.run("INSERT INTO mappa_zone (tipo, nome, x1, y1, x2, y2, esplorato) VALUES ('strada', NULL, ?, ?, ?, ?, 0)", x1, y1, x2, y2);
 }
 
 // ---------- Persistenza ----------
@@ -196,39 +223,46 @@ async function inserisciBatch(db, tabella, colonne, righe, max = 100) {
   }
 }
 
-async function _assicuraChunk(db, cx, cy) {
-  if (await db.get('SELECT 1 AS ok FROM mappa_chunk WHERE cx = ? AND cy = ?', cx, cy)) return false;
+async function _assicuraBlocco(db, bi, bj) {
+  if (await db.get('SELECT 1 AS ok FROM mappa_blocchi WHERE bi = ? AND bj = ?', bi, bj)) return false;
+  const X = ASSE_X.blocchi[bi], Y = ASSE_Y.blocchi[bj];
+  if (!X || !Y) return false;
+  const w = X.b - X.a + 1, h = Y.b - Y.a + 1;
 
-  const { codici, edifici } = generaChunk(cx, cy);
-  const x0 = cx * CHUNK, y0 = cy * CHUNK;
-  const x1 = x0 + CHUNK - 1, y1 = y0 + CHUNK - 1;
+  // Caselle già occupate: edifici e zone esistenti (parchi del master compresi) e celle fuori griglia
+  const occ = new Uint8Array(w * h);
+  const segna = (x1, y1, x2, y2) => {
+    for (let y = Math.max(y1, Y.a); y <= Math.min(y2, Y.b); y++)
+      for (let x = Math.max(x1, X.a); x <= Math.min(x2, X.b); x++) occ[(y - Y.a) * w + (x - X.a)] = 1;
+  };
+  const ed = await db.all('SELECT x, y, w, h FROM mappa_edifici WHERE x <= ? AND x + w - 1 >= ? AND y <= ? AND y + h - 1 >= ?', X.b, X.a, Y.b, Y.a);
+  ed.forEach(e => segna(e.x, e.y, e.x + e.w - 1, e.y + e.h - 1));
+  const zone = await db.all('SELECT x1, y1, x2, y2 FROM mappa_zone WHERE x1 <= ? AND x2 >= ? AND y1 <= ? AND y2 >= ?', X.b, X.a, Y.b, Y.a);
+  zone.forEach(z => segna(z.x1, z.y1, z.x2, z.y2));
+  for (let ly = 0; ly < h; ly++)
+    for (let lx = 0; lx < w; lx++)
+      if (X.a + lx >= GRID_W || Y.a + ly >= GRID_H) occ[ly * w + lx] = 1;
 
-  // Non sovrascrivere ciò che il Master ha già disegnato
-  const occ = new Uint8Array(CHUNK * CHUNK);
-  const edEsistenti = await db.all('SELECT x, y FROM mappa_edifici WHERE x BETWEEN ? AND ? AND y BETWEEN ? AND ?', x0, x1, y0, y1);
-  edEsistenti.forEach(e => { occ[(e.y - y0) * CHUNK + (e.x - x0)] = 1; });
-  const zoneEsistenti = await db.all('SELECT x1, y1, x2, y2 FROM mappa_zone WHERE x1 <= ? AND x2 >= ? AND y1 <= ? AND y2 >= ?', x1, x0, y1, y0);
-  zoneEsistenti.forEach(z => {
-    for (let y = Math.max(z.y1, y0); y <= Math.min(z.y2, y1); y++)
-      for (let x = Math.max(z.x1, x0); x <= Math.min(z.x2, x1); x++) occ[(y - y0) * CHUNK + (x - x0)] = 1;
-  });
-  for (let i = 0; i < occ.length; i++) if (occ[i]) codici[i] = FUORI;
-  const daCreare = edifici.filter(e => !occ[(e.y - y0) * CHUNK + (e.x - x0)]);
+  const nuovi = edificiDelBlocco(bi, bj, occ);
 
   await db.run('BEGIN');
   try {
-    const rz = [...rettangoli(codici, C_STRADA), ...rettangoli(codici, C_PARCO)];
-    await inserisciBatch(db, 'mappa_zone', ['tipo', 'nome', 'x1', 'y1', 'x2', 'y2', 'esplorato'],
-      rz.map(r => [r.codice === C_STRADA ? 'strada' : 'parco', null, x0 + r.x1, y0 + r.y1, x0 + r.x2, y0 + r.y2, 0]));
+    // 1) prima la struttura stradale che circonda il blocco
+    const unita = [
+      ['H', bj, bi], ['H', bj, bi + 1], ['H', bj + 1, bi], ['H', bj + 1, bi + 1],
+      ['V', bi, bj], ['V', bi + 1, bj]
+    ];
+    for (const [tipo, a, b] of unita) await _assicuraStrada(db, tipo, a, b);
 
-    await inserisciBatch(db, 'mappa_edifici', ['x', 'y', 'nome', 'tipo'],
-      daCreare.map(e => [e.x, e.y, null, e.def.tipo]));
+    // 2) poi gli edifici dentro il blocco
+    await inserisciBatch(db, 'mappa_edifici', ['x', 'y', 'nome', 'tipo', 'w', 'h'],
+      nuovi.map(e => [e.x, e.y, null, e.def.tipo, e.w, e.h]));
 
-    const idRighe = await db.all('SELECT id, x, y FROM mappa_edifici WHERE x BETWEEN ? AND ? AND y BETWEEN ? AND ?', x0, x1, y0, y1);
+    const idRighe = await db.all('SELECT id, x, y FROM mappa_edifici WHERE x BETWEEN ? AND ? AND y BETWEEN ? AND ?', X.a, X.b, Y.a, Y.b);
     const ids = new Map(idRighe.map(r => [`${r.x}:${r.y}`, r.id]));
 
     const piani = [], att = [];
-    daCreare.forEach(e => {
+    nuovi.forEach(e => {
       const id = ids.get(`${e.x}:${e.y}`);
       if (!id) return;
       e.def.piani.forEach((p, i) => {
@@ -238,7 +272,7 @@ async function _assicuraChunk(db, cx, cy) {
     });
     await inserisciBatch(db, 'mappa_piani', ['edificio_id', 'piano', 'tipo', 'esplorato', 'loot_json', 'grado'], piani);
     await inserisciBatch(db, 'mappa_attivita', ['edificio_id', 'piano', 'categoria', 'qualita'], att);
-    await db.run('INSERT INTO mappa_chunk (cx, cy) VALUES (?, ?)', cx, cy);
+    await db.run('INSERT INTO mappa_blocchi (bi, bj) VALUES (?, ?)', bi, bj);
     await db.run('COMMIT');
   } catch (e) {
     await db.run('ROLLBACK').catch(() => {});
@@ -249,20 +283,21 @@ async function _assicuraChunk(db, cx, cy) {
 
 const limita = (v, a, b) => Math.max(a, Math.min(b, v));
 
-// Garantisce che tutti i chunk che toccano il rettangolo siano generati. Ritorna quanti ne ha creati.
+// Genera i blocchi che toccano il rettangolo (+1 casella di margine, per le strade di bordo).
+// Ritorna quanti blocchi ha creato.
 export function assicuraArea(db, x1, y1, x2, y2) {
-  x1 = limita(x1, 0, GRID_W - 1); x2 = limita(x2, 0, GRID_W - 1);
-  y1 = limita(y1, 0, GRID_H - 1); y2 = limita(y2, 0, GRID_H - 1);
+  x1 = limita(x1 - 1, 0, GRID_W - 1); x2 = limita(x2 + 1, 0, GRID_W - 1);
+  y1 = limita(y1 - 1, 0, GRID_H - 1); y2 = limita(y2 + 1, 0, GRID_H - 1);
   return seriale(async () => {
     let nuovi = 0;
-    for (let cy = Math.floor(y1 / CHUNK); cy <= Math.floor(y2 / CHUNK); cy++)
-      for (let cx = Math.floor(x1 / CHUNK); cx <= Math.floor(x2 / CHUNK); cx++)
-        if (await _assicuraChunk(db, cx, cy)) nuovi++;
+    for (const bj of blocchiTra(ASSE_Y, y1, y2))
+      for (const bi of blocchiTra(ASSE_X, x1, x2))
+        if (await _assicuraBlocco(db, bi, bj)) nuovi++;
     return nuovi;
   });
 }
 
-// ---------- Grado di esplorazione (algoritmo della spec) ----------
+// ---------- Grado di esplorazione (invariato) ----------
 export function probabilitaGradi(giorno) {
   const t = Math.max(0, (giorno - 7) / 23);
   const w100 = Math.max(0, 40 * (1 - 0.5 * t));
@@ -282,7 +317,6 @@ export function rollGrado(giorno) {
   return 20;
 }
 
-// Assegna il grado ai piani che non ce l'hanno ancora, nel rettangolo (alla "scoperta").
 export async function assegnaGradi(db, x1, y1, x2, y2) {
   const m = await db.get('SELECT ore_totali FROM mondo WHERE id = 1');
   const giorno = Math.floor((m?.ore_totali || 0) / 24);

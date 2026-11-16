@@ -182,7 +182,7 @@ export function registraRotteMappaCampo(app, { dbPromise, authenticateUser, requ
         .map(q => ({ x1: Math.max(q.x1, x), y1: Math.max(q.y1, y), x2: Math.min(q.x2, x2), y2: Math.min(q.y2, y2) }));
 
       const edRaw = await db.all(
-        `SELECT e.id, e.x, e.y, e.nome, e.tipo, e.autoctoni,
+         `SELECT e.id, e.x, e.y, e.w, e.h, e.nome, e.tipo, e.autoctoni,
                 COUNT(p.piano) AS num_piani, COALESCE(MAX(p.esplorato), 0) AS esplorato_max
          FROM mappa_edifici e LEFT JOIN mappa_piani p ON p.edificio_id = e.id
          WHERE e.x BETWEEN ? AND ? AND e.y BETWEEN ? AND ?
@@ -228,7 +228,7 @@ export function registraRotteMappaCampo(app, { dbPromise, authenticateUser, requ
         zone,
         known: locali,
         edifici: edifici.map(e => ({
-          id: e.id, x: e.x, y: e.y, tipo: e.tipo,
+           id: e.id, x: e.x, y: e.y, w: e.w || 1, h: e.h || 1, tipo: e.tipo,
           nome: e.nome && e.nome.trim() ? e.nome : `Edificio #${e.id}`,
           num_piani: e.num_piani, esplorato_max: e.esplorato_max,
           insegne: insegne.get(e.id) || []

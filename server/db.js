@@ -364,9 +364,13 @@ export async function openDatabase() {
     await db.run('ALTER TABLE campi_base ADD COLUMN raggio INTEGER NOT NULL DEFAULT 10');
   }
   await db.exec(`
-    CREATE TABLE IF NOT EXISTS mappa_chunk (
-      cx INTEGER NOT NULL, cy INTEGER NOT NULL,
-      PRIMARY KEY (cx, cy)
+    CREATE TABLE IF NOT EXISTS mappa_blocchi (
+      bi INTEGER NOT NULL, bj INTEGER NOT NULL,
+      PRIMARY KEY (bi, bj)
+    );
+    CREATE TABLE IF NOT EXISTS mappa_strade_gen (
+      tipo TEXT NOT NULL, a INTEGER NOT NULL, b INTEGER NOT NULL,
+      PRIMARY KEY (tipo, a, b)
     );
     CREATE TABLE IF NOT EXISTS mappa_attivita (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -390,6 +394,8 @@ export async function openDatabase() {
   if (!pianiCols.includes('grado')) await db.run('ALTER TABLE mappa_piani ADD COLUMN grado INTEGER');
   const edCols = (await db.all('PRAGMA table_info(mappa_edifici)')).map(c => c.name);
   if (!edCols.includes('autoctoni')) await db.run('ALTER TABLE mappa_edifici ADD COLUMN autoctoni INTEGER NOT NULL DEFAULT 0');
+  if (!edCols.includes('w')) await db.run('ALTER TABLE mappa_edifici ADD COLUMN w INTEGER NOT NULL DEFAULT 1');
+  if (!edCols.includes('h')) await db.run('ALTER TABLE mappa_edifici ADD COLUMN h INTEGER NOT NULL DEFAULT 1');
     // Crea i campi base iniziali se non esistono (retrocompatibilità + seed richiesto)
   const campoDefault = await db.get('SELECT id, nome FROM campi_base WHERE id = 1');
   if (!campoDefault) {

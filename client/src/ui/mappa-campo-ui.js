@@ -211,7 +211,10 @@ async function scaricaTile(tx, ty, k) {
 
 function ricostruisciIndice() {
   S.edIdx.clear();
-  S.tiles.forEach(t => t.dati.edifici.forEach(e => S.edIdx.set(`${e.x}:${e.y}`, e)));
+  S.tiles.forEach(t => t.dati.edifici.forEach(e => {
+    for (let dy = 0; dy < (e.h || 1); dy++)
+      for (let dx = 0; dx < (e.w || 1); dx++) S.edIdx.set(`${e.x + dx}:${e.y + dy}`, e);
+  }));
 }
 
 // ---------- Disegno ----------
@@ -242,18 +245,19 @@ function render() {
   tiles.forEach(d => d.edifici.forEach(e => {
     ctx.globalAlpha = e.esplorato_max >= 1 ? 1 : 0.7;
     ctx.fillStyle = coloreEdificio(e);
-    ctx.fillRect(px(e.x) + gap / 2, py(e.y) + gap / 2, c - gap, c - gap);
+    const bw = (e.w || 1) * c, bh = (e.h || 1) * c;
+    ctx.fillRect(px(e.x) + gap / 2, py(e.y) + gap / 2, bw - gap, bh - gap);
     ctx.globalAlpha = 1;
     if (e.esplorato_max >= 1 && c >= 10) {
       ctx.fillStyle = '#7c9154';
-      ctx.fillRect(px(e.x) + c - 4, py(e.y) + 1, 3, 3);
+      ctx.fillRect(px(e.x) + bw - 4, py(e.y) + 1, 3, 3);
     }
   }));
 
   // Selezione multipla (esplorazione)
   ctx.lineWidth = 2;
   ctx.strokeStyle = '#c98d2c';
-  S.selezione.forEach(e => ctx.strokeRect(px(e.x) + 1, py(e.y) + 1, c - 2, c - 2));
+  S.selezione.forEach(e => ctx.strokeRect(px(e.x) + 1, py(e.y) + 1, (e.w || 1) * c - 2, (e.h || 1) * c - 2));
   if (S.selezionato) {
     ctx.strokeStyle = '#ff4d4d';
     ctx.strokeRect(px(S.selezionato.x), py(S.selezionato.y), c, c);
