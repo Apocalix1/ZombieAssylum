@@ -8,7 +8,7 @@
 // - I parchi non si generano mai: li disegna il master. Le caselle già occupate non vengono toccate.
 
 import { GRID_W, GRID_H } from './mappa-config.js';
-import { TIPOLOGIE } from './mappa-tipologie.js';
+import { TIPOLOGIE } from './mappa_tipologia.js';
 
 export const SEED = 20260101;
 // Le suddivisioni si calcolano ben oltre i limiti: allargare la mappa non le cambia.
