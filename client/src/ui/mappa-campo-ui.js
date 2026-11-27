@@ -15,7 +15,7 @@ import { escapeHtml } from './common-ui.js';
 const MAX_SELEZIONE = 3;
 const TTL_TILE = 20000;
 
-const CAT = {
+export const CAT = {
   abitazione:     ['Abitazione', '#5d6b7a'],
   alimentari:     ['Alimentari / ristoranti', '#b5832f'],
   taverna:        ['Taverna', '#9a5a2c'],
@@ -35,7 +35,7 @@ const CAT = {
   cimeli:         ['Cimeli / antiquariato', '#a08a5a'],
   animali:        ['Animali', '#7a9a4a']
 };
-const COL = { fog: '#050403', terreno: '#1d1913', strada: '#4a4743', parco: '#2f4a2b', ignoto: '#6b6358' };
+const COL = { fog: '#050403', terreno: '#2b251b', strada: '#4a4743', parco: '#2f4a2b', ignoto: '#6b6358' };
 
 const S = {
   config: null, campoId: null, campo: null,
@@ -45,7 +45,7 @@ const S = {
   opts: {}, drag: null, timer: null, poll: null
 };
 let root, canvas, ctx, pannello;
-
+const qs = () => S.personaggioId ? `personaggioId=${S.personaggioId}` : `campoBaseId=${S.campoId}`;
 function nota(msg, tipo = 'info') {
   if (typeof window.mostraNotificaInAlto === 'function') window.mostraNotificaInAlto(msg, tipo);
 }
@@ -193,7 +193,7 @@ async function scaricaTile(tx, ty, k) {
   const T = S.config.TILE;
   const x = tx * T, y = ty * T;
   const w = Math.min(T, S.config.GRID_W - x), h = Math.min(T, S.config.GRID_H - y);
-  const p = fetch(apiUrl(`/api/mappa/campo/tile?x=${x}&y=${y}&w=${w}&h=${h}&campoBaseId=${S.campoId}`), { headers: buildAuthHeaders() })
+  const p = fetch(apiUrl(`/api/mappa/campo/tile?x=${x}&y=${y}&w=${w}&h=${h}&${qs()}`), { headers: buildAuthHeaders() })
     .then(async r => {
       const dati = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(dati.error || `HTTP ${r.status}`);
@@ -211,7 +211,10 @@ async function scaricaTile(tx, ty, k) {
 
 function ricostruisciIndice() {
   S.edIdx.clear();
-  S.tiles.forEach(t => t.dati.edifici.forEach(e => S.edIdx.set(`${e.x}:${e.y}`, e)));
+  S.tiles.forEach(t => t.dati.edifici.forEach(e => {
+    for (let dy = 0; dy < (e.h || 1); dy++)
+      for (let dx = 0; dx < (e.w || 1); dx++) S.edIdx.set(`${e.x + dx}:${e.y + dy}`, e);
+  }));
 }
 
 // ---------- Disegno ----------
@@ -242,18 +245,26 @@ function render() {
   tiles.forEach(d => d.edifici.forEach(e => {
     ctx.globalAlpha = e.esplorato_max >= 1 ? 1 : 0.7;
     ctx.fillStyle = coloreEdificio(e);
-    ctx.fillRect(px(e.x) + gap / 2, py(e.y) + gap / 2, c - gap, c - gap);
+    const bw = (e.w || 1) * c, bh = (e.h || 1) * c;
+    ctx.fillRect(px(e.x) + gap / 2, py(e.y) + gap / 2, bw - gap, bh - gap);
     ctx.globalAlpha = 1;
     if (e.esplorato_max >= 1 && c >= 10) {
       ctx.fillStyle = '#7c9154';
-      ctx.fillRect(px(e.x) + c - 4, py(e.y) + 1, 3, 3);
+      ctx.fillRect(px(e.x) + bw - 4, py(e.y) + 1, 3, 3);
+    }
+     if (c >= 16) {
+      ctx.fillStyle = '#fff';
+      ctx.font = `${Math.min(12, c - 4)}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(String(e.num_piani || 1), px(e.x) + bw / 2, py(e.y) + bh / 2);
     }
   }));
 
   // Selezione multipla (esplorazione)
   ctx.lineWidth = 2;
   ctx.strokeStyle = '#c98d2c';
-  S.selezione.forEach(e => ctx.strokeRect(px(e.x) + 1, py(e.y) + 1, c - 2, c - 2));
+  S.selezione.forEach(e => ctx.strokeRect(px(e.x) + 1, py(e.y) + 1, (e.w || 1) * c - 2, (e.h || 1) * c - 2));
   if (S.selezionato) {
     ctx.strokeStyle = '#ff4d4d';
     ctx.strokeRect(px(S.selezionato.x), py(S.selezionato.y), c, c);
@@ -312,7 +323,10 @@ function mostraPannelloBase(cella = null) {
   const legenda = Object.values(CAT).map(([nome, col]) =>
     `<div style="display:flex; align-items:center; gap:6px;"><span style="display:inline-block; width:10px; height:10px; background:${col};"></span>${escapeHtml(nome)}</div>`).join('');
   pannello.innerHTML = `
-    <h3 style="margin-bottom:6px;">Mappa del campo${S.campo ? `: ${escapeHtml(S.campo.nome || '')}` : ''}</h3>
+<h3 style="margin-bottom:6px;">${S.personaggioId
+  ? `Mappa di ${escapeHtml(S.titolo)}`
+  : `Mappa del campo${S.campo ? `: ${escapeHtml(S.campo.nome || '')}` : ''}`}</h3>
+<p style="color:#a39c8f;">${S.personaggioId ? 'Vedi solo ciò che questo personaggio conosce.' : 'Vedi solo ciò che il tuo campo conosce.'} Trascina per muoverti.</p>
     <p style="color:#a39c8f;">Vedi solo ciò che il tuo campo conosce. Trascina per muoverti.</p>
     ${cella ? `<p style="margin-top:6px;">Casella ${cella.x}:${cella.y} — nessun edificio noto.</p>` : ''}
     <div style="margin-top:8px; display:grid; gap:2px; font-size:0.78rem;">
@@ -328,7 +342,7 @@ function mostraPannelloBase(cella = null) {
 async function mostraDettaglio(e) {
   pannello.innerHTML = '<p>Caricamento...</p>';
   try {
-    const r = await fetch(apiUrl(`/api/mappa/campo/edificio/${e.id}?campoBaseId=${S.campoId}`), { headers: buildAuthHeaders() });
+    const r = await fetch(apiUrl('/api/mappa/campo/edificio/${e.id}?${qs()}'),{ headers: buildAuthHeaders() });
     const d = await r.json();
     if (!r.ok) throw new Error(d.error || 'Errore');
     const righe = d.piani.map(p => {
@@ -338,12 +352,12 @@ async function mostraDettaglio(e) {
             const nome = (CAT[a.categoria] || [a.categoria])[0];
             return escapeHtml(nome + (a.qualita ? ` (${a.qualita})` : ''));
           }).join(', ') || '—');
-      const grado = p.grado !== null ? ` — grado ${p.grado}%` : '';
+       const grado = p.grado !== null ? ` — grado ${p.grado}%` : ' — grado ignoto (mai esplorato)';
       return `<div style="padding:4px 0; border-bottom:1px solid #1c1712;"><strong>Piano ${p.piano}</strong>${grado}<br>${att}</div>`;
     }).join('');
     pannello.innerHTML = `
       <h3>${escapeHtml(d.edificio.nome)}</h3>
-      <div style="color:#a39c8f;">${escapeHtml(d.edificio.tipo)} • ${d.edificio.x}:${d.edificio.y} • ${d.piani.length} piani</div>
+      <div style="color:#a39c8f;">Tipo: ${escapeHtml({ appartamenti: 'Appartamenti', commerciale: 'Commerciale', misto: 'Misto' }[d.edificio.tipo] || d.edificio.tipo)} • ${d.edificio.x}:${d.edificio.y} • ${d.piani.length} piani</div>
       <div style="margin-top:8px;">${righe}</div>
       ${bloccoSelezione()}`;
     agganciaConferma();
@@ -356,6 +370,8 @@ async function mostraDettaglio(e) {
 export async function apriMappaCampo(opts = {}) {
   ensureRoot();
   S.opts = opts;
+  S.personaggioId = opts.personaggioId || null;
+  S.titolo = opts.titolo || '';
   S.selezione.clear();
   S.selezionato = null;
   S.campoId = opts.campoBaseId || getCampoBaseId();
@@ -365,7 +381,7 @@ export async function apriMappaCampo(opts = {}) {
   if (!S.config) {
     const r = await fetch(apiUrl('/api/mappa/config'), { headers: buildAuthHeaders() });
     const d = await r.json();
-    if (!r.ok) { nota(d.error || 'Impossibile caricare la mappa.', 'pericolo'); return; }
+    if (!r.ok) { nota(d.error || 'Impossibile caricare la mappa.', 'pericolo'); if (typeof opts.onChiudi === 'function') opts.onChiudi(); return; }
     S.config = d;
   }
 
@@ -388,7 +404,14 @@ export function chiudiMappaCampo() {
   if (root) root.style.display = 'none';
   clearInterval(S.poll);
   S.poll = null;
+  if (typeof S.opts.onChiudi === 'function') S.opts.onChiudi();
 }
+
+window.apriMappaPersonaggio = function(idx) {
+  const p = window.party[idx];
+  if (!p || !p.id) return nota('Personaggio non valido.', 'avviso');
+  return apriMappaCampo({ personaggioId: p.id, titolo: p.nome });
+};
 
 window.apriMappaCampo = apriMappaCampo;
 window.chiudiMappaCampo = chiudiMappaCampo;

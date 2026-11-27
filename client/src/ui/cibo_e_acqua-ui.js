@@ -734,7 +734,7 @@ function eseguiNutrizione(p, dati) {
         if (caricheDisponibili > 0) {
             const usate = Math.min(qty, caricheDisponibili);
             p._purificazioneCiboCariche = caricheDisponibili - usate;
-            mostraNoificaInAlto(`✨ ${p.nome}: ${usate} unità di cibo avariato erano purificate, nessun rischio di malattia.`, 'successo');
+            mostraNotificaInAlto(`✨ ${p.nome}: ${usate} unità di cibo avariato erano purificate, nessun rischio di malattia.`, 'successo');
         } else {
             let costMod = p.getStatDettagliata('Costituzione').mod;
             if (p.hasPerk && p.hasPerk('Stomaco di ferro')) costMod += 2;

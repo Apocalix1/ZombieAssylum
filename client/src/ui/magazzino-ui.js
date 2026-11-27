@@ -830,41 +830,6 @@ async function consumaMunizioneAttacco(personaggio, categoria) {
     return true;
 }
 
-function applicaPerkArmato(p) {
-    if (!p) return;
-    const nomiPerk = (p.perks || []).map(pk => typeof pk === 'string' ? pk : pk.nome);
-    if (!nomiPerk.includes('Armato')) return;
-
-    const categorie = ['Archi', 'Balestre', "Armi con l'asta", 'Lame leggere', 'Armi da fuoco', 'Rampini e fruste', 'Mazze e armi contundenti'];
-    const elenco = categorie.map((c, i) => `${i + 1}) ${c}`).join('\n');
-    let scelta = prompt(`Perk "Armato": scegli un'arma iniziale (competenza livello 1):\n${elenco}`, '1');
-    let idx = parseInt(scelta, 10) - 1;
-    if (isNaN(idx) || idx < 0 || idx >= categorie.length) idx = 0;
-    const categoria = categorie[idx];
-    p.initInventarioBase();
-    p.inventario.armi.push(categoria);
-    p.armiLivello = p.armiLivello || {};
-    const livelloBase = p.isRobot ? 4 : 1;
-    const livelloAttuale = p.armiLivello[categoria] || 0;
-    if (!p.isRobot && livelloAttuale >= 1) {
-        const costi = window.ARMI_COSTI && window.ARMI_COSTI[categoria];
-        const rimborso = costi ? (costi[1] || 1) : 1;
-        p.puntiCreazione = (p.puntiCreazione || 0) + rimborso;
-        alert(`Avevi già acquistato Livello 1 in ${categoria}: rimborsati ${rimborso} punti, ora fornito gratis dal perk Armato.`);
-    }
-    p.armiLivello[categoria] = Math.max(livelloBase, livelloAttuale);
-
-    let munText = '';
-    if (typeof p.inventario.munizioni !== 'object' || !p.inventario.munizioni) {
-    p.inventario.munizioni = { frecce: 0, quadrelli: 0, proiettili: 0 };
-}
-if (categoria === 'Archi') { p.inventario.munizioni.frecce += 10; munText = ' e 10 munizioni'; }
-else if (categoria === 'Balestre') { p.inventario.munizioni.quadrelli += 10; munText = ' e 10 munizioni'; }
-else if (categoria === 'Armi da fuoco') { p.inventario.munizioni.proiettili += 3; munText = ' e 3 munizioni'; }
-
-    alert(`${p.nome} inizia con: ${categoria} (competenza livello 1)${munText}.`);
-}
-
 window.applicaPerkArmato = applicaPerkArmato;
 window.consumaMunizioneAttacco = consumaMunizioneAttacco;
 window.updateMagazzinoFields = updateMagazzinoFields;

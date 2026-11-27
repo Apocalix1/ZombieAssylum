@@ -7,6 +7,7 @@ import { processAutomaticActions} from "./cibo_e_acqua-ui.js";
 import "../ui/magazzino-ui.js";
 import { getPendingDeadIds,queueCommand, processPendingCommands, syncStatiDalServer, syncDocumentiDalServer } from "../logic/logic.js";
 import { registraEventoCampoCorrente } from "../logic/campo.js";
+import { Personaggio, syncPartyFromServer, salvaPersonaggioCloud, fetchUserCharacters, apiUrl, buildAuthHeaders, refreshPartyListeners, fermaSincronizzazioneCompleta } from "../logic/logic.js";
 const party = stateParty;
 
 // Esposizioni Globali per compatibilità con HTML inline e altri script non-modulari
@@ -1907,8 +1908,9 @@ export function aggiornaInterfaccia() {
                         <details class="action-dropdown">
                             <summary>ESPLORA</summary>
                             <div class="dropdown-buttons">
-                                <button onclick="spedisciPersonaggio(${idx})">Spedisci</button>
-                                <button onclick="esplora(${idx})">Esplora</button>
+                            <button onclick="spedisciPersonaggio(${idx})">Spedisci</button>
+                            <button onclick="esplora(${idx})">Esplora</button>
+                            <button onclick="apriMappaPersonaggio(${idx})">🗺️ Mappa</button>
                             </div>
                         </details>
                     `;
@@ -2958,17 +2960,6 @@ window.registraColpo = registraColpo;
 window.passaTempoGlobale = passaTempoGlobale;
 window.chiudiScheda = chiudiScheda;
 
-function findPerkData(nomePerk) {
-    const targetName = getPerkBaseName(nomePerk);
-    const perkDb = window.DATABASE_PERK || globalThis.DATABASE_PERK || {};
-    for (let cat in perkDb) {
-        const lista = Array.isArray(perkDb[cat]) ? perkDb[cat] : [];
-        const found = lista.find(p => perkNamesMatch(getPerkBaseName(p.nome), targetName));
-        if (found) return found;
-    }
-    return null;
-}
-
 window.getPerkBaseName = getPerkBaseName;
 window.findPerkData = findPerkData;
 
@@ -3734,12 +3725,6 @@ document.addEventListener('click', (ev) => {
     if (btn.id === 'btn-register') return registerUser();
     if (btn.id === 'btn-guest') return continueAsGuest();
 });
-
-window.onclick = function(event) {
-    if (event.target.className === 'modal') {
-        event.target.style.display = "none";
-    }
-}
 
 async function renderCharacterList() {
     const container = document.getElementById('lobby-characters');
