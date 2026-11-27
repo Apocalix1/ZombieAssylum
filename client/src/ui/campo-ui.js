@@ -318,7 +318,8 @@ async function campoDelPersonaggioDellUtente() {
 }
 
 window.initCampoBaseCorrenteUI = async function(preferredId = null) {
-    const idPreferito = preferredId ?? await campoDelPersonaggioDellUtente();
+    const user = getCurrentUser();
+    const idPreferito = user?.role === 'ospite' ? 1 : (preferredId ?? await campoDelPersonaggioDellUtente());
     const idRichiesto = idPreferito ?? getCampoBaseId();
     const campo = await initCampoBaseCorrente(idPreferito);
     window.aggiornaDisplayCampoBase();

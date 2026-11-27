@@ -253,8 +253,11 @@ export function registraRotteMappaCampo(app, { dbPromise, authenticateUser, requ
         const x = parseInt(e?.x, 10), y = parseInt(e?.y, 10);
         if ([x, y].some(Number.isNaN) || x < 0 || y < 0 || x >= GRID_W || y >= GRID_H) continue;
         // solo edifici che esistono davvero: niente rivelazioni di coordinate inventate
-        if (!(await db.get('SELECT 1 AS ok FROM mappa_edifici WHERE x = ? AND y = ?', x, y))) continue;
+         const ed = await db.get('SELECT id FROM mappa_edifici WHERE x = ? AND y = ?', x, y);
+        if (!ed) continue;
         await rivelaPerPersonaggi(db, [id], x, y, RAGGIO_RIVELAZIONE);
+        // prima esplorazione: da ora l'edificio mostra grado e attività interne
+        await db.run('UPDATE mappa_piani SET esplorato = 1 WHERE edificio_id = ? AND esplorato < 1', ed.id);
         rivelati++;
       }
       res.json({ success: true, rivelati });
@@ -285,8 +288,8 @@ export function registraRotteMappaCampo(app, { dbPromise, authenticateUser, requ
         edificio: { id: ed.id, x: ed.x, y: ed.y, tipo: ed.tipo, nome: ed.nome && ed.nome.trim() ? ed.nome : `Edificio #${ed.id}` },
         piani: piani.map(p => ({
           piano: p.piano, tipo: p.tipo, esplorato: p.esplorato,
-          grado: p.esplorato >= 1 ? p.grado : null,
-          attivita: (p.piano === 1 || p.esplorato >= 1)
+          grado: (p.esplorato >= 1 || req.user.role === 'master') ? p.grado : null,
+          attivita: (p.piano === 1 || p.esplorato >= 1 || req.user.role === 'master')
             ? att.filter(a => a.piano === p.piano).map(a => ({ categoria: a.categoria, qualita: a.qualita }))
             : null
         }))

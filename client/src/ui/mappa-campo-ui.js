@@ -15,7 +15,7 @@ import { escapeHtml } from './common-ui.js';
 const MAX_SELEZIONE = 3;
 const TTL_TILE = 20000;
 
-const CAT = {
+export const CAT = {
   abitazione:     ['Abitazione', '#5d6b7a'],
   alimentari:     ['Alimentari / ristoranti', '#b5832f'],
   taverna:        ['Taverna', '#9a5a2c'],
@@ -35,7 +35,7 @@ const CAT = {
   cimeli:         ['Cimeli / antiquariato', '#a08a5a'],
   animali:        ['Animali', '#7a9a4a']
 };
-const COL = { fog: '#050403', terreno: '#1d1913', strada: '#4a4743', parco: '#2f4a2b', ignoto: '#6b6358' };
+const COL = { fog: '#050403', terreno: '#2b251b', strada: '#4a4743', parco: '#2f4a2b', ignoto: '#6b6358' };
 
 const S = {
   config: null, campoId: null, campo: null,
@@ -252,6 +252,13 @@ function render() {
       ctx.fillStyle = '#7c9154';
       ctx.fillRect(px(e.x) + bw - 4, py(e.y) + 1, 3, 3);
     }
+     if (c >= 16) {
+      ctx.fillStyle = '#fff';
+      ctx.font = `${Math.min(12, c - 4)}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(String(e.num_piani || 1), px(e.x) + bw / 2, py(e.y) + bh / 2);
+    }
   }));
 
   // Selezione multipla (esplorazione)
@@ -345,12 +352,12 @@ async function mostraDettaglio(e) {
             const nome = (CAT[a.categoria] || [a.categoria])[0];
             return escapeHtml(nome + (a.qualita ? ` (${a.qualita})` : ''));
           }).join(', ') || '—');
-      const grado = p.grado !== null ? ` — grado ${p.grado}%` : '';
+       const grado = p.grado !== null ? ` — grado ${p.grado}%` : ' — grado ignoto (mai esplorato)';
       return `<div style="padding:4px 0; border-bottom:1px solid #1c1712;"><strong>Piano ${p.piano}</strong>${grado}<br>${att}</div>`;
     }).join('');
     pannello.innerHTML = `
       <h3>${escapeHtml(d.edificio.nome)}</h3>
-      <div style="color:#a39c8f;">${escapeHtml(d.edificio.tipo)} • ${d.edificio.x}:${d.edificio.y} • ${d.piani.length} piani</div>
+      <div style="color:#a39c8f;">Tipo: ${escapeHtml({ appartamenti: 'Appartamenti', commerciale: 'Commerciale', misto: 'Misto' }[d.edificio.tipo] || d.edificio.tipo)} • ${d.edificio.x}:${d.edificio.y} • ${d.piani.length} piani</div>
       <div style="margin-top:8px;">${righe}</div>
       ${bloccoSelezione()}`;
     agganciaConferma();

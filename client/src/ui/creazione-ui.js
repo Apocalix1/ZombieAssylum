@@ -1106,6 +1106,16 @@ function gestisciDigitazionePerk(valore) {
     }
 }
 
+function statPerCreazione(p, stat) {
+    const chiavi = ['statiAlterati', 'timers', 'malattia', '_arcaneFatigueApplied', 'biocarburanteDeficit', '_indigestioneFinoA', 'diabeteIperglicemiaAttiva'];
+    const salvati = {};
+    chiavi.forEach(k => { salvati[k] = p[k]; });
+    p.statiAlterati = []; p.timers = {}; p.malattia = { attiva: false, grado: 0 };
+    p._arcaneFatigueApplied = false; p.biocarburanteDeficit = false; p._indigestioneFinoA = null; p.diabeteIperglicemiaAttiva = false;
+    try { return p.getStatDettagliata(stat); }
+    finally { chiavi.forEach(k => { p[k] = salvati[k]; }); }
+}
+
     function cliccaSuggerimentoPerk(nome) {
         window.perkSearchQuery = nome.toLowerCase().trim(); // Aggiunto window.
         const input = document.getElementById('perk-search-input');
@@ -1132,7 +1142,7 @@ function gestisciDigitazionePerk(valore) {
 
         // 1) Prova a usare getStatDettagliata se esiste
         if (typeof p.getStatDettagliata === 'function') {
-            dettagli = p.getStatDettagliata(s);
+            dettagli = statPerCreazione(p, s);
         }
 
         // 2) Se non c'è o non è valido, costruisci da p[chiave]

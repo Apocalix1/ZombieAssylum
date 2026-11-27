@@ -14,11 +14,12 @@ import {
   TIPI_PIANO,
   MIN_PIANI,
   ESPLORAZIONE,
-  RAGGIO_CAMPO_DEFAULT
+  RAGGIO_CAMPO_DEFAULT,
+  TIPOLOGIE,
+  CATEGORIE_VALIDE
 } from '../client/src/logic/mappa-config.js';
 import { creaContenutoDocumento } from './documento-utils.js';
 import { registraRotteMappaCampo, assicuraAreaCampo, invalidaConoscenza } from './mappa-campo.js';
-
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -190,6 +191,84 @@ function validatePianiPayload(piani) {
     });
   }
   return { ok: true, value: clean };
+}
+
+const DIM_MAX_EDIFICIO = 10;
+
+// La casella selezionata è il centro. Con lato pari c'è una casella in più a destra/sotto
+// (es. 4 = 1 a sinistra + centro + 2 a destra). Ritorna l'angolo in alto a sinistra.
+function ancoraDalCentro(cx, cy, w, h) {
+  return { x: cx - Math.floor((w - 1) / 2), y: cy - Math.floor((h - 1) / 2) };
+}
+
+async function validaImpronta(db, x, y, w, h, { escludiEdificioId = null } = {}) {
+  if (![x, y, w, h].every(Number.isInteger)) return { status: 400, error: 'x, y, w, h devono essere interi' };
+  if (w < 1 || h < 1 || w > DIM_MAX_EDIFICIO || h > DIM_MAX_EDIFICIO) {
+    return { status: 400, error: `Le dimensioni vanno da 1 a ${DIM_MAX_EDIFICIO}` };
+  }
+  const x2 = x + w - 1, y2 = y + h - 1;
+  const err = validateGridPoint(x, y) || validateGridPoint(x2, y2);
+  if (err) return { status: 400, error: err };
+  const ed = await db.get(
+    'SELECT id FROM mappa_edifici WHERE x <= ? AND x + w - 1 >= ? AND y <= ? AND y + h - 1 >= ? AND id != ? LIMIT 1',
+    x2, x, y2, y, escludiEdificioId ?? -1);
+  if (ed) return { status: 409, error: `Si sovrappone all'edificio #${ed.id}` };
+  const z = await db.get('SELECT id FROM mappa_zone WHERE x1 <= ? AND x2 >= ? AND y1 <= ? AND y2 >= ? LIMIT 1', x2, x, y2, y);
+  if (z) return { status: 409, error: `Si sovrappone alla zona #${z.id}` };
+  return null;
+}
+
+// piano = una attività (opzionale) + N abitazioni
+function validaPianiCompleti(piani, tipoEdificio) {
+  if (!Array.isArray(piani) || piani.length === 0) return { status: 400, error: 'Un edificio deve avere almeno un piano' };
+  const minPiani = minPianiPerTipo(tipoEdificio);
+  if (piani.length < minPiani) return { status: 400, error: `Il tipo ${tipoEdificio} richiede almeno ${minPiani} piani` };
+  const out = [];
+  for (let i = 0; i < piani.length; i += 1) {
+    const p = piani[i] || {};
+    const puliti = [];
+    for (const a of (Array.isArray(p.attivita) ? p.attivita : [])) {
+      const categoria = String(a?.categoria || '').trim().toLowerCase();
+      if (!CATEGORIE_VALIDE.has(categoria)) return { status: 400, error: `Categoria non valida al piano ${i + 1}` };
+      const def = TIPOLOGIE.find(t => t.chiave === categoria);
+      const qualita = a?.qualita ? String(a.qualita) : null;
+      if (qualita && !(def?.qualita || []).some(([k]) => k === qualita)) return { status: 400, error: `Qualità non valida al piano ${i + 1}` };
+      puliti.push({ categoria, qualita });
+    }
+    const haAbi = puliti.some(a => a.categoria === 'abitazione');
+    const haAtt = puliti.some(a => a.categoria !== 'abitazione');
+    if (!puliti.length) return { status: 400, error: `Il piano ${i + 1} è vuoto` };
+    if (tipoEdificio === 'appartamenti' && haAtt) return { status: 400, error: `Un edificio "appartamenti" ha solo abitazioni (piano ${i + 1})` };
+    if (tipoEdificio === 'commerciale' && haAbi) return { status: 400, error: `Un edificio "commerciale" ha solo attività (piano ${i + 1})` };
+    const esplorato = parseIntStrict(p.esplorato ?? 0);
+    if (![0, 1, 2].includes(esplorato)) return { status: 400, error: `Esplorazione non valida al piano ${i + 1}` };
+    let grado = null;
+    if (p.grado !== null && p.grado !== undefined && p.grado !== '') {
+      grado = parseIntStrict(p.grado);
+      if (grado === null || grado < 0 || grado > 100) return { status: 400, error: `Grado non valido al piano ${i + 1} (0-100)` };
+    }
+    out.push({
+      piano: i + 1,
+      tipo: haAbi && haAtt ? 'misto' : (haAtt ? 'commerciale' : 'abitazione'),
+      esplorato, grado,
+      loot_json: p.loot_json ? String(p.loot_json) : '{}',
+      attivita: puliti
+    });
+  }
+  return { ok: true, value: out };
+}
+
+async function salvaPianiEdificio(db, edificioId, piani) {
+  await db.run('DELETE FROM mappa_piani WHERE edificio_id = ?', edificioId);
+  await db.run('DELETE FROM mappa_attivita WHERE edificio_id = ?', edificioId);
+  for (const p of piani) {
+    await db.run('INSERT INTO mappa_piani (edificio_id, piano, tipo, esplorato, loot_json, grado) VALUES (?, ?, ?, ?, ?, ?)',
+      edificioId, p.piano, p.tipo, p.esplorato, p.loot_json, p.grado);
+    for (const a of p.attivita) {
+      await db.run('INSERT INTO mappa_attivita (edificio_id, piano, categoria, qualita) VALUES (?, ?, ?, ?)',
+        edificioId, p.piano, a.categoria, a.qualita);
+    }
+  }
 }
 
 async function validateEdificioPayload(db, payload, { edificioId = null } = {}) {
@@ -442,6 +521,43 @@ app.put('/api/campi/:id/posizione', authenticateUser, requireMaster, async (req,
   }
 });
 
+// Modifica un campo, oppure lo toglie dalla mappa (resta il campo, restano i personaggi e la mappa già generata)
+app.put('/api/campi/:id', authenticateUser, requireMaster, async (req, res) => {
+  const id = parseIntStrict(req.params.id);
+  if (id === null || id <= 0) return res.status(400).json({ error: 'ID campo base non valido' });
+  try {
+    const db = await dbPromise;
+    const campo = await db.get('SELECT * FROM campi_base WHERE id = ?', id);
+    if (!campo) return res.status(404).json({ error: 'Campo base non trovato' });
+    const b = req.body || {};
+
+    if (b.rimuovi_posizione) {
+      await db.run('UPDATE campi_base SET pos_x = NULL, pos_y = NULL WHERE id = ?', id);
+      invalidaConoscenza();
+      return res.json({ campo: await db.get('SELECT * FROM campi_base WHERE id = ?', id) });
+    }
+
+    const nome = b.nome !== undefined ? String(b.nome).trim() : campo.nome;
+    if (!nome) return res.status(400).json({ error: 'Nome campo base richiesto' });
+    const x = b.pos_x !== undefined ? parseIntStrict(b.pos_x) : campo.pos_x;
+    const y = b.pos_y !== undefined ? parseIntStrict(b.pos_y) : campo.pos_y;
+    const raggio = b.raggio !== undefined ? parseIntStrict(b.raggio) : campo.raggio;
+    if (x === null || y === null) return res.status(400).json({ error: 'pos_x e pos_y sono obbligatori' });
+    const coordErr = validateGridPoint(x, y);
+    if (coordErr) return res.status(400).json({ error: coordErr });
+    if (raggio === null || raggio < 0) return res.status(400).json({ error: 'Raggio non valido' });
+
+    await db.run('UPDATE campi_base SET nome = ?, pos_x = ?, pos_y = ?, raggio = ? WHERE id = ?', nome, x, y, raggio, id);
+    const updated = await db.get('SELECT * FROM campi_base WHERE id = ?', id);
+    await assicuraAreaCampo(db, updated);
+    invalidaConoscenza();
+    res.json({ campo: updated });
+  } catch (error) {
+    if (error.message && error.message.includes('UNIQUE constraint failed')) return res.status(409).json({ error: 'Esiste già un campo base con questo nome' });
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.delete('/api/campi/:id', authenticateUser, requireMaster, async (req, res) => {
   const id = parseInt(req.params.id, 10);
   if (isNaN(id) || id === 1) return res.status(400).json({ error: 'Impossibile eliminare questo campo base' });
@@ -474,7 +590,8 @@ app.get('/api/mappa/config', authenticateUser, async (_req, res) => {
     TIPI_PIANO,
     MIN_PIANI,
     ESPLORAZIONE,
-    RAGGIO_CAMPO_DEFAULT
+    RAGGIO_CAMPO_DEFAULT,
+    CATEGORIE: TIPOLOGIE.map(t => ({ chiave: t.chiave, nome: t.nome, qualita: !!t.qualita }))
   });
 });
 
@@ -509,9 +626,11 @@ app.get('/api/mappa/tile', authenticateUser, async (req, res) => {
     );
 
     let edifici = await db.all(
-      `SELECT e.id, e.x, e.y, e.nome, e.tipo,
+      `SELECT e.id, e.x, e.y, e.w, e.h, e.nome, e.tipo,
               COUNT(p.piano) AS num_piani,
-              COALESCE(MAX(p.esplorato), 0) AS esplorato_max
+              COALESCE(MAX(p.esplorato), 0) AS esplorato_max,
+              (SELECT a.categoria FROM mappa_attivita a WHERE a.edificio_id = e.id AND a.piano = 1
+               ORDER BY (a.categoria = 'abitazione') ASC, a.id ASC LIMIT 1) AS insegna
        FROM mappa_edifici e
        LEFT JOIN mappa_piani p ON p.edificio_id = e.id
        WHERE e.x BETWEEN ? AND ? AND e.y BETWEEN ? AND ?
@@ -535,45 +654,6 @@ app.get('/api/mappa/tile', authenticateUser, async (req, res) => {
 
     const campi = await db.all('SELECT id, nome, pos_x, pos_y, raggio FROM campi_base ORDER BY id ASC');
     res.json({ zone, edifici, campi });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-app.get('/api/mappa/edificio/:id', authenticateUser, async (req, res) => {
-  const edificioId = parseIntStrict(req.params.id);
-  if (edificioId === null || edificioId <= 0) {
-    return res.status(400).json({ error: 'ID edificio non valido' });
-  }
-  try {
-    const db = await dbPromise;
-    const edificio = await db.get('SELECT id, x, y, nome, tipo FROM mappa_edifici WHERE id = ?', edificioId);
-    if (!edificio) return res.status(404).json({ error: 'Edificio non trovato' });
-    let piani = await db.all(
-      'SELECT piano, tipo, esplorato, loot_json FROM mappa_piani WHERE edificio_id = ? ORDER BY piano ASC',
-      edificioId
-    );
-    if (req.user.role !== 'master') {
-      const hasVisible = piani.some(p => Number(p.esplorato) >= 1);
-      if (!hasVisible) {
-        return res.status(404).json({ error: 'Edificio non visibile' });
-      }
-      piani = piani
-        .filter(p => Number(p.esplorato) >= 1)
-        .map(p => ({
-          piano: p.piano,
-          tipo: p.tipo,
-          esplorato: p.esplorato,
-          loot_json: p.loot_json
-        }));
-    }
-    res.json({
-      edificio: {
-        ...edificio,
-        nome: edificio.nome && edificio.nome.trim() ? edificio.nome : `Edificio #${edificio.id}`
-      },
-      piani
-    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -603,7 +683,7 @@ app.get('/api/mappa/cerca', authenticateUser, async (req, res) => {
         `SELECT e.id, e.x, e.y, e.nome, e.tipo, COALESCE(MAX(p.esplorato),0) AS esplorato_max
          FROM mappa_edifici e
          LEFT JOIN mappa_piani p ON p.edificio_id = e.id
-         WHERE e.x = ? AND e.y = ?
+          WHERE ? BETWEEN e.x AND e.x + e.w - 1 AND ? BETWEEN e.y AND e.y + e.h - 1
          GROUP BY e.id
          LIMIT 1`,
         x,
@@ -736,88 +816,91 @@ app.delete('/api/mappa/zone/:id', authenticateUser, requireMaster, async (req, r
   }
 });
 
+// Crea: x,y sono il CENTRO. Il grado lasciato vuoto viene assegnato al momento della rivelazione.
 app.post('/api/mappa/edifici', authenticateUser, requireMaster, async (req, res) => {
+  const db = await dbPromise;
+  let inTransazione = false;
   try {
-    const db = await dbPromise;
-    const { x, y, nome, tipo, piani } = req.body || {};
+    const b = req.body || {};
+    const cx = parseIntStrict(b.x), cy = parseIntStrict(b.y);
+    const w = parseIntStrict(b.w ?? 1), h = parseIntStrict(b.h ?? 1);
+    const tipo = String(b.tipo || '').trim().toLowerCase();
+    if (cx === null || cy === null || w === null || h === null) return res.status(400).json({ error: 'x, y (centro), w e h sono obbligatori' });
+    if (!TIPI_EDIFICIO.includes(tipo)) return res.status(400).json({ error: `Tipo edificio non valido. Tipi ammessi: ${TIPI_EDIFICIO.join(', ')}` });
 
-    if (x === undefined || y === undefined || !tipo) {
-      return res.status(400).json({ error: 'x, y e tipo sono obbligatori' });
-    }
+    const { x, y } = ancoraDalCentro(cx, cy, w, h);
+    const errImpronta = await validaImpronta(db, x, y, w, h);
+    if (errImpronta) return res.status(errImpronta.status).json({ error: errImpronta.error });
+    const pc = validaPianiCompleti(b.piani, tipo);
+    if (!pc.ok) return res.status(pc.status).json({ error: pc.error });
 
-    const checkEdificio = await validateEdificioPayload(db, { x, y, tipo });
-    if (!checkEdificio.ok) return res.status(checkEdificio.status).json({ error: checkEdificio.error });
+    await db.run('BEGIN'); inTransazione = true;
+    const r = await db.run('INSERT INTO mappa_edifici (x, y, nome, tipo, w, h) VALUES (?, ?, ?, ?, ?, ?)',
+      x, y, b.nome ? String(b.nome).trim() : null, tipo, w, h);
+    await salvaPianiEdificio(db, r.lastID, pc.value);
+    await db.run('COMMIT'); inTransazione = false;
 
-    const pianiCheck = validatePianiPayload(piani);
-    if (!pianiCheck.ok) return res.status(pianiCheck.status).json({ error: pianiCheck.error });
-
-    const minPiani = minPianiPerTipo(tipo);
-    if (pianiCheck.value.length < minPiani) {
-      return res.status(400).json({ error: `Il tipo ${tipo} richiede almeno ${minPiani} piani` });
-    }
-
-    await db.run('BEGIN');
-    const result = await db.run(
-      'INSERT INTO mappa_edifici (x, y, nome, tipo) VALUES (?, ?, ?, ?)',
-      x,
-      y,
-      nome ? String(nome).trim() : null,
-      String(tipo).trim().toLowerCase()
-    );
-
-    for (const piano of pianiCheck.value) {
-      await db.run(
-        'INSERT INTO mappa_piani (edificio_id, piano, tipo, esplorato, loot_json) VALUES (?, ?, ?, ?, ?)',
-        result.lastID,
-        piano.piano,
-        piano.tipo,
-        piano.esplorato,
-        piano.loot_json
-      );
-    }
-    await db.run('COMMIT');
-
-    const edificio = await db.get('SELECT * FROM mappa_edifici WHERE id = ?', result.lastID);
+    const edificio = await db.get('SELECT * FROM mappa_edifici WHERE id = ?', r.lastID);
     res.json({ edificio: { ...edificio, nome: edificio.nome || `Edificio #${edificio.id}` } });
   } catch (error) {
-    try {
-      const db = await dbPromise;
-      await db.run('ROLLBACK');
-    } catch (_) {
-      // no-op
-    }
-    if (error.message && error.message.includes('UNIQUE constraint failed')) {
-      return res.status(409).json({ error: 'Esiste gia un edificio in questa casella' });
-    }
+    if (inTransazione) await db.run('ROLLBACK').catch(() => {});
     res.status(500).json({ error: error.message });
   }
 });
 
+// Modifica TUTTO: nome, tipo, posizione (angolo alto-sinistra), dimensioni, piani, attività, esplorazione, grado
 app.put('/api/mappa/edifici/:id', authenticateUser, requireMaster, async (req, res) => {
   const id = parseIntStrict(req.params.id);
   if (id === null || id <= 0) return res.status(400).json({ error: 'ID edificio non valido' });
+  const db = await dbPromise;
+  let inTransazione = false;
   try {
-    const db = await dbPromise;
     const edificio = await db.get('SELECT * FROM mappa_edifici WHERE id = ?', id);
     if (!edificio) return res.status(404).json({ error: 'Edificio non trovato' });
+    const b = req.body || {};
+    const tipo = b.tipo ? String(b.tipo).trim().toLowerCase() : edificio.tipo;
+    if (!TIPI_EDIFICIO.includes(tipo)) return res.status(400).json({ error: `Tipo edificio non valido. Tipi ammessi: ${TIPI_EDIFICIO.join(', ')}` });
+    const x = b.x !== undefined ? parseIntStrict(b.x) : edificio.x;
+    const y = b.y !== undefined ? parseIntStrict(b.y) : edificio.y;
+    const w = b.w !== undefined ? parseIntStrict(b.w) : edificio.w;
+    const h = b.h !== undefined ? parseIntStrict(b.h) : edificio.h;
 
-    const newTipo = req.body?.tipo ? String(req.body.tipo).trim().toLowerCase() : edificio.tipo;
-    const checkTipo = await validateEdificioPayload(db, { tipo: newTipo }, { edificioId: id });
-    if (!checkTipo.ok) return res.status(checkTipo.status).json({ error: checkTipo.error });
+    const errImpronta = await validaImpronta(db, x, y, w, h, { escludiEdificioId: id });
+    if (errImpronta) return res.status(errImpronta.status).json({ error: errImpronta.error });
+    const pc = validaPianiCompleti(b.piani, tipo);
+    if (!pc.ok) return res.status(pc.status).json({ error: pc.error });
+    const nome = Object.prototype.hasOwnProperty.call(b, 'nome') ? (b.nome ? String(b.nome).trim() : null) : edificio.nome;
 
-    const pianiCountRow = await db.get('SELECT COUNT(*) AS count FROM mappa_piani WHERE edificio_id = ?', id);
-    const minPiani = minPianiPerTipo(newTipo);
-    if ((pianiCountRow?.count || 0) < minPiani) {
-      return res.status(400).json({ error: `Il tipo ${newTipo} richiede almeno ${minPiani} piani` });
-    }
+    await db.run('BEGIN'); inTransazione = true;
+    await db.run('UPDATE mappa_edifici SET nome = ?, tipo = ?, x = ?, y = ?, w = ?, h = ? WHERE id = ?', nome, tipo, x, y, w, h, id);
+    await salvaPianiEdificio(db, id, pc.value);
+    await db.run('COMMIT'); inTransazione = false;
 
-    const hasNome = Object.prototype.hasOwnProperty.call(req.body || {}, 'nome');
-    const nomeFinale = hasNome
-      ? (req.body?.nome ? String(req.body.nome).trim() : null)
-      : edificio.nome;
-    await db.run('UPDATE mappa_edifici SET nome = ?, tipo = ? WHERE id = ?', nomeFinale, newTipo, id);
     const updated = await db.get('SELECT * FROM mappa_edifici WHERE id = ?', id);
     res.json({ edificio: { ...updated, nome: updated.nome || `Edificio #${updated.id}` } });
+  } catch (error) {
+    if (inTransazione) await db.run('ROLLBACK').catch(() => {});
+    if (error.message && error.message.includes('UNIQUE constraint failed')) return res.status(409).json({ error: 'Esiste già un edificio in questa casella' });
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Dettaglio: piani con attività e grado (il master vede tutto; il giocatore solo i piani esplorati, senza loot)
+app.get('/api/mappa/edificio/:id', authenticateUser, async (req, res) => {
+  const edificioId = parseIntStrict(req.params.id);
+  if (edificioId === null || edificioId <= 0) return res.status(400).json({ error: 'ID edificio non valido' });
+  try {
+    const db = await dbPromise;
+    const edificio = await db.get('SELECT id, x, y, w, h, nome, tipo FROM mappa_edifici WHERE id = ?', edificioId);
+    if (!edificio) return res.status(404).json({ error: 'Edificio non trovato' });
+    let piani = await db.all('SELECT piano, tipo, esplorato, loot_json, grado FROM mappa_piani WHERE edificio_id = ? ORDER BY piano ASC', edificioId);
+    const att = await db.all('SELECT piano, categoria, qualita FROM mappa_attivita WHERE edificio_id = ?', edificioId);
+    piani = piani.map(p => ({ ...p, attivita: att.filter(a => a.piano === p.piano).map(a => ({ categoria: a.categoria, qualita: a.qualita })) }));
+    if (req.user.role !== 'master') {
+      if (!piani.some(p => Number(p.esplorato) >= 1)) return res.status(404).json({ error: 'Edificio non visibile' });
+      piani = piani.filter(p => Number(p.esplorato) >= 1).map(({ loot_json, ...resto }) => resto);
+    }
+    res.json({ edificio: { ...edificio, nome: edificio.nome && edificio.nome.trim() ? edificio.nome : `Edificio #${edificio.id}` }, piani });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -939,12 +1022,12 @@ app.post('/api/eventi',authenticateUser, requireCampoAccess, async (req, res) =>
 
 app.post('/api/eventi/segna-letti', authenticateUser, async (req, res) => {
   const { campoBaseId } = req.body;
-   if (!campoBaseId) return res.status(400).json({ error: 'campoBaseId richiesto per la biblioteca' });
-        if (!(await puoAccedereCampo(db, req.user, campoBaseId))) {
-          return res.status(403).json({ error: 'Non hai personaggi in questo campo base' });
-        }
+  if (!campoBaseId) return res.status(400).json({ error: 'campoBaseId richiesto per la biblioteca' });
   try {
     const db = await dbPromise;
+    if (!(await puoAccedereCampo(db, req.user, campoBaseId))) {
+      return res.status(403).json({ error: 'Non hai personaggi in questo campo base' });
+    }
     await db.run('UPDATE eventi_log SET letto = 1 WHERE campo_base_id = ?', campoBaseId);
     res.json({ success: true });
   } catch (error) {

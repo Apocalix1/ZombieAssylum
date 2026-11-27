@@ -1,5 +1,6 @@
 import { apiUrl, buildAuthHeaders } from '../logic/logic.js';
 import { escapeHtml } from './common-ui.js';
+import { CAT } from './mappa-campo-ui.js';
 
 const MAPPA_STATO = {
   config: null,
@@ -416,12 +417,28 @@ function drawTile(data, viewport, cell) {
     ctx.fillRect(left, top, width, height);
   }
 
-  for (const e of edifici) {
+    for (const e of edifici) {
     const left = (e.x - viewport.startX) * cell;
     const top = (e.y - viewport.startY) * cell;
+    const w = (e.w || 1) * cell, h = (e.h || 1) * cell;
     const espl = Number(e.esplorato_max || 0);
-    ctx.fillStyle = espl === 0 ? '#1b1b1b' : (espl === 1 ? '#bfa226' : '#8fcf6a');
-    ctx.fillRect(left, top, cell, cell);
+    ctx.globalAlpha = espl === 0 ? 0.75 : 1;
+    ctx.fillStyle = (CAT[e.insegna] && CAT[e.insegna][1]) || '#6b6358';
+    ctx.fillRect(left + 1, top + 1, w - 2, h - 2);
+    ctx.globalAlpha = 1;
+    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = espl >= 2 ? '#8fcf6a' : (espl === 1 ? '#bfa226' : 'rgba(0,0,0,0.6)');
+    ctx.strokeRect(left + 1.5, top + 1.5, w - 3, h - 3);
+    if (cell >= 14) {
+      ctx.save();
+      ctx.beginPath(); ctx.rect(left + 1, top + 1, w - 2, h - 2); ctx.clip();
+      ctx.fillStyle = '#fff';
+      ctx.font = '10px sans-serif';
+      ctx.textBaseline = 'top';
+      ctx.fillText(`${e.num_piani || 1}p`, left + 3, top + 3);
+      if (cell >= 28) ctx.fillText(e.nome || '', left + 3, top + 15);
+      ctx.restore();
+    }
   }
 
   for (const c of campi) {
@@ -577,159 +594,6 @@ function renderZonaPanel(zona) {
   });
 }
 
-function renderEdificioPanel(edificio, piani) {
-  const pianiRows = piani.map((p, idx) => `
-    <div data-row="${idx}" style="border:1px solid #2a2a2a; padding:6px; margin-bottom:6px;">
-      <div style="display:flex; justify-content:space-between; align-items:center;">
-        <strong>Piano ${p.piano}</strong>
-        <button class="btn-hero piano-remove" data-row="${idx}" style="background:#7f1d1d;">-</button>
-      </div>
-      <label>Tipo
-        <select class="piano-tipo" data-row="${idx}"><option value="abitazione" ${p.tipo === 'abitazione' ? 'selected' : ''}>abitazione</option></select>
-      </label>
-      <label>Esplorazione
-        <select class="piano-espl" data-row="${idx}">
-          <option value="0" ${Number(p.esplorato) === 0 ? 'selected' : ''}>0</option>
-          <option value="1" ${Number(p.esplorato) === 1 ? 'selected' : ''}>1</option>
-          <option value="2" ${Number(p.esplorato) === 2 ? 'selected' : ''}>2</option>
-        </select>
-      </label>
-      <label>Loot
-        <textarea class="piano-loot" data-row="${idx}" rows="2">${escapeHtml(p.loot_json || '')}</textarea>
-      </label>
-    </div>
-  `).join('');
-
-  sidePanel.innerHTML = `
-    <h3>${escapeHtml(edificio.nome || `Edificio #${edificio.id}`)}</h3>
-    <div style="display:grid; gap:8px;">
-      <label>Nome <input id="ed-nome" value="${escapeHtml(edificio.nome || '')}" /></label>
-      <label>Tipo
-        <select id="ed-tipo"><option value="appartamenti" ${edificio.tipo === 'appartamenti' ? 'selected' : ''}>appartamenti</option></select>
-      </label>
-      <div id="piani-wrap">${pianiRows}</div>
-      <button id="piano-add" class="btn-hero">+ Piano</button>
-      <button id="ed-save" class="btn-hero">Salva</button>
-      <button id="ed-delete" class="btn-hero" style="background:#c0392b;">Elimina</button>
-    </div>
-  `;
-
-  const currentPiani = piani.map(p => ({ ...p }));
-
-  function rerenderPiani() {
-    renderEdificioPanel(edificio, currentPiani.map((p, i) => ({ ...p, piano: i + 1 })));
-  }
-
-  sidePanel.querySelector('#piano-add').addEventListener('click', () => {
-    currentPiani.push({ piano: currentPiani.length + 1, tipo: 'abitazione', esplorato: 0, loot_json: '{}' });
-    rerenderPiani();
-  });
-
-  sidePanel.querySelectorAll('.piano-remove').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const row = Number(btn.dataset.row);
-      currentPiani.splice(row, 1);
-      rerenderPiani();
-    });
-  });
-
-  sidePanel.querySelector('#ed-save').addEventListener('click', async () => {
-    const nome = sidePanel.querySelector('#ed-nome').value.trim();
-    const tipo = sidePanel.querySelector('#ed-tipo').value;
-
-    const payloadPiani = [...sidePanel.querySelectorAll('#piani-wrap > div')].map((row, i) => ({
-      tipo: row.querySelector('.piano-tipo').value,
-      esplorato: Number(row.querySelector('.piano-espl').value),
-      loot_json: row.querySelector('.piano-loot').value,
-      piano: i + 1
-    }));
-
-    const r1 = await fetch(apiUrl(`/api/mappa/edifici/${edificio.id}`), {
-      method: 'PUT',
-      headers: buildAuthHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({ nome: nome || null, tipo })
-    });
-    const d1 = await r1.json();
-    if (!r1.ok) return alert(d1.error || 'Errore aggiornamento edificio');
-
-    const r2 = await fetch(apiUrl(`/api/mappa/edifici/${edificio.id}/piani`), {
-      method: 'PUT',
-      headers: buildAuthHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({ piani: payloadPiani })
-    });
-    const d2 = await r2.json();
-    if (!r2.ok) return alert(d2.error || 'Errore aggiornamento piani');
-
-    invalidateTilesForRect(edificio.x, edificio.y, edificio.x, edificio.y);
-    requestVisibleTiles();
-    render();
-    renderEdificioPanel(d1.edificio, d2.piani || []);
-  });
-
-  sidePanel.querySelector('#ed-delete').addEventListener('click', async () => {
-    if (!confirm('Eliminare questo edificio?')) return;
-    const r = await fetch(apiUrl(`/api/mappa/edifici/${edificio.id}`), {
-      method: 'DELETE',
-      headers: buildAuthHeaders()
-    });
-    const d = await r.json();
-    if (!r.ok) return alert(d.error || 'Errore eliminazione edificio');
-    invalidateTilesForRect(edificio.x, edificio.y, edificio.x, edificio.y);
-    requestVisibleTiles();
-    MAPPA_STATO.selected = null;
-    render();
-    renderSidePanel();
-  });
-}
-
-function renderEmptyCellPanel(selected) {
-  sidePanel.innerHTML = `
-    <h3>Casella vuota ${selected.x}:${selected.y}</h3>
-    <p>Questa casella non contiene zone o edifici.</p>
-    <button id="create-edificio-here" class="btn-hero">Crea edificio qui</button>
-  `;
-
-  sidePanel.querySelector('#create-edificio-here').addEventListener('click', () => {
-    apriFormCreaEdificio(selected.x, selected.y);
-  });
-}
-
-function apriFormCreaEdificio(x, y) {
-  sidePanel.innerHTML = `
-    <h3>Crea edificio ${x}:${y}</h3>
-    <div style="display:grid; gap:8px;">
-      <label>Nome <input id="new-ed-nome" /></label>
-      <label>Tipo
-        <select id="new-ed-tipo"><option value="appartamenti">appartamenti</option></select>
-      </label>
-      <label>Numero piani <input id="new-ed-piani-count" type="number" value="3" min="1" /></label>
-      <button id="new-ed-create" class="btn-hero">Crea</button>
-      <button id="new-ed-cancel" class="btn-hero">Annulla</button>
-    </div>
-  `;
-
-  sidePanel.querySelector('#new-ed-create').addEventListener('click', async () => {
-    const nome = sidePanel.querySelector('#new-ed-nome').value.trim();
-    const tipo = sidePanel.querySelector('#new-ed-tipo').value;
-    const count = Math.max(1, Number.parseInt(sidePanel.querySelector('#new-ed-piani-count').value, 10) || 1);
-    const piani = Array.from({ length: count }).map(() => ({ tipo: 'abitazione', esplorato: 0, loot_json: '{}' }));
-    const r = await fetch(apiUrl('/api/mappa/edifici'), {
-      method: 'POST',
-      headers: buildAuthHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({ x, y, nome: nome || null, tipo, piani })
-    });
-    const data = await r.json();
-    if (!r.ok) return alert(data.error || 'Errore creazione edificio');
-    invalidateTilesForRect(x, y, x, y);
-    requestVisibleTiles();
-    MAPPA_STATO.selected = { x, y };
-    render();
-    await loadSelectionDetails(MAPPA_STATO.selected);
-  });
-
-  sidePanel.querySelector('#new-ed-cancel').addEventListener('click', renderSidePanel);
-}
-
 function apriFormCreaZona(rect) {
   sidePanel.innerHTML = `
     <h3>Crea zona</h3>
@@ -865,6 +729,293 @@ export async function apriEditorMappa() {
 export function chiudiEditorMappa() {
   if (!rootEl) return;
   rootEl.style.display = 'none';
+}
+
+// ---------- Utilità ----------
+function aggiornaTutto() {
+  MAPPA_STATO.tileCache.clear();
+  requestVisibleTiles();
+  render();
+}
+
+function trovaCampoIn(x, y) {
+  for (const t of MAPPA_STATO.tileCache.values()) {
+    const c = (t.campi || []).find(k => k.pos_x === x && k.pos_y === y);
+    if (c) return c;
+  }
+  return null;
+}
+
+async function inviaJson(url, metodo, corpo) {
+  const r = await fetch(apiUrl(url), { method: metodo, headers: buildAuthHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify(corpo) });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(d.error || `Errore (HTTP ${r.status})`);
+  return d;
+}
+
+// ---------- Editor edificio (creazione e modifica) ----------
+const TIPI_EDIFICIO_UI = [
+  ['appartamenti', 'Appartamenti (solo abitazioni)'],
+  ['commerciale', "Commerciale (ogni piano un'attività)"],
+  ['misto', 'Misto (attività e abitazioni)']
+];
+const ESPLORAZIONE_UI = ['0 - Ignoto', '1 - Parziale', '2 - Esplorato'];
+const QUALITA_UI = ['bassa', 'media', 'alta'];
+
+const categorie = () => MAPPA_STATO.config.CATEGORIE || [];
+const categoriaDef = k => categorie().find(c => c.chiave === k);
+
+function pianoVuoto(tipo) {
+  return {
+    categoria: tipo === 'appartamenti' ? '' : (categorie()[0]?.chiave || ''),
+    qualita: '', abitazioni: tipo === 'appartamenti' ? 1 : 0, esplorato: 0, grado: '', loot_json: '{}'
+  };
+}
+
+function normalizzaForm(f) {
+  f.piani.forEach(p => {
+    if (f.tipo === 'appartamenti') { p.categoria = ''; p.qualita = ''; if (!(p.abitazioni > 0)) p.abitazioni = 1; }
+    if (f.tipo === 'commerciale') { p.abitazioni = 0; if (!p.categoria) p.categoria = categorie()[0]?.chiave || ''; }
+    if (p.categoria && !categoriaDef(p.categoria)?.qualita) p.qualita = '';
+  });
+}
+
+function formDaServer(ed, piani) {
+  return {
+    nome: ed.nome || '', tipo: ed.tipo, x: ed.x, y: ed.y, w: ed.w || 1, h: ed.h || 1,
+    piani: piani.map(p => {
+      const att = (p.attivita || []).find(a => a.categoria !== 'abitazione');
+      return {
+        categoria: att ? att.categoria : '', qualita: att?.qualita || '',
+        abitazioni: (p.attivita || []).filter(a => a.categoria === 'abitazione').length,
+        esplorato: Number(p.esplorato) || 0, grado: p.grado ?? '', loot_json: p.loot_json || '{}'
+      };
+    })
+  };
+}
+
+function payloadEdificio(f) {
+  return {
+    nome: f.nome || null, tipo: f.tipo, x: f.x, y: f.y, w: f.w, h: f.h,
+    piani: f.piani.map(p => {
+      const attivita = [];
+      if (p.categoria) attivita.push({ categoria: p.categoria, qualita: p.qualita || null });
+      for (let k = 0; k < (p.abitazioni || 0); k += 1) attivita.push({ categoria: 'abitazione', qualita: null });
+      return { esplorato: p.esplorato, grado: p.grado === '' ? null : p.grado, loot_json: p.loot_json || '{}', attivita };
+    })
+  };
+}
+
+function renderFormEdificio(f, opz) {
+  normalizzaForm(f);
+  const pianiHtml = f.piani.map((p, i) => {
+    const haQ = !!categoriaDef(p.categoria)?.qualita;
+    return `
+      <div style="border:1px solid #2a2a2a; padding:6px; margin-bottom:6px; display:grid; gap:4px;">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <strong>Piano ${i + 1}</strong>
+          <button class="btn-hero js-piano-del" data-i="${i}" style="background:#7f1d1d;">-</button>
+        </div>
+        <label>Attività
+          <select class="js-p" data-i="${i}" data-k="categoria" ${f.tipo === 'appartamenti' ? 'disabled' : ''}>
+            ${f.tipo === 'commerciale' ? '' : '<option value="">— nessuna —</option>'}
+            ${categorie().map(c => `<option value="${c.chiave}" ${c.chiave === p.categoria ? 'selected' : ''}>${escapeHtml(c.nome)}</option>`).join('')}
+          </select>
+        </label>
+        ${haQ ? `<label>Qualità <select class="js-p" data-i="${i}" data-k="qualita">${QUALITA_UI.map(q => `<option value="${q}" ${q === p.qualita ? 'selected' : ''}>${q}</option>`).join('')}</select></label>` : ''}
+        <label>Abitazioni <input class="js-p" type="number" min="0" data-i="${i}" data-k="abitazioni" value="${p.abitazioni}" ${f.tipo === 'commerciale' ? 'disabled' : ''}></label>
+        <label>Esplorazione <select class="js-p" data-i="${i}" data-k="esplorato">${ESPLORAZIONE_UI.map((t, n) => `<option value="${n}" ${n === Number(p.esplorato) ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
+        <label>Grado % <input class="js-p" type="number" min="0" max="100" data-i="${i}" data-k="grado" value="${p.grado}" placeholder="auto"></label>
+      </div>`;
+  }).join('');
+
+  sidePanel.innerHTML = `
+    <h3>${escapeHtml(opz.titolo)}</h3>
+    <div style="display:grid; gap:8px;">
+      <label>Nome <input class="js-f" data-k="nome" value="${escapeHtml(f.nome)}" style="width:100%;"></label>
+      <label>Tipo
+        <select class="js-f" data-k="tipo">${TIPI_EDIFICIO_UI.map(([v, t]) => `<option value="${v}" ${v === f.tipo ? 'selected' : ''}>${t}</option>`).join('')}</select>
+      </label>
+      ${opz.creazione
+        ? `<div style="color:#bbb;">Centro: ${opz.cx}:${opz.cy}</div>`
+        : `<div style="display:flex; gap:6px;">
+             <label>Angolo x <input class="js-f" type="number" data-k="x" value="${f.x}" style="width:70px;"></label>
+             <label>Angolo y <input class="js-f" type="number" data-k="y" value="${f.y}" style="width:70px;"></label>
+           </div>`}
+      <div style="display:flex; gap:6px;">
+        <label>Larghezza <input class="js-f" type="number" min="1" max="10" data-k="w" value="${f.w}" style="width:70px;"></label>
+        <label>Altezza <input class="js-f" type="number" min="1" max="10" data-k="h" value="${f.h}" style="width:70px;"></label>
+      </div>
+      <small style="color:#999;">Occupa ${(f.w || 1) * (f.h || 1)} caselle.${opz.creazione ? ' La casella selezionata è il centro (con lato pari, una casella in più a destra/sotto).' : ''}</small>
+      <div>${pianiHtml}</div>
+      <button id="fe-add" class="btn-hero">+ Piano</button>
+      <button id="fe-salva" class="btn-hero">${opz.creazione ? 'Crea edificio' : 'Salva'}</button>
+      ${opz.creazione ? '' : '<button id="fe-elimina" class="btn-hero" style="background:#c0392b;">Elimina</button>'}
+      ${opz.creazione ? '<button id="fe-annulla" class="btn-hero">Annulla</button>' : ''}
+    </div>`;
+
+  const rerender = () => renderFormEdificio(f, opz);
+  sidePanel.querySelectorAll('.js-f').forEach(el => el.addEventListener('change', () => {
+    const k = el.dataset.k;
+    f[k] = ['x', 'y', 'w', 'h'].includes(k) ? (Number.parseInt(el.value, 10) || 0) : el.value;
+    if (k === 'tipo' || k === 'w' || k === 'h') rerender();
+  }));
+  sidePanel.querySelectorAll('.js-p').forEach(el => el.addEventListener('change', () => {
+    const p = f.piani[Number(el.dataset.i)], k = el.dataset.k;
+    p[k] = (k === 'abitazioni' || k === 'esplorato') ? (Number.parseInt(el.value, 10) || 0) : el.value;
+    if (k === 'categoria') { p.qualita = categoriaDef(p.categoria)?.qualita ? (p.qualita || 'bassa') : ''; rerender(); }
+  }));
+  sidePanel.querySelector('#fe-add').addEventListener('click', () => { f.piani.push(pianoVuoto(f.tipo)); rerender(); });
+  sidePanel.querySelectorAll('.js-piano-del').forEach(b => b.addEventListener('click', () => { f.piani.splice(Number(b.dataset.i), 1); rerender(); }));
+  sidePanel.querySelector('#fe-salva').addEventListener('click', () => opz.onSalva(f));
+  sidePanel.querySelector('#fe-elimina')?.addEventListener('click', () => opz.onElimina());
+  sidePanel.querySelector('#fe-annulla')?.addEventListener('click', () => renderSidePanel());
+}
+
+function renderEdificioPanel(edificio, piani) {
+  const f = formDaServer(edificio, piani);
+  renderFormEdificio(f, {
+    titolo: `${edificio.nome || `Edificio #${edificio.id}`} (#${edificio.id})`,
+    creazione: false,
+    onSalva: async form => {
+      try {
+        const d = await inviaJson(`/api/mappa/edifici/${edificio.id}`, 'PUT', payloadEdificio(form));
+        aggiornaTutto();
+        MAPPA_STATO.selected = { x: d.edificio.x, y: d.edificio.y };
+        await loadSelectionDetails(MAPPA_STATO.selected);
+      } catch (e) { alert(e.message); }
+    },
+    onElimina: async () => {
+      if (!confirm('Eliminare questo edificio?')) return;
+      try {
+        await inviaJson(`/api/mappa/edifici/${edificio.id}`, 'DELETE', {});
+        MAPPA_STATO.selected = null;
+        aggiornaTutto();
+        renderSidePanel();
+      } catch (e) { alert(e.message); }
+    }
+  });
+}
+
+function apriFormCreaEdificio(cx, cy) {
+  const f = {
+    nome: '', tipo: 'misto', x: cx, y: cy, w: 1, h: 1,
+    piani: [pianoVuoto('misto'), { ...pianoVuoto('misto'), categoria: '', abitazioni: 1 }]
+  };
+  renderFormEdificio(f, {
+    titolo: `Crea edificio ${cx}:${cy}`,
+    creazione: true, cx, cy,
+    onSalva: async form => {
+      try {
+        await inviaJson('/api/mappa/edifici', 'POST', { ...payloadEdificio(form), x: cx, y: cy });
+        MAPPA_STATO.selected = { x: cx, y: cy };
+        aggiornaTutto();
+        await loadSelectionDetails(MAPPA_STATO.selected);
+      } catch (e) { alert(e.message); }
+    }
+  });
+}
+
+// ---------- Campi base ----------
+function renderCampoPanel(campo) {
+  sidePanel.innerHTML = `
+    <h3>🏕️ Campo: ${escapeHtml(campo.nome)}</h3>
+    <div style="display:grid; gap:8px;">
+      <label>Nome <input id="campo-nome" value="${escapeHtml(campo.nome)}" style="width:100%;"></label>
+      <label>x <input id="campo-x" type="number" value="${campo.pos_x}"></label>
+      <label>y <input id="campo-y" type="number" value="${campo.pos_y}"></label>
+      <label>Raggio <input id="campo-raggio" type="number" min="0" value="${campo.raggio}"></label>
+      <button id="campo-save" class="btn-hero">Salva</button>
+      <button id="campo-rimuovi" class="btn-hero" style="background:#c0392b;">Rimuovi dalla mappa</button>
+      <small style="color:#999;">Rimuovere il campo dalla mappa non lo cancella: restano i personaggi, il magazzino e la mappa già generata. Potrai rimetterlo con "Metti campo qui".</small>
+    </div>`;
+  sidePanel.querySelector('#campo-save').addEventListener('click', async () => {
+    try {
+      const d = await inviaJson(`/api/campi/${campo.id}`, 'PUT', {
+        nome: sidePanel.querySelector('#campo-nome').value.trim(),
+        pos_x: Number(sidePanel.querySelector('#campo-x').value),
+        pos_y: Number(sidePanel.querySelector('#campo-y').value),
+        raggio: Number(sidePanel.querySelector('#campo-raggio').value)
+      });
+      MAPPA_STATO.selected = { x: d.campo.pos_x, y: d.campo.pos_y };
+      aggiornaTutto();
+      renderCampoPanel(d.campo);
+    } catch (e) { alert(e.message); }
+  });
+  sidePanel.querySelector('#campo-rimuovi').addEventListener('click', async () => {
+    if (!confirm(`Togliere "${campo.nome}" dalla mappa? La mappa già generata resta.`)) return;
+    try {
+      await inviaJson(`/api/campi/${campo.id}`, 'PUT', { rimuovi_posizione: true });
+      MAPPA_STATO.selected = null;
+      aggiornaTutto();
+      renderSidePanel();
+    } catch (e) { alert(e.message); }
+  });
+}
+
+function apriFormCreaCampo(x, y) {
+  sidePanel.innerHTML = `
+    <h3>Nuovo campo base ${x}:${y}</h3>
+    <div style="display:grid; gap:8px;">
+      <label>Nome <input id="nc-nome" style="width:100%;"></label>
+      <label>Raggio <input id="nc-raggio" type="number" min="0" value="${MAPPA_STATO.config.RAGGIO_CAMPO_DEFAULT ?? 10}"></label>
+      <button id="nc-crea" class="btn-hero">Crea campo</button>
+      <button id="nc-annulla" class="btn-hero">Annulla</button>
+    </div>`;
+  sidePanel.querySelector('#nc-annulla').addEventListener('click', () => loadSelectionDetails({ x, y }));
+  sidePanel.querySelector('#nc-crea').addEventListener('click', async () => {
+    const nome = sidePanel.querySelector('#nc-nome').value.trim();
+    if (!nome) return alert('Inserisci un nome.');
+    try {
+      const d = await inviaJson('/api/campi', 'POST', { nome, pos_x: x, pos_y: y, raggio: Number(sidePanel.querySelector('#nc-raggio').value) });
+      MAPPA_STATO.selected = { x, y };
+      aggiornaTutto();
+      renderCampoPanel(d.campo);
+    } catch (e) { alert(e.message); }
+  });
+}
+
+async function apriMettiCampoQui(x, y) {
+  sidePanel.innerHTML = '<p>Caricamento...</p>';
+  try {
+    const r = await fetch(apiUrl('/api/campi'), { headers: buildAuthHeaders() });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Errore caricamento campi');
+    const senza = (d.campi || []).filter(c => c.pos_x === null || c.pos_x === undefined || c.pos_y === null || c.pos_y === undefined);
+    sidePanel.innerHTML = senza.length
+      ? `<h3>Metti campo qui (${x}:${y})</h3>
+         <p>Campi senza posizione:</p>
+         ${senza.map(c => `<button class="btn-hero js-metti" data-id="${c.id}" style="display:block; width:100%; margin-bottom:6px; text-align:left;">${escapeHtml(c.nome)}</button>`).join('')}
+         <button id="mc-indietro" class="btn-hero">Annulla</button>`
+      : `<h3>Metti campo qui</h3>
+         <p>Tutti i campi hanno già una posizione. Per spostarne uno, selezionalo sulla mappa e cambia le coordinate.</p>
+         <button id="mc-indietro" class="btn-hero">Indietro</button>`;
+    sidePanel.querySelector('#mc-indietro').addEventListener('click', () => loadSelectionDetails({ x, y }));
+    sidePanel.querySelectorAll('.js-metti').forEach(b => b.addEventListener('click', async () => {
+      try {
+        const res = await inviaJson(`/api/campi/${b.dataset.id}/posizione`, 'PUT', { pos_x: x, pos_y: y });
+        MAPPA_STATO.selected = { x, y };
+        aggiornaTutto();
+        renderCampoPanel(res.campo);
+      } catch (e) { alert(e.message); }
+    }));
+  } catch (e) {
+    sidePanel.innerHTML = `<p style="color:#e74c3c;">${escapeHtml(e.message)}</p>`;
+  }
+}
+
+function renderEmptyCellPanel(selected) {
+  sidePanel.innerHTML = `
+    <h3>Casella vuota ${selected.x}:${selected.y}</h3>
+    <p>Questa casella non contiene zone, edifici o campi.</p>
+    <div style="display:grid; gap:8px;">
+      <button id="create-edificio-here" class="btn-hero">Crea edificio qui</button>
+      <button id="create-campo-here" class="btn-hero">Crea nuovo campo qui</button>
+      <button id="metti-campo-here" class="btn-hero">Metti campo qui</button>
+    </div>`;
+  sidePanel.querySelector('#create-edificio-here').addEventListener('click', () => apriFormCreaEdificio(selected.x, selected.y));
+  sidePanel.querySelector('#create-campo-here').addEventListener('click', () => apriFormCreaCampo(selected.x, selected.y));
+  sidePanel.querySelector('#metti-campo-here').addEventListener('click', () => apriMettiCampoQui(selected.x, selected.y));
 }
 
 window.apriEditorMappa = apriEditorMappa;

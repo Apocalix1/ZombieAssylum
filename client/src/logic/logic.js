@@ -9,6 +9,41 @@ const PENDING_COMMANDS_KEY = 'pending_commands';
 let syncPartyInterval = null;
 let isSyncing = false;
 
+// sopra syncPartyFromServer
+const _snapshotSync = new WeakMap();
+const snapshotPg = p => JSON.stringify(p, (k, v) => (k === 'updated_at' ? undefined : v));
+
+// Spinge il personaggio solo se è cambiato dall'ultima sincronizzazione
+export async function sincronizzaSeCambiato(p) {
+    const snap = snapshotPg(p);
+    if (!_snapshotSync.has(p)) { _snapshotSync.set(p, snap); return; } // prima volta: punto di partenza
+    if (_snapshotSync.get(p) === snap) return;
+    await sincronizzaPersonaggio(p);
+    _snapshotSync.set(p, snapshotPg(p));
+}
+
+export function fermaSincronizzazioneCompleta() {
+    if (syncPartyInterval) clearInterval(syncPartyInterval);
+    syncPartyInterval = null;
+}
+
+const _snapshotSync = new WeakMap();
+const snapshotPg = p => JSON.stringify(p, (k, v) => (k === 'updated_at' ? undefined : v));
+
+// Spinge il personaggio solo se è cambiato dall'ultima sincronizzazione
+export async function sincronizzaSeCambiato(p) {
+    const snap = snapshotPg(p);
+    if (!_snapshotSync.has(p)) { _snapshotSync.set(p, snap); return; } // prima volta: punto di partenza
+    if (_snapshotSync.get(p) === snap) return;
+    await sincronizzaPersonaggio(p);
+    _snapshotSync.set(p, snapshotPg(p));
+}
+
+export function fermaSincronizzazioneCompleta() {
+    if (syncPartyInterval) clearInterval(syncPartyInterval);
+    syncPartyInterval = null;
+}
+
 export async function syncPartyFromServer() {
     if (isSyncing) return;
     isSyncing = true;
@@ -50,6 +85,7 @@ export async function syncPartyFromServer() {
                         existing.initInventarioBase();
                     }
                 }
+                _snapshotSync.set(existing, snapshotPg(existing));
             } else {
                 // Nuovo personaggio – crea istanza
                 const stats = serverChar.data || {};
@@ -64,6 +100,7 @@ export async function syncPartyFromServer() {
                     p.initInventarioBase();
                 }
                 party.push(p);
+                 _snapshotSync.set(p, snapshotPg(p));
             }
         }
 
@@ -112,8 +149,8 @@ export function avviaSincronizzazioneCompleta() {
 
         // 3. Spingi le modifiche locali al server (per ogni personaggio)
           for (const p of party) {
-            if (p.id && (user.role === 'master' || p.user_id === user.id)) {
-                await sincronizzaPersonaggio(p);
+              if (p.id && (user.role === 'master' || p.user_id === user.id)) {
+                await sincronizzaSeCambiato(p);
             }
         }
 
@@ -262,7 +299,7 @@ function startSlowPoll() {
                 await syncDocumentiDalServer();
                 for (const p of party) {
                     if (p.user_id === user.id) {
-                        await sincronizzaPersonaggio(p);
+                        await sincronizzaSeCambiato(p);
                     }
                 }
             }

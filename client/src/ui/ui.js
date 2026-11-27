@@ -7,6 +7,7 @@ import { processAutomaticActions} from "./cibo_e_acqua-ui.js";
 import "../ui/magazzino-ui.js";
 import { getPendingDeadIds,queueCommand, processPendingCommands, syncStatiDalServer, syncDocumentiDalServer } from "../logic/logic.js";
 import { registraEventoCampoCorrente } from "../logic/campo.js";
+import { Personaggio, syncPartyFromServer, salvaPersonaggioCloud, fetchUserCharacters, apiUrl, buildAuthHeaders, refreshPartyListeners, fermaSincronizzazioneCompleta } from "../logic/logic.js";
 const party = stateParty;
 
 // Esposizioni Globali per compatibilità con HTML inline e altri script non-modulari
